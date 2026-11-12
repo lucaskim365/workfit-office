@@ -18,9 +18,8 @@ import { COMPANY_PLAN_OWNER } from '@/features/workPlan/useCompanyImportant';
 import { stripInlineMarks } from '@/domain/workPlan/richText';
 import { currentApproverIds } from '@/domain/approvalDoc/engine';
 import { COMMUTE_STATUS_LABELS } from '@/domain/commute/schema';
-import { OUTSIDE_WORK_CATEGORY_LABELS } from '@/domain/outsideWork/schema';
 import type { DayEntry } from '@/domain/workPlan/dayEntries';
-import { Modal } from '@/shared/ui/Modal';
+import { EntryDetailModal, entryTimeKind } from './EntryDetailModal';
 import { birthdaysInMonth } from '@/domain/birthday/engine';
 import { sortPostsForList } from '@/domain/board/rules';
 import { BOARDS_SEED } from '@/data/seeds/board.seed';
@@ -42,7 +41,6 @@ import {
   weekDates,
   monthDates,
   nowPercent,
-  minutesOf,
   orderDayItems,
   shiftMonth,
   timelineSpan,
@@ -203,9 +201,7 @@ interface DayRow {
  * 외근·출장·휴가·회의 등의 시각 없는 일정은 '종일'.
  */
 function rowKindOf(e: DayEntry): DayRow['kind'] {
-  const noTime = e.allDay || minutesOf(e.startTime) === null;
-  if (!noTime) return 'timed';
-  return e.source === 'ITEM' ? 'undecided' : 'allDay';
+  return entryTimeKind(e);
 }
 
 /** 줄의 시간 글자 */
@@ -360,92 +356,11 @@ export function TodayWidget() {
           </div>
         )}
       </div>
-      <EntryDetailModal entry={picked} onClose={() => setPicked(null)} />
+      <EntryDetailModal entry={picked} date={today} onClose={() => setPicked(null)} />
     </Panel>
   );
 }
 
-/** 일정 종류 이름 */
-function entryKindName(e: DayEntry): string {
-  switch (e.source) {
-    case 'ITEM':
-      return e.tag?.name && e.tag.name !== '업무' ? `업무 · ${e.tag.name}` : '업무';
-    case 'MEETING':
-      return '회의';
-    case 'CALENDAR':
-      return '일정';
-    case 'OUTSIDE':
-      return e.outside ? `${OUTSIDE_WORK_CATEGORY_LABELS[e.outside.category]}${e.outside.subType && e.outside.subType !== OUTSIDE_WORK_CATEGORY_LABELS[e.outside.category] ? ` · ${e.outside.subType}` : ''}` : '외근·출장';
-    case 'APPROVAL':
-      return e.schedule?.category === 'LEAVE' ? `휴가${e.schedule.leaveType ? ` · ${e.schedule.leaveType}` : ''}` : e.schedule?.docType ?? '결재 일정';
-    default:
-      return '일정';
-  }
-}
-
-/** 일정 상세 — 읽기 전용. 고치려면 업무계획에서 */
-function EntryDetailModal({ entry, onClose }: { entry: DayEntry | null; onClose: () => void }) {
-  const users = useUsers({ status: '사용' }).data ?? [];
-  if (!entry) return null;
-  const nameOf = (id: string) => users.find((u) => u.id === id)?.name ?? '';
-  const look = chipLook(entry);
-  const kind = rowKindOf(entry);
-  const time = kind === 'allDay' ? '종일' : kind === 'undecided' ? '시간 미정' : `${entry.startTime!.slice(0, 5)}${entry.endTime ? ` ~ ${entry.endTime.slice(0, 5)}` : ''}`;
-  const o = entry.outside;
-  const ev = entry.event;
-  const isLeave = entry.source === 'APPROVAL' && entry.schedule?.category === 'LEAVE';
-  const span = o && o.startDate !== o.endDate ? `${o.startDate.slice(5).replace('-', '.')} ~ ${o.endDate.slice(5).replace('-', '.')}` : entry.schedule && entry.schedule.startDate !== entry.schedule.endDate ? `${entry.schedule.startDate.slice(5).replace('-', '.')} ~ ${entry.schedule.endDate.slice(5).replace('-', '.')}` : '';
-  const attendees = (ev?.attendeeUserIds ?? []).map(nameOf).filter(Boolean);
-  const memo = (entry.item?.memo || ev?.memo || (!isLeave ? o?.memo : '') || '').trim();
-  const doc = o?.approval ?? (entry.schedule && !isLeave ? { docNo: entry.schedule.docNo, docTitle: entry.schedule.docTitle } : null);
-  const rows: Array<[string, ReactNode]> = [
-    ['종류', entryKindName(entry)],
-    ['시간', time],
-    ...(span ? ([['기간', span]] as Array<[string, ReactNode]>) : []),
-    ...(ev?.location ? ([['장소', ev.location]] as Array<[string, ReactNode]>) : []),
-    ...(entry.roomStatus ? ([['회의실', entry.roomStatus === 'PENDING' ? '예약 승인 대기' : '예약 반려']] as Array<[string, ReactNode]>) : []),
-    ...(attendees.length ? ([['참석자', attendees.join(', ')]] as Array<[string, ReactNode]>) : []),
-    ...(o?.destination ? ([['행선지', o.destination]] as Array<[string, ReactNode]>) : []),
-    ...(o?.purpose ? ([['목적', o.purpose]] as Array<[string, ReactNode]>) : []),
-    ...(o?.companions ? ([['동행', o.companions]] as Array<[string, ReactNode]>) : []),
-    ...(o?.transportation ? ([['교통', o.transportation]] as Array<[string, ReactNode]>) : []),
-    ...(entry.companionOf ? ([['등록한 사람', nameOf(entry.companionOf)]] as Array<[string, ReactNode]>) : []),
-    ...(doc ? ([['결재 문서', `${doc.docTitle}${doc.docNo ? ` (${doc.docNo})` : ''}`]] as Array<[string, ReactNode]>) : []),
-  ];
-  return (
-    <Modal
-      open
-      onClose={onClose}
-      width={460}
-      title={
-        <span className="flex min-w-0 items-center gap-2">
-          {look.dotClass && <i className={`h-2.5 w-2.5 shrink-0 rounded-full ${look.dotClass}`} />}
-          <span className="truncate">{look.label}</span>
-        </span>
-      }
-      footer={
-        <button type="button" onClick={onClose} className="cursor-pointer rounded-lg border border-border px-4 py-1.5 text-[12.5px] font-bold text-ink2 hover:bg-panel-alt">
-          닫기
-        </button>
-      }
-    >
-      <dl className="m-0 grid grid-cols-[76px_minmax(0,1fr)] gap-x-3 gap-y-2.5 text-[13px]">
-        {rows.map(([k, v]) => (
-          <div key={k} className="contents">
-            <dt className="font-bold text-ink3">{k}</dt>
-            <dd className="m-0 min-w-0 break-words text-ink">{v}</dd>
-          </div>
-        ))}
-      </dl>
-      {memo && (
-        <div className="mt-4 rounded-xl bg-panel-alt px-3.5 py-3">
-          <div className="mb-1 text-[11.5px] font-bold text-ink3">메모</div>
-          <div className="whitespace-pre-wrap break-words text-[13px] leading-relaxed text-ink">{stripInlineMarks(memo)}</div>
-        </div>
-      )}
-    </Modal>
-  );
-}
 
 /* ───────────────────────── 내 근태 ───────────────────────── */
 
