@@ -766,7 +766,7 @@ function Designer({
         </div>
       )}
 
-      <InfoBlock collapsible={standalone} defaultOpen={isNew}>
+      <InfoBlock collapsible={standalone} defaultOpen={isNew} linkLabel={LINK_TYPES.find((t) => t.code === link)?.feature ?? null}>
       {/* 서식 정보 */}
       <div className="grid grid-cols-2 gap-2.5 rounded-xl border border-border bg-panel p-3 md:grid-cols-[70px_1fr_1fr_1fr_1fr_1fr_1.4fr]">
         <Field label="아이콘">
@@ -1059,7 +1059,18 @@ function Designer({
 }
 
 /** 서식 정보·문서 머리 항목 — 새 탭에서는 접어 두는 띠(새 서식은 펼쳐서), 앱 안에서는 그대로 */
-function InfoBlock({ collapsible, defaultOpen, children }: { collapsible: boolean; defaultOpen: boolean; children: React.ReactNode }) {
+function InfoBlock({
+  collapsible,
+  defaultOpen,
+  linkLabel,
+  children,
+}: {
+  collapsible: boolean;
+  defaultOpen: boolean;
+  /** 접혀 있어도 보이게 — 고른 연동 기능(없으면 null) */
+  linkLabel: string | null;
+  children: React.ReactNode;
+}) {
   if (!collapsible) return <>{children}</>;
   return (
     <details open={defaultOpen} className="group shrink-0 rounded-xl border border-border bg-panel [&[open]>summary]:border-b [&[open]>summary]:border-border">
@@ -1067,6 +1078,12 @@ function InfoBlock({ collapsible, defaultOpen, children }: { collapsible: boolea
         <span className="text-ink3 group-open:rotate-90">▸</span>
         서식 정보 · 문서 머리 항목
         <span className="font-normal text-ink3">(서식명·코드·격식 문서명·폴더·연동·저장 메모·대외 문서)</span>
+        <span
+          className={`ml-auto shrink-0 rounded-full px-2 py-px text-[10.5px] font-semibold ${linkLabel ? 'bg-teal-soft text-teal' : 'bg-panel-alt text-ink3'}`}
+          title="이 서식으로 쓴 문서가 이어지는 기능 — 바꾸려면 펼쳐서 '연동 기능'"
+        >
+          연동: {linkLabel ?? '없음'}
+        </span>
       </summary>
       <div className="space-y-2 p-2 [&>div]:border-0 [&>div]:shadow-none">{children}</div>
     </details>
