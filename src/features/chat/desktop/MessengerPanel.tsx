@@ -33,6 +33,8 @@ import { AutoLinkText } from '@/shared/ui/AutoLinkText';
 import { registerViewedChatRoom } from '@/shared/lib/viewedChatRoom';
 import { useWindowActive } from '@/shared/lib/useWindowActive';
 import { ProfileCardHost, useOpenProfileCard } from './ProfileCard';
+import { roomFilesOf } from '@/domain/chatMessage/roomFiles';
+import { FileKindIcon } from '@/features/chat/FileKindIcon';
 
 /** ISO 시각 → 오늘 HH:MM / 어제 / MM/DD 표시. */
 export function fmtTime(iso?: string): string {
@@ -518,18 +520,8 @@ function MessengerThread({
   /** 파일함 — 안 받은 옛 메시지의 파일까지(열었을 때 서버에서 받는다. 받기 전엔 받아 둔 것으로) */
   const { data: fileMessages } = useRoomFiles(room.id, showFileBox);
 
-  const filesInRoom = useMemo(() => {
-    return (fileMessages ?? messages)
-      .filter((m) => m.attachment)
-      .map((m) => ({
-        messageId: m.id,
-        senderName: m.senderName,
-        at: m.at,
-        attachment: m.attachment!,
-        type: m.type,
-      }))
-      .reverse();
-  }, [fileMessages, messages]);
+  // 파일함 — 예전 메시지(attachment)와 서식 메시지(attachments 여러 개)를 모두(웹·PWA 공용 roomFilesOf)
+  const filesInRoom = useMemo(() => roomFilesOf(fileMessages ?? messages), [fileMessages, messages]);
 
   const [showMemberList, setShowMemberList] = useState(false);
   const kick = useKickMember();
@@ -1574,7 +1566,7 @@ function MessageBubble({
           style={mine ? { backgroundColor: '#bae0ff', color: '#1c2536' } : undefined}
           className={`flex cursor-pointer items-center gap-2.5 rounded-xl px-3 py-2.5 text-left shadow-[0_1px_2px_rgba(16,24,48,0.05)] transition-[filter] hover:brightness-95 select-text min-w-0 max-w-full ${mine ? '' : 'border border-border bg-panel text-ink'}`}
         >
-          <span className="text-[18px] shrink-0">📄</span>
+          <FileKindIcon name={att.name} size={28} />
           <span className="min-w-0 flex-1">
             <span className="block max-w-[220px] truncate text-[12px] font-semibold">{att.name}</span>
             <span className={`block text-[10px] ${mine ? 'opacity-85' : 'text-ink3'}`}>{fmtSize(att.size)} · 다운로드</span>
@@ -2503,15 +2495,13 @@ function DesktopFileBoxPanel({
           files.map((f) => {
             const isImg = f.type === 'image';
             return (
-              <div key={f.messageId} className="flex items-center gap-3 rounded-lg border border-border bg-panel p-2.5 shadow-3xs hover:border-amber/40 transition-colors">
+              <div key={f.key} className="flex items-center gap-3 rounded-lg border border-border bg-panel p-2.5 shadow-3xs hover:border-amber/40 transition-colors">
                 {isImg ? (
                   <button onClick={() => onOpenImage(f.attachment)} className="w-10 h-10 rounded-md border border-border overflow-hidden shrink-0 block bg-panel-alt/10 hover:brightness-95 transition-all cursor-pointer">
                     <img src={f.attachment.url} alt={f.attachment.name} className="w-full h-full object-cover" />
                   </button>
                 ) : (
-                  <div className="w-10 h-10 rounded-md border border-border overflow-hidden shrink-0 flex items-center justify-center bg-panel-alt/10 text-[18px] select-none">
-                    📄
-                  </div>
+                  <FileKindIcon name={f.attachment.name} size={40} />
                 )}
                 <div className="min-w-0 flex-1">
                   <button 
