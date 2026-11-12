@@ -92,7 +92,7 @@ abstract class FilteringBackend {
     return (await this.listByRoom(roomId)).filter((m) => m.senderId !== userId && !m.readBy.includes(userId));
   }
   async listWithAttachment(roomId: string) {
-    return (await this.listByRoom(roomId)).filter((m) => m.attachment);
+    return (await this.listByRoom(roomId)).filter((m) => m.attachment || m.attachments?.length);
   }
 }
 
@@ -338,7 +338,14 @@ class AppwriteBackend implements ChatMessageBackend {
   }
 
   async listWithAttachment(roomId: string) {
-    return this.parseRows(await this.loadRows([Query.equal('roomId', roomId), Query.isNotNull('attachment')]));
+    // 예전 메시지는 attachment 하나, 서식 메시지(메신저 개편 뒤 모든 전송)는 attachments 여러 개 — 둘 다 받는다
+    // (예전에는 attachment 만 찾아 개편 뒤 보낸 파일·사진이 파일함에 하나도 안 나왔다)
+    const [single, multi] = await Promise.all([
+      this.loadRows([Query.equal('roomId', roomId), Query.isNotNull('attachment')]),
+      this.loadRows([Query.equal('roomId', roomId), Query.isNotNull('attachments')]),
+    ]);
+    const seen = new Set(single.map((r) => r.$id));
+    return this.parseRows([...single, ...multi.filter((r) => !seen.has(r.$id))]);
   }
 
   async get(id: string) {
