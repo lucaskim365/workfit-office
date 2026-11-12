@@ -356,7 +356,7 @@ export function TodayWidget() {
           </div>
         )}
       </div>
-      <EntryDetailModal entry={picked} date={today} onClose={() => setPicked(null)} />
+      <EntryDetailModal entry={picked} date={today} all={rows.map((r) => r.entry)} onPick={setPicked} onClose={() => setPicked(null)} />
     </Panel>
   );
 }
