@@ -202,7 +202,7 @@ export const PART_SECTIONS: { title: string; desc?: string; groups: { label?: st
         icon: Eraser,
         hint: '고른 칸의 입력 칸·자동 채우기·문서 항목·직인·자동번호·안내문을 뺍니다(글자·서식은 그대로)',
         apply: (s, g) =>
-          [APPROVAL_NS.input, APPROVAL_NS.bind, APPROVAL_NS.seal, APPROVAL_NS.sealMark, APPROVAL_NS.autoNo, APPROVAL_NS.guide].reduce(
+          [APPROVAL_NS.input, APPROVAL_NS.bind, APPROVAL_NS.seal, APPROVAL_NS.sealMark, APPROVAL_NS.logoMark, APPROVAL_NS.autoNo, APPROVAL_NS.guide].reduce(
             (acc, ns) => setApprovalProp(acc, g, ns, undefined),
             s,
           ),
