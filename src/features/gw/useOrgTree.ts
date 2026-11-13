@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { pickDeptHeadId } from '@/domain/org/deptHead';
+import { managerLabel, pickDeptHeadId } from '@/domain/org/deptHead';
 import { useQuery } from '@tanstack/react-query';
 import { departmentRepo } from '@/data/department/department.repo';
 import { userRepo } from '@/data/user/user.repo';
@@ -46,6 +46,8 @@ export interface OrgTree {
   managerChain: (userId: string, depth?: number) => User[];
   deptHeadOf: (userId: string) => User | null;
   directManagerOf: (userId: string) => User | null;
+  /** 조직도 '직속 상급자' 표시 글(부서장 없는 위원회 소속이면 '위원장'). */
+  directManagerLabelOf: (userId: string) => string;
 }
 
 export function useOrgTree() {
@@ -192,6 +194,13 @@ export function useOrgTree() {
       return null;
     };
 
+    const directManagerLabelOf = (userId: string): string => {
+      const u = usersById.get(userId);
+      if (!u) return '—';
+      const h = headIdOfDept(u.dept);
+      return managerLabel({ deptName: u.dept, ownDeptHasOtherHead: Boolean(h && h !== userId) }, directManagerOf(userId));
+    };
+
     const deptHeadOf = (userId: string): User | null => directManagerOf(userId);
 
     const managerChain = (userId: string, depth = 5): User[] => {
@@ -209,7 +218,7 @@ export function useOrgTree() {
     };
 
     const depts = [...nodeByName.values()].map((n) => n.dept);
-    return { roots, depts, users, positions, userById, rankOf, managerChain, deptHeadOf, directManagerOf };
+    return { roots, depts, users, positions, userById, rankOf, managerChain, deptHeadOf, directManagerOf, directManagerLabelOf };
   }, [deptsQ.data, usersQ.data, profilesQ.data, positionsQ.data, deptMembersQ.data]);
 
   const isLoading = deptsQ.isLoading || usersQ.isLoading || profilesQ.isLoading || positionsQ.isLoading || deptMembersQ.isLoading;

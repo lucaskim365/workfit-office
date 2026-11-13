@@ -19,3 +19,16 @@ export function pickDeptHeadId(members: DeptMemberLike[], rankOf: (position: str
   if (primary.length === 0) return null;
   return primary.slice().sort((a, b) => rankOf(a.position) - rankOf(b.position))[0].id;
 }
+
+/**
+ * 조직도 '직속 상급자' 표시 글.
+ * 부서장이 따로 없는 위원회 소속이면 그 위 상급자가 위원장 역할이다 — 계정 이름은 드러내지 않고 '위원장'만 보인다.
+ */
+export function managerLabel(
+  user: { deptName: string; ownDeptHasOtherHead: boolean },
+  mgr: { name: string; position?: string; jobTitle?: string } | null,
+): string {
+  if (!mgr) return '—';
+  if (user.deptName.includes('위원회') && !user.ownDeptHasOtherHead) return '위원장';
+  return `${mgr.name} (${mgr.position || mgr.jobTitle || '부서장'})`;
+}
