@@ -81,6 +81,9 @@ export interface SheetEditorProps {
 type Cell = { r: number; c: number };
 type Popover = 'color' | 'bg' | 'border' | 'numFmt' | null;
 type HeaderMenu = { kind: 'row' | 'col'; idx: number; x: number; y: number } | null;
+/** 행·열 번호 우클릭 메뉴의 크기(자리 계산용) — 폭은 메뉴 클래스 w-[150px] 와 같게 */
+const HEADER_MENU_W = 150;
+const HEADER_MENU_H = 104;
 
 const HISTORY_LIMIT = 50;
 const HEADER_W = 40;
@@ -154,6 +157,18 @@ export function SheetEditor({
   const [draft, setDraft] = useState('');
   const [popover, setPopover] = useState<Popover>(null);
   const [headerMenu, setHeaderMenu] = useState<HeaderMenu>(null);
+  /**
+   * 행·열 번호 우클릭 메뉴 띄우기 — 마우스 자리에.
+   * 메뉴는 고정 위치(fixed)인데 화면 크기 배율(CSS zoom — 글자 크기 설정) 안에 있어 left·top 이 배율만큼 커진다.
+   * 마우스 좌표(화면 좌표)를 배율로 나눠야 마우스 자리에 뜬다. 화면 오른쪽·아래 끝에서는 안쪽으로 당긴다
+   */
+  const openHeaderMenu = (kind: 'row' | 'col', idx: number, e: { clientX: number; clientY: number }) => {
+    const grid = gridRef.current;
+    const scale = (grid && grid.offsetWidth > 0 ? grid.getBoundingClientRect().width / grid.offsetWidth : 1) || 1;
+    const x = Math.max(0, Math.min(e.clientX / scale, window.innerWidth / scale - HEADER_MENU_W - 4));
+    const y = Math.max(0, Math.min(e.clientY / scale, window.innerHeight / scale - HEADER_MENU_H - 4));
+    setHeaderMenu({ kind, idx, x, y });
+  };
   const [picked, setPicked] = useState<CellRange | null>(null);
   const [customColor, setCustomColor] = useState('#');
 
@@ -912,7 +927,7 @@ export function SheetEditor({
                   onContextMenu={(e) => {
                     if (!design) return;
                     e.preventDefault();
-                    setHeaderMenu({ kind: 'col', idx: c, x: e.clientX, y: e.clientY });
+                    openHeaderMenu('col', c, e);
                   }}
                   title={paper ? `${colLetter(c)}열 — 눌러 열 고르기, 오른쪽 끝을 끌어 너비 바꾸기` : undefined}
                   style={paper ? undefined : { top: headTop }}
@@ -954,7 +969,7 @@ export function SheetEditor({
                   onContextMenu={(e) => {
                     if (!design) return;
                     e.preventDefault();
-                    setHeaderMenu({ kind: 'row', idx: r, x: e.clientX, y: e.clientY });
+                    openHeaderMenu('row', r, e);
                   }}
                   title={paper ? `${r + 1}행 — 눌러 행 고르기, 아래 끝을 끌어 높이 바꾸기` : undefined}
                   className={
@@ -1095,8 +1110,8 @@ export function SheetEditor({
 
         {headerMenu && (
           <div
-            className="fixed z-40 w-[150px] rounded-lg border border-border bg-white py-1 text-[11.5px] shadow-lg"
-            style={{ left: headerMenu.x, top: headerMenu.y }}
+            className="fixed z-40 rounded-lg border border-border bg-white py-1 text-[11.5px] shadow-lg"
+            style={{ left: headerMenu.x, top: headerMenu.y, width: HEADER_MENU_W }}
             onMouseLeave={() => setHeaderMenu(null)}
           >
             {(headerMenu.kind === 'row'
