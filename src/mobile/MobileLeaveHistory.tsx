@@ -6,6 +6,7 @@ import { annualLeaveHistoryDocs, calculateLeaveDays } from '@/domain/leave/polic
 import { StatusBadge } from '@/features/commute/StatusBadge';
 import type { LeaveBalance } from '@/features/gw/useLeave';
 import { PERSON_TONES } from '@/shared/theme/statusColors';
+import { formatMinutes } from '@/domain/leave/substituteLedger';
 
 const REQUEST_FILTERS = ['전체', '진행중', '완료', '반려'] as const;
 type RequestFilter = (typeof REQUEST_FILTERS)[number];
@@ -46,16 +47,16 @@ export default function MobileLeaveHistory({
       {tab === 'annual' ? (
         <ul className="divide-y divide-border/60">
           {substitutes.map((item) => (
-            <li key={`sub-${item.id}`} className="flex items-center justify-between gap-2 py-2.5">
+            <li key={`sub-${item.entry.id}`} className="flex items-center justify-between gap-2 py-2.5">
               <div className="min-w-0">
                 <div className="flex items-center gap-1.5">
                   <span className={`rounded border px-1.5 py-0.5 text-[10.5px] font-bold ${PERSON_TONES.leave.badge}`}>대체휴무</span>
-                  <span className="text-[11px] text-ink3">{item.occurrenceDate}</span>
+                  <span className="text-[11px] text-ink3">{item.entry.workDate}</span>
                 </div>
-                <p className="mt-1 truncate text-[11.5px] text-ink2">{item.reason}</p>
-                <p className="text-[10.5px] text-ink3">관리자 부여 · 만료 ~{item.expirationDate}</p>
+                <p className="mt-1 truncate text-[11.5px] text-ink2">휴일근로 {formatMinutes(item.entry.workMinutes)}</p>
+                <p className="text-[10.5px] text-ink3">{item.status === 'REVOKED' ? '취소됨' : item.status === 'EXPIRED' ? '만료됨' : `만료 ~${item.entry.expiresOn}`}</p>
               </div>
-              <b className="shrink-0 text-[13px] text-emerald-600">+{item.days}일</b>
+              <b className={`shrink-0 text-[13px] ${item.status === 'REVOKED' || item.status === 'EXPIRED' ? 'text-ink3 line-through' : 'text-emerald-600'}`}>+{formatMinutes(item.entry.minutes)}</b>
             </li>
           ))}
 

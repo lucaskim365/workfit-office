@@ -1,3 +1,4 @@
+import { formatMinutes } from '@/domain/leave/substituteLedger';
 import React, { useEffect, useMemo, useRef, useState, Fragment } from 'react';
 import { stepTitleOf } from '@/domain/approvalDoc/stampTitle';
 import type { User } from '@/domain/user/schema';
@@ -798,7 +799,7 @@ export function ApprovalDraftDocumentSheet({
 
       {/* 6-1. 휴가원 전용: 대체휴무 현황 배너 & 대휴 구분 버튼 */}
       {docCode === '휴가' && (selectedLeaveType === '대체휴무' || selectedLeaveType === 'SUBSTITUTE') && (() => {
-        const subRemaining = Number(leaveBalance?.substituteHoliday?.remaining ?? 0);
+        const subRemaining = Number(leaveBalance?.substituteHoliday?.remainingMin ?? 0);
         const isNoSubRemaining = subRemaining <= 0;
 
         return (
@@ -812,23 +813,23 @@ export function ApprovalDraftDocumentSheet({
                 <Calendar size={13} className={isNoSubRemaining ? 'text-rose-600' : 'text-sky-600'} />
                 <span className="font-bold text-[#222]">{me.name} 님의 대체휴무 현황:</span>
                 <span className="text-[#666]">
-                  총 발생 <strong>{leaveBalance?.substituteHoliday?.total ?? 0}일</strong>
+                  총 지급 <strong>{formatMinutes(leaveBalance?.substituteHoliday?.totalMin ?? 0)}</strong>
                 </span>
                 <span className="text-[#888]">·</span>
                 <span className="text-[#666]">
-                  사용 <strong>{leaveBalance?.substituteHoliday?.used ?? 0}일</strong>
+                  사용 <strong>{formatMinutes(leaveBalance?.substituteHoliday?.usedMin ?? 0)}</strong>
                 </span>
-                {(leaveBalance?.substituteHoliday?.pending ?? 0) > 0 && (
+                {(leaveBalance?.substituteHoliday?.pendingMin ?? 0) > 0 && (
                   <>
                     <span className="text-[#888]">·</span>
                     <span className="text-amber-700 font-medium">
-                      진행중 {leaveBalance.substituteHoliday.pending}일
+                      진행중 {formatMinutes(leaveBalance.substituteHoliday.pendingMin)}
                     </span>
                   </>
                 )}
                 <span className="text-[#888]">·</span>
                 <span className={`font-extrabold ${subRemaining > 0 ? 'text-sky-700' : 'text-rose-600'}`}>
-                  잔여 {subRemaining}일
+                  잔여 {formatMinutes(subRemaining)}
                 </span>
               </div>
               {/* 만료 임박 또는 잔여 0일 알림 */}

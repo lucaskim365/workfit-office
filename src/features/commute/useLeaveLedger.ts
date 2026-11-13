@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { buildLeaveLedger, type LeaveLedgerEntry, type LeaveLedgerSummary } from '@/domain/leave/ledger';
 import { getStoredAdjustments, type LeaveAdjustmentTransaction } from '@/domain/leave/adjustmentStore';
 import type { ApprovalDoc } from '@/domain/approvalDoc/schema';
+import { SUBSTITUTE_LEDGER_UPDATED_EVENT, substituteLedgerStore } from '@/data/substituteLedger/substituteLedger.repo';
 import { normName, type CommuteRoster } from './useCommuteRoster';
 
 export type LeaveLedgerMode = 'HIRE_DATE' | 'FISCAL_YEAR';
@@ -43,6 +44,13 @@ export function useLeaveLedger({
     return () => window.removeEventListener('workfit-leave-adjustment-updated', refreshAdjustments);
   }, [refreshAdjustments]);
 
+  const [subVer, setSubVer] = useState(0);
+  useEffect(() => {
+    const on = () => setSubVer((v) => v + 1);
+    window.addEventListener(SUBSTITUTE_LEDGER_UPDATED_EVENT, on);
+    return () => window.removeEventListener(SUBSTITUTE_LEDGER_UPDATED_EVENT, on);
+  }, []);
+
   const { employees, userByEmpMap, isExcludedAttendance, getHireDateForEmp, employeeProfiles, compareEmployees } = roster;
   const ledger = useMemo(() => {
     if (!enabled) return { entries: [] as LeaveLedgerEntry[], summary: EMPTY_SUMMARY };
@@ -62,9 +70,9 @@ export function useLeaveLedger({
           isRetired: !e.active || u?.status === '미사용' || Boolean(u?.resignedAt),
         };
       });
-    const result = buildLeaveLedger(empInput, employeeProfiles, approvals, adjustments, { mode, holidays });
+    const result = buildLeaveLedger(empInput, employeeProfiles, approvals, adjustments, { mode, holidays, substituteLedger: substituteLedgerStore.getAll() });
     return { entries: result.entries.sort(compareEmployees), summary: result.summary };
-  }, [enabled, employees, userByEmpMap, isExcludedAttendance, getHireDateForEmp, employeeProfiles, approvals, adjustments, mode, holidays, compareEmployees]);
+  }, [enabled, employees, userByEmpMap, isExcludedAttendance, getHireDateForEmp, employeeProfiles, approvals, adjustments, mode, holidays, compareEmployees, subVer]);
 
   return { ...ledger, refreshAdjustments };
 }

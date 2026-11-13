@@ -1,3 +1,4 @@
+import { formatMinutes } from '@/domain/leave/substituteLedger';
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, Megaphone } from 'lucide-react';
@@ -526,7 +527,7 @@ function LeaveBar({ standalone = false }: { standalone?: boolean }) {
       <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-ink2">
         <span className="flex items-center gap-1.5"><i className="h-2 w-2 rounded-full bg-[#0876c8]" />사용 <strong className="tabular-nums text-ink">{fmt(leave.used)}</strong></span>
         {leave.pending > 0 && <span className="flex items-center gap-1.5"><i className="h-2 w-2 rounded-full bg-[#7cc4ec]" />신청 중 <strong className="tabular-nums text-ink">{fmt(leave.pending)}</strong></span>}
-        {leave.substituteHoliday.remaining > 0 && <span>대체휴무 <strong className="tabular-nums text-ink">{fmt(leave.substituteHoliday.remaining)}</strong></span>}
+        {leave.substituteHoliday.remainingMin > 0 && <span>대체휴무 <strong className="tabular-nums text-ink">{formatMinutes(leave.substituteHoliday.remainingMin)}</strong></span>}
       </div>
     </button>
   );

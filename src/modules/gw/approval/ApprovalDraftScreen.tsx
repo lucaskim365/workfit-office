@@ -50,6 +50,7 @@ import { OvertimeAutoFill } from './components/OvertimeAutoFill';
 import { clockOf, markOvertimeTimes, OVERTIME_AUTOFILL_FIELD, type OvertimeFill } from '@/domain/commute/overtimeDraft';
 import { isRestDay } from '@/shared/ui/form/datePickerGrid';
 import { nowLocalIso } from '@/shared/lib/datetime';
+import { formatMinutes, substituteUseMinutes } from '@/domain/leave/substituteLedger';
 
 /**
  * 브라우저 보관 상태 표시.
@@ -1240,12 +1241,13 @@ function ApprovalDraftInner({
 
       // 대체휴무 잔여일수 검증: 선사용 불가 (휴일근무 실적 사전 존재 필수)
       if (isSubLeave) {
-        const subRemaining = Number(bal?.substituteHoliday?.remaining ?? 0);
+        const subRemaining = Number(bal?.substituteHoliday?.remainingMin ?? 0);
+        const requestMin = substituteUseMinutes(effectiveDays);
         if (subRemaining <= 0) {
-          return '보유하신 대체휴무 잔여 일수가 없습니다. (잔여: 0일)\n대체휴무는 법률상 선사용이 불가하며, 휴일근무 발생 내역이 사전에 적립되어 있어야만 신청하실 수 있습니다.';
+          return '보유하신 대체휴무 잔여 시간이 없습니다. (잔여: 0시간)\n대체휴무는 결재 완료된 휴일근로가 있어야 신청할 수 있습니다.';
         }
-        if (effectiveDays > subRemaining) {
-          return `신청 가능한 잔여 대체휴무(${subRemaining}일)를 초과하였습니다. (잔여: ${subRemaining}일, 신청일수: ${effectiveDays}일)`;
+        if (requestMin > subRemaining) {
+          return `대체휴무 잔여 ${formatMinutes(subRemaining)}보다 신청 ${formatMinutes(requestMin)}이(가) 많습니다.`;
         }
       }
 
@@ -1564,11 +1566,11 @@ function ApprovalDraftInner({
           {(() => {
             const currentLType = String(values['leaveType'] || '').trim();
             const isSub = (code === '휴가' || form?.code === '휴가') && (currentLType.includes('대체휴무') || currentLType === 'SUBSTITUTE');
-            const subRem = Number(bal?.substituteHoliday?.remaining ?? 0);
+            const subRem = Number(bal?.substituteHoliday?.remainingMin ?? 0);
             if (isSub && subRem <= 0) {
               return (
                 <span className="rounded-lg bg-rose-50 px-2.5 py-1 text-[11px] font-bold text-rose-600 border border-rose-200 shadow-2xs animate-pulse">
-                  잔여 대휴 0일 (상신 불가)
+                  잔여 대휴 0시간 (상신 불가)
                 </span>
               );
             }
@@ -1599,7 +1601,7 @@ function ApprovalDraftInner({
           {(() => {
             const currentLType = String(values['leaveType'] || '').trim();
             const isSub = (code === '휴가' || form?.code === '휴가') && (currentLType.includes('대체휴무') || currentLType === 'SUBSTITUTE');
-            const subRem = Number(bal?.substituteHoliday?.remaining ?? 0);
+            const subRem = Number(bal?.substituteHoliday?.remainingMin ?? 0);
             const isBlockedBySub = isSub && subRem <= 0;
 
             return (

@@ -12,8 +12,9 @@ import { useAllApprovals } from '@/features/gw/useApprovals';
 import { useEmployeeProfiles } from '@/features/employeeProfile/useEmployeeProfiles';
 import type { ApprovalDoc } from '@/domain/approvalDoc/schema';
 import type { StatutoryLeaveResult, AdvanceOffsetResult } from '@/domain/leave/accrualEngine';
-import { SUBSTITUTE_HOLIDAY_UPDATED_EVENT } from '@/domain/leave/substituteHolidayStore';
+import { SUBSTITUTE_LEDGER_UPDATED_EVENT, substituteLedgerStore } from '@/data/substituteLedger/substituteLedger.repo';
 import { getStoredAdjustments } from '@/domain/leave/adjustmentStore';
+import type { SubstituteSummary } from '@/domain/leave/substituteLedger';
 import {
   calculateUserLeaveBalance,
   type SubstituteHolidayDetailItem,
@@ -45,15 +46,8 @@ export interface LeaveBalance {
   /** 입사일자 (YYYY-MM-DD) */
   hireDate?: string;
 
-  /** 대체휴무(대휴) 현황 (FIFO 선입선출 분배) */
-  substituteHoliday: {
-    total: number;
-    used: number;
-    pending: number;
-    remaining: number;
-    expiringSoonCount: number;
-    detailList: SubstituteHolidayItem[];
-  };
+  /** 대체휴무(대휴) 현황 — 분 단위(totalMin·usedMin·pendingMin·remainingMin), 선입선출 */
+  substituteHoliday: SubstituteSummary;
 
   /** 내 휴가 문서(최근순) */
   myDocs: ApprovalDoc[];
@@ -69,10 +63,10 @@ export function useLeave(userId: string | undefined): LeaveBalance {
   useEffect(() => {
     const onSubUpdate = () => setSubUpdateVer((v) => v + 1);
     if (typeof window !== 'undefined') {
-      window.addEventListener(SUBSTITUTE_HOLIDAY_UPDATED_EVENT, onSubUpdate);
+      window.addEventListener(SUBSTITUTE_LEDGER_UPDATED_EVENT, onSubUpdate);
       window.addEventListener('workfit-leave-adjustment-updated', onSubUpdate);
       return () => {
-        window.removeEventListener(SUBSTITUTE_HOLIDAY_UPDATED_EVENT, onSubUpdate);
+        window.removeEventListener(SUBSTITUTE_LEDGER_UPDATED_EVENT, onSubUpdate);
         window.removeEventListener('workfit-leave-adjustment-updated', onSubUpdate);
       };
     }
@@ -104,6 +98,7 @@ export function useLeave(userId: string | undefined): LeaveBalance {
       approvalDocs: allApprovals,
       adjustments,
       holidays: holidayList,
+      substituteLedger: substituteLedgerStore.getAll(),
     });
 
     return {

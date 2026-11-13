@@ -31,7 +31,6 @@ import { CommuteLeaveView } from './components/CommuteLeaveView';
 import { MyCommuteLeaveTab } from './components/MyCommuteLeaveTab';
 import { LeaveLedgerTable } from '../leave/components/LeaveLedgerTable';
 import { LeaveAdjustmentModal } from '../leave/components/LeaveAdjustmentModal';
-import { BatchSubstituteHolidayModal } from '../leave/components/BatchSubstituteHolidayModal';
 import type { LeaveLedgerEntry } from '@/domain/leave/ledger';
 import type { CommuteAdminTab, CommutePersonRow, DeptSummary, AnomalyItem } from './types';
 import {
@@ -184,7 +183,6 @@ export default function CommuteScreen() {
   // 연차 원장 산정 모드 & 수동 가감 상태
   const [ledgerMode, setLedgerMode] = useState<LeaveLedgerMode>('HIRE_DATE');
   const [adjustmentTarget, setAdjustmentTarget] = useState<LeaveLedgerEntry | null>(null);
-  const [showBatchSubstituteModal, setShowBatchSubstituteModal] = useState(false);
   // 필터 상태
   const [selectedDept, setSelectedDept] = useState<string>('ALL');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
@@ -882,7 +880,6 @@ export default function CommuteScreen() {
                 calculationMode={ledgerMode}
                 onToggleCalculationMode={setLedgerMode}
                 onOpenAdjustment={(entry) => setAdjustmentTarget(entry)}
-                onOpenBatchSubstitute={() => setShowBatchSubstituteModal(true)}
                 isAdmin={canAll}
               />
             </div>
@@ -899,20 +896,6 @@ export default function CommuteScreen() {
           onSuccess={() => {
             refreshAdjustments();
           }}
-        />
-      )}
-
-      {/* 5. 대체휴무 일괄 및 개별 부여 관리 모달 */}
-      {showBatchSubstituteModal && (
-        <BatchSubstituteHolidayModal
-          adminName={user?.name || '관리자'}
-          employees={employees
-            .filter((e) => e.active)
-            .map((e) => ({
-              ...e,
-              hireDate: getHireDateForEmp(e.name, e.empId),
-            }))}
-          onClose={() => setShowBatchSubstituteModal(false)}
         />
       )}
 

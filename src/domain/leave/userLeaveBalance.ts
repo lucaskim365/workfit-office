@@ -21,17 +21,17 @@ import {
 import { isAnnualLeaveDeduction, type CalculateLeaveDaysOptions } from './policy';
 import { normalizeLegacyLeaveDoc, type NormalizedLeaveRecord } from './legacyAdapter';
 import {
-  getSubstituteHolidaysForUser,
-  type SubstituteHolidayItemInput,
-} from './substituteHolidayStore';
+  allocateSubstitute,
+  substituteUseMinutes,
+  type SubstituteDetail,
+  type SubstituteLedgerEntry,
+  type SubstituteSummary,
+} from './substituteLedger';
 
 export const FALLBACK_ANNUAL_GRANT = 15;
 
-export interface SubstituteHolidayDetailItem extends SubstituteHolidayItemInput {
-  used: number;
-  pending: number;
-  status: 'USED' | 'AVAILABLE' | 'EXPIRED';
-}
+/** 대체휴무 지급 한 건(원장 지급 줄 기준) — 분 단위 */
+export type SubstituteHolidayDetailItem = SubstituteDetail;
 
 export interface UserLeaveBalance {
   // 기본 신원
@@ -64,15 +64,8 @@ export interface UserLeaveBalance {
   statutory?: StatutoryLeaveResult;
   advanceStatus: AdvanceOffsetResult;
 
-  // 대체휴무(대휴) 현황 (FIFO 선입선출 분배)
-  substituteHoliday: {
-    total: number;
-    used: number;
-    pending: number;
-    remaining: number;
-    expiringSoonCount: number;
-    detailList: SubstituteHolidayDetailItem[];
-  };
+  // 대체휴무(대휴) 현황 — 분 단위, 원장 지급분을 오래된 것부터 사용(선입선출)
+  substituteHoliday: SubstituteSummary;
 
   // 이력 데이터
   leaveHistory: Array<{
@@ -106,6 +99,8 @@ export interface CalculateUserLeaveBalanceOptions {
   mode?: 'HIRE_DATE' | 'FISCAL_YEAR';
   /** 공휴일 목록 — 기간 기반 연차 일수 계산 시 자동 제외 */
   holidays?: CalculateLeaveDaysOptions['holidays'];
+  /** 대체휴무 원장(전 직원) — 이 사람(userId) 줄만 쓴다 */
+  substituteLedger?: readonly SubstituteLedgerEntry[];
 }
 
 const norm = (s?: string | null) => (s || '').replace(/\s+/g, '').toLowerCase();
@@ -123,6 +118,7 @@ export function calculateUserLeaveBalance(
     referenceDate = new Date(),
     mode = 'HIRE_DATE',
     holidays,
+    substituteLedger = [],
   } = options;
 
   const refDateStr = referenceDate.toISOString().slice(0, 10);
@@ -241,66 +237,14 @@ export function calculateUserLeaveBalance(
   // 6. 1년 미만 신입사원 선사용 상계 평가
   const advanceStatus = evaluateAdvanceLeaveOffset(hireDate, refDateStr, usedDays);
 
-  // 7. 대체휴무(대휴) 선입선출(FIFO) 분배
-  const subHolidays = getSubstituteHolidaysForUser(
-    targetUserId || String(user.empId || ''),
-    targetName,
-    hireDate
+  // 7. 대체휴무(대휴) — 원장 지급분(분)에서 사용(종일 480·반일 240)을 오래된 지급부터 뺀다
+  const myLedger = targetUserId ? substituteLedger.filter((e) => e.userId === targetUserId) : [];
+  const substituteHoliday = allocateSubstitute(
+    myLedger,
+    substituteUseMinutes(approvedSubDays),
+    substituteUseMinutes(pendingSubDays),
+    refDateStr,
   );
-
-  let remApprSub = approvedSubDays;
-  let remPendSub = pendingSubDays;
-
-  const thirtyDaysLater = new Date(referenceDate.getTime() + 30 * 24 * 60 * 60 * 1000);
-  const thirtyDaysLaterStr = thirtyDaysLater.toISOString().slice(0, 10);
-
-  const detailList: SubstituteHolidayDetailItem[] = subHolidays.map((item) => {
-    const isExpired = item.expirationDate < refDateStr;
-    let itemUsed = 0;
-    let itemPending = 0;
-
-    if (!isExpired) {
-      if (remApprSub > 0) {
-        const alloc = Math.min(item.days, remApprSub);
-        itemUsed = alloc;
-        remApprSub -= alloc;
-      }
-      if (remPendSub > 0) {
-        const availForPending = item.days - itemUsed;
-        const alloc = Math.min(availForPending, remPendSub);
-        itemPending = alloc;
-        remPendSub -= alloc;
-      }
-    }
-
-    let status: 'USED' | 'AVAILABLE' | 'EXPIRED' = 'AVAILABLE';
-    if (isExpired) {
-      status = 'EXPIRED';
-    } else if (itemUsed >= item.days) {
-      status = 'USED';
-    }
-
-    return {
-      ...item,
-      used: itemUsed,
-      pending: itemPending,
-      status,
-    };
-  });
-
-  const activeSubItems = detailList.filter((item) => item.status !== 'EXPIRED');
-  const subTotal = activeSubItems.reduce((acc, cur) => acc + cur.days, 0);
-  const subUsed = activeSubItems.reduce((acc, cur) => acc + cur.used, 0);
-  const subPending = activeSubItems.reduce((acc, cur) => acc + cur.pending, 0);
-  const subRemaining = Math.max(0, subTotal - subUsed - subPending);
-
-  const expiringSoonCount = activeSubItems.filter(
-    (item) =>
-      item.status === 'AVAILABLE' &&
-      item.used + item.pending < item.days &&
-      item.expirationDate <= thirtyDaysLaterStr &&
-      item.expirationDate >= refDateStr
-  ).length;
 
   return {
     userId: targetUserId,
@@ -329,14 +273,7 @@ export function calculateUserLeaveBalance(
     statutory,
     advanceStatus,
 
-    substituteHoliday: {
-      total: subTotal,
-      used: subUsed,
-      pending: subPending,
-      remaining: subRemaining,
-      expiringSoonCount,
-      detailList,
-    },
+    substituteHoliday,
 
     leaveHistory: leaveHistory.sort((a, b) => b.startDate.localeCompare(a.startDate)),
     adjustmentHistory: empAdjustments.sort((a, b) => b.createdAt.localeCompare(a.createdAt)),

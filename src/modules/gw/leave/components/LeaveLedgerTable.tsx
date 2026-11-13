@@ -1,9 +1,7 @@
+import { formatMinutes } from '@/domain/leave/substituteLedger';
 import { useState, useMemo, useEffect } from 'react';
 import type { LeaveLedgerEntry } from '@/domain/leave/ledger';
-import {
-  getSubstituteHolidaysForUser,
-  SUBSTITUTE_HOLIDAY_UPDATED_EVENT,
-} from '@/domain/leave/substituteHolidayStore';
+import { SUBSTITUTE_LEDGER_UPDATED_EVENT as SUBSTITUTE_HOLIDAY_UPDATED_EVENT } from '@/data/substituteLedger/substituteLedger.repo';
 import {
   Search,
   Filter,
@@ -63,10 +61,7 @@ export function LeaveLedgerTable({
       if (selectedDept !== 'ALL' && e.dept !== selectedDept) return false;
       if (onlyAdvance && !e.advanceStatus.isAdvanceUsed) return false;
       if (onlyNegative && e.remainingDays >= 0) return false;
-      if (onlySubstitute) {
-        const subHolidays = getSubstituteHolidaysForUser(String(e.empId), e.name, e.hireDate);
-        if (subHolidays.length === 0) return false;
-      }
+      if (onlySubstitute && e.substituteHoliday.detailList.length === 0) return false;
 
       if (keyword.trim()) {
         const q = keyword.trim().toLowerCase();
@@ -321,25 +316,17 @@ export function LeaveLedgerTable({
 
                       {/* 대체휴무 현황 */}
                       {(() => {
-                        const subHolidays = getSubstituteHolidaysForUser(String(e.empId), e.name, e.hireDate);
-                        const totalSubGranted = subHolidays.reduce((s, h) => s + h.days, 0);
-                        const usedSubDays = e.leaveHistory
-                          .filter((h) => h.status === '완료' && h.leaveType === '대체휴무')
-                          .reduce((s, h) => s + h.daysCount, 0);
-                        const pendingSubDays = e.leaveHistory
-                          .filter((h) => h.status === '진행중' && h.leaveType === '대체휴무')
-                          .reduce((s, h) => s + h.daysCount, 0);
-                        const remainingSubDays = Math.max(0, totalSubGranted - usedSubDays - pendingSubDays);
+                        const { totalMin: totalSubGranted, usedMin: usedSubDays, remainingMin: remainingSubDays } = e.substituteHoliday;
 
                         return (
                           <td className="p-3 text-center tabular-nums">
                             {totalSubGranted > 0 ? (
                               <div className="inline-flex flex-col items-center">
                                 <span className="inline-block rounded-md bg-teal/15 px-2 py-0.5 text-[11px] font-extrabold text-teal border border-teal/25">
-                                  잔여 {remainingSubDays}일
+                                  잔여 {formatMinutes(remainingSubDays)}
                                 </span>
                                 <span className="text-[9.5px] text-ink3 mt-0.5">
-                                  총 {totalSubGranted}일 ({usedSubDays > 0 ? `사용 ${usedSubDays}일` : '미사용'})
+                                  총 {formatMinutes(totalSubGranted)} ({usedSubDays > 0 ? `사용 ${formatMinutes(usedSubDays)}` : '미사용'})
                                 </span>
                               </div>
                             ) : (

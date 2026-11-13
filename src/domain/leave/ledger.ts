@@ -37,6 +37,9 @@ export interface LeaveLedgerEntry {
   // 선사용/상계 상태
   advanceStatus: AdvanceOffsetResult;
 
+  // 대체휴무(분 단위, 원장 기준)
+  substituteHoliday: import('./substituteLedger').SubstituteSummary;
+
   // 상세 이력 링크
   leaveHistory: Array<{
     docId: string;
@@ -69,6 +72,7 @@ export interface BuildLedgerOptions {
   referenceDate?: Date; // 기준일 (기본값: 오늘)
   mode?: 'HIRE_DATE' | 'FISCAL_YEAR'; // 산정 방식 (기본값: HIRE_DATE 입사일 기준)
   holidays?: Array<{ date: string; name?: string }> | Map<string, string>; // 공휴일 목록 (연차 차감 시 공휴일 자동 제외)
+  substituteLedger?: import('./substituteLedger').SubstituteLedgerEntry[]; // 대체휴무 원장(전 직원)
 }
 
 const norm = (s?: string | null) => (s || '').replace(/\s+/g, '').toLowerCase();
@@ -131,6 +135,7 @@ export function buildLeaveLedger(
       referenceDate: refDate,
       mode,
       holidays: options.holidays,
+      substituteLedger: options.substituteLedger,
     });
 
     entries.push({
@@ -152,6 +157,7 @@ export function buildLeaveLedger(
       availableDays: balance.availableDays,
       usageRate: balance.usageRate,
       advanceStatus: balance.advanceStatus,
+      substituteHoliday: balance.substituteHoliday,
       leaveHistory: balance.leaveHistory,
       adjustmentHistory: balance.adjustmentHistory,
       isRetired: balance.isRetired,
