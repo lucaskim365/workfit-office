@@ -29,16 +29,19 @@ const EXPENSE_TONE: Record<ExpenseStatus, Tone> = { none: 'mute', drafting: 'inf
 
 /** 표 머리 묶음 — 값이 어디서 오는지(누가 넣는지)를 열 위에 보인다 */
 const GROUPS = [
-  { label: '발주서 (결재 끝난 발주서에서 자동)', span: 12, tone: 'bg-teal/10 text-teal' },
+  { label: '발주서 (결재 끝난 발주서에서 자동)', span: 6, tone: 'bg-teal/10 text-teal' },
   { label: '경영기획팀', span: 1, tone: 'bg-blue/10 text-blue' },
   { label: '인프라팀', span: 1, tone: 'bg-amber/10 text-amber' },
   { label: '지출결의서', span: 1, tone: 'bg-ok/10 text-ok' },
-  { label: '경영기획팀', span: 2, tone: 'bg-blue/10 text-blue' },
+  { label: '경영기획팀', span: 1, tone: 'bg-blue/10 text-blue' },
 ] as const;
-const ACCOUNT_GROUP = { label: '거래처 정보 (자동)', span: 5, tone: 'bg-ink3/10 text-ink2' };
+const ACCOUNT_GROUP = { label: '거래처 정보 (자동)', span: 3, tone: 'bg-ink3/10 text-ink2' };
+/** 발주서 묶음의 칸 수 — 합계 줄이 금액 칸 앞뒤를 비울 때 쓴다 */
+const PO_COLS = GROUPS[0].span;
 
-const dateInput = 'h-7 w-[7.4rem] rounded-md border border-border-hi bg-panel px-1.5 text-[11px] text-ink outline-none focus:border-teal';
 const num = `${bizTd} text-right tabular-nums`;
+/** 두 줄 칸의 아랫줄(덜 중요한 값) */
+const sub = 'text-[11px] text-ink3';
 
 /** 사업관리 › 매입 결제 관리 — 보여주기용(목업 데이터, 저장되지 않음). 한 줄 = 발주서 지급 조건의 한 번 */
 export default function BizPurchaseScreen() {
@@ -148,6 +151,7 @@ export default function BizPurchaseScreen() {
           </label>
         }
       >
+        {/* 한눈에 들어오게 짝이 되는 값을 한 칸에 두 줄로 묶는다(도입기업·사업구분, 발행일·결제일 등) — 칸마다 따로 두면 옆으로 밀어야 보인다 */}
         <table className="w-full border-collapse text-left">
           <thead>
             <tr>
@@ -159,28 +163,19 @@ export default function BizPurchaseScreen() {
             </tr>
             <tr>
               <th className={`${bizTh} text-center`}>번호</th>
-              <th className={bizTh}>사업구분</th>
-              <th className={bizTh}>도입기업</th>
-              <th className={bizTh}>발주처</th>
-              <th className={bizTh}>발주 내역</th>
+              <Th2 top="도입기업" bottom="사업구분" />
+              <Th2 top="발주처" bottom="발주 내역" />
               <th className={bizTh}>지급 조건</th>
-              <th className={`${bizTh} text-right`}>비율</th>
-              <th className={bizTh}>(예정) 계산서 발행일</th>
-              <th className={bizTh}>(예정) 결제일</th>
-              <th className={`${bizTh} text-right`}>매입 공급가액</th>
-              <th className={`${bizTh} text-right`}>부가세</th>
-              <th className={`${bizTh} text-right`}>매입 합계</th>
+              <Th2 top="(예정) 계산서 발행일" bottom="(예정) 결제일" />
+              <Th2 top="매입 합계" bottom="공급가액 + 부가세" right />
               <th className={`${bizTh} text-center`}>매출 부가세 수금</th>
               <th className={bizTh}>구축일</th>
               <th className={`${bizTh} text-center`}>진행</th>
-              <th className={bizTh}>(확정) 계산서 발행일</th>
-              <th className={bizTh}>(확정) 결제일</th>
+              <Th2 top="(확정) 계산서 발행일" bottom="(확정) 결제일" />
               {showAccount && (
                 <>
-                  <th className={bizTh}>은행</th>
-                  <th className={bizTh}>계좌번호</th>
-                  <th className={bizTh}>예금주</th>
-                  <th className={bizTh}>대표자</th>
+                  <Th2 top="은행" bottom="계좌번호" />
+                  <Th2 top="예금주" bottom="대표자" />
                   <th className={bizTh}>사업자번호</th>
                 </>
               )}
@@ -193,22 +188,32 @@ export default function BizPurchaseScreen() {
               return (
                 <tr key={r.id} className="hover:bg-panel-alt/40">
                   <td className={`${bizTd} text-center text-ink3`}>{r.no}</td>
-                  <td className={bizTd}>{r.bizType}</td>
-                  <td className={`${bizTd} font-semibold text-ink`}>{r.client}</td>
-                  <td className={bizTd}>{r.vendor}</td>
                   <td className={bizTd}>
-                    <button onClick={() => setPeek(r)} title={r.items.join(', ')} className="flex items-center gap-1 font-semibold text-ink hover:text-teal">
-                      <FileText size={12} className="shrink-0 text-ink3" />
-                      <span className="underline decoration-border-hi underline-offset-2">{shortItems(r.items)}</span>
-                    </button>
+                    <Two top={<span className="font-semibold text-ink">{r.client}</span>} bottom={<span className={sub}>{r.bizType}</span>} />
                   </td>
-                  <td className={bizTd}>{r.term}</td>
-                  <td className={num}>{r.rate}%</td>
-                  <td className={bizTd}>{r.planTaxDate}</td>
-                  <td className={bizTd}>{r.planPayDate}</td>
-                  <td className={num}>{won(r.supply)}</td>
-                  <td className={num}>{won(vatOf(r.supply))}</td>
-                  <td className={`${num} font-bold text-ink`}>{won(totalOf(r.supply))}</td>
+                  <td className={bizTd}>
+                    <Two
+                      top={r.vendor}
+                      bottom={
+                        <button onClick={() => setPeek(r)} title={r.items.join(', ')} className="flex items-center gap-1 text-[11px] font-semibold text-ink2 hover:text-teal">
+                          <FileText size={11} className="shrink-0 text-ink3" />
+                          <span className="underline decoration-border-hi underline-offset-2">{shortItems(r.items)}</span>
+                        </button>
+                      }
+                    />
+                  </td>
+                  <td className={bizTd}>
+                    <span className="font-semibold text-ink">{r.term}</span> <span className="tabular-nums text-ink3">{r.rate}%</span>
+                  </td>
+                  <td className={bizTd}>
+                    <Two top={<DateLine label="발행" value={r.planTaxDate} />} bottom={<DateLine label="결제" value={r.planPayDate} />} />
+                  </td>
+                  <td className={num}>
+                    <Two
+                      top={<span className="font-bold text-ink">{won(totalOf(r.supply))}</span>}
+                      bottom={<span className={sub}>{won(r.supply)} + {won(vatOf(r.supply))}</span>}
+                    />
+                  </td>
                   <td className={`${bizTd} text-center`}>
                     <button
                       onClick={() => patch(r.id, { salesVatCollected: !r.salesVatCollected })}
@@ -219,11 +224,10 @@ export default function BizPurchaseScreen() {
                     </button>
                   </td>
                   <td className={bizTd}>
-                    <span className="flex items-center gap-1">
-                      <input type="date" value={r.buildFrom} onChange={(e) => patch(r.id, { buildFrom: e.target.value })} aria-label="구축 시작일" className={dateInput} />
-                      <span className="text-ink3">~</span>
-                      <input type="date" value={r.buildTo} min={r.buildFrom} onChange={(e) => patch(r.id, { buildTo: e.target.value })} aria-label="구축 종료일" className={dateInput} />
-                    </span>
+                    <Two
+                      top={<DateEdit label="시작" value={r.buildFrom} onChange={(v) => patch(r.id, { buildFrom: v })} />}
+                      bottom={<DateEdit label="종료" value={r.buildTo} min={r.buildFrom} onChange={(v) => patch(r.id, { buildTo: v })} />}
+                    />
                   </td>
                   <td className={`${bizTd} text-center`}>
                     {r.expense === 'none' ? (
@@ -233,28 +237,32 @@ export default function BizPurchaseScreen() {
                     )}
                   </td>
                   <td className={bizTd}>
-                    <span className="flex items-center gap-1.5">
-                      <input type="date" value={r.taxDate} onChange={(e) => patch(r.id, { taxDate: e.target.value })} aria-label="확정 세금계산서 발행일" className={dateInput} />
-                      {!r.taxDate && (
-                        <button
-                          onClick={() => patch(r.id, { taxRequested: !r.taxRequested })}
-                          title="누르면 바뀝니다"
-                          className={`rounded-full px-2 py-0.5 text-[10px] font-bold whitespace-nowrap ${r.taxRequested ? 'bg-amber/10 text-amber' : 'bg-ink3/10 text-ink3'}`}
-                        >
-                          {r.taxRequested ? '발행 요청함' : '발행 요청'}
-                        </button>
-                      )}
-                    </span>
-                  </td>
-                  <td className={bizTd}>
-                    <input type="date" value={r.payDate} onChange={(e) => patch(r.id, { payDate: e.target.value })} aria-label="확정 결제일" className={dateInput} />
+                    <Two
+                      top={
+                        <span className="flex items-center gap-1.5">
+                          <DateEdit label="발행" value={r.taxDate} onChange={(v) => patch(r.id, { taxDate: v })} />
+                          {!r.taxDate && (
+                            <button
+                              onClick={() => patch(r.id, { taxRequested: !r.taxRequested })}
+                              title="누르면 바뀝니다"
+                              className={`rounded-full px-2 py-0.5 text-[10px] font-bold whitespace-nowrap ${r.taxRequested ? 'bg-amber/10 text-amber' : 'bg-ink3/10 text-ink3'}`}
+                            >
+                              {r.taxRequested ? '발행 요청함' : '발행 요청'}
+                            </button>
+                          )}
+                        </span>
+                      }
+                      bottom={<DateEdit label="결제" value={r.payDate} onChange={(v) => patch(r.id, { payDate: v })} />}
+                    />
                   </td>
                   {showAccount && (
                     <>
-                      <td className={bizTd}>{account?.bank ?? '-'}</td>
-                      <td className={`${bizTd} tabular-nums`}>{account?.account ?? '-'}</td>
-                      <td className={bizTd}>{account?.holder ?? '-'}</td>
-                      <td className={bizTd}>{account?.ceo ?? '-'}</td>
+                      <td className={bizTd}>
+                        <Two top={account?.bank ?? '-'} bottom={<span className={`${sub} tabular-nums`}>{account?.account ?? '-'}</span>} />
+                      </td>
+                      <td className={bizTd}>
+                        <Two top={account?.holder ?? '-'} bottom={<span className={sub}>{account?.ceo ?? '-'}</span>} />
+                      </td>
                       <td className={`${bizTd} tabular-nums`}>{account?.bizNo ?? '-'}</td>
                     </>
                   )}
@@ -265,11 +273,11 @@ export default function BizPurchaseScreen() {
           {shown.length > 0 && (
             <tfoot>
               <tr className="bg-panel-alt font-extrabold text-ink">
-                <td colSpan={9} className={`${bizTd} border-b-0 text-right`}>합계</td>
-                <td className={`${num} border-b-0`}>{won(summary.supply)}</td>
-                <td className={`${num} border-b-0`}>{won(summary.vat)}</td>
-                <td className={`${num} border-b-0`}>{won(summary.total)}</td>
-                <td colSpan={colCount - 12} className={`${bizTd} border-b-0`} />
+                <td colSpan={PO_COLS - 1} className={`${bizTd} border-b-0 text-right`}>합계</td>
+                <td className={`${num} border-b-0`}>
+                  <Two top={won(summary.total)} bottom={<span className={`${sub} font-semibold`}>{won(summary.supply)} + {won(summary.vat)}</span>} />
+                </td>
+                <td colSpan={colCount - PO_COLS} className={`${bizTd} border-b-0`} />
               </tr>
             </tfoot>
           )}
@@ -352,5 +360,69 @@ function Info({ label, children }: { label: string; children: ReactNode }) {
       <dt className="text-[11px] font-bold text-ink3">{label}</dt>
       <dd className="font-semibold text-ink">{children}</dd>
     </div>
+  );
+}
+
+
+/** 두 줄 칸 — 짝이 되는 값 둘을 위아래로 */
+function Two({ top, bottom }: { top: ReactNode; bottom: ReactNode }) {
+  return (
+    <div className="flex flex-col gap-0.5 leading-tight">
+      <div>{top}</div>
+      <div>{bottom}</div>
+    </div>
+  );
+}
+
+/** 두 줄 칸의 머리 — 윗줄 이름, 아랫줄 이름(흐리게) */
+function Th2({ top, bottom, right = false }: { top: string; bottom: string; right?: boolean }) {
+  return (
+    <th className={`${bizTh} leading-tight ${right ? 'text-right' : ''}`}>
+      {top}
+      <span className="block font-semibold text-ink3">{bottom}</span>
+    </th>
+  );
+}
+
+const dateLabel = 'w-6 shrink-0 text-[10px] text-ink3';
+
+/** 날짜 한 줄(읽기 전용) — 앞에 무슨 날짜인지 작은 이름표 */
+function DateLine({ label, value }: { label: string; value: string }) {
+  return (
+    <span className="flex items-center gap-1.5">
+      <span className={dateLabel}>{label}</span>
+      <span className="tabular-nums">{value || '-'}</span>
+    </span>
+  );
+}
+
+/** 고칠 수 있는 날짜 한 줄 — 평소엔 글자, 누르면 날짜 입력 상자(칸 폭을 줄이려고 상자를 늘 띄워 두지 않는다) */
+function DateEdit({ label, value, min, onChange }: { label: string; value: string; min?: string; onChange: (v: string) => void }) {
+  const [editing, setEditing] = useState(false);
+  return (
+    <span className="flex items-center gap-1.5">
+      <span className={dateLabel}>{label}</span>
+      {editing ? (
+        <input
+          type="date"
+          autoFocus
+          value={value}
+          min={min}
+          onChange={(e) => onChange(e.target.value)}
+          onBlur={() => setEditing(false)}
+          onKeyDown={(e) => (e.key === 'Enter' || e.key === 'Escape') && e.currentTarget.blur()}
+          aria-label={label}
+          className="h-6 w-[7.2rem] rounded-md border border-teal bg-panel px-1 text-[11px] text-ink outline-none"
+        />
+      ) : (
+        <button
+          onClick={() => setEditing(true)}
+          title="누르면 날짜를 고칩니다"
+          className={`-mx-1 rounded px-1 tabular-nums underline decoration-dotted decoration-border-hi underline-offset-2 hover:bg-panel-alt ${value ? 'text-ink' : 'text-ink3'}`}
+        >
+          {value || '날짜 입력'}
+        </button>
+      )}
+    </span>
   );
 }
