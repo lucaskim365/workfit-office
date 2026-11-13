@@ -5,6 +5,7 @@ import { useAuth } from '@/app/auth/AuthProvider';
 import { useBoardPosts } from '@/features/board/useBoardPosts';
 import { useCommuteBootstrap, useCommuteEmployees, useCommuteMonth, useCommuteViewer } from '@/features/commute/useCommute';
 import { useCommuteEvaluation } from '@/features/commute/useCommuteEvaluation';
+import type { ApprovalDayMap } from '@/domain/commute/approvalDayIndex';
 import { useDepartments } from '@/features/department/useDepartments';
 import { useEmployeeProfiles } from '@/features/employeeProfile/useEmployeeProfiles';
 import { useApprovalUnread } from '@/features/gw/useApprovalUnread';
@@ -415,7 +416,57 @@ function TodayClock({ rec }: { rec?: { inAt: string | null; outAt: string | null
   );
 }
 
-function HoursBars({ days, today }: { days: Array<{ date: string; minutes: number; bucket: AttendanceBucket }>; today: string }) {
+type AwayKind = 'outside' | 'trip' | null;
+const NO_APPROVALS: ApprovalDayMap = new Map();
+/** 외근·출장 영역 — 근무 막대(꽉 찬 파랑)와 헷갈리지 않게 빗금 */
+const AWAY_LOOK: Record<'outside' | 'trip', { label: string; stripe: string }> = {
+  outside: { label: '외근', stripe: 'repeating-linear-gradient(135deg, rgb(20 184 166 / 0.42) 0 3px, rgb(20 184 166 / 0.16) 3px 6px)' },
+  trip: { label: '출장', stripe: 'repeating-linear-gradient(135deg, rgb(139 92 246 / 0.42) 0 3px, rgb(139 92 246 / 0.16) 3px 6px)' },
+};
+const minText = (m: number) => `${Math.floor(m / 60)}시간 ${m % 60}분`;
+
+/**
+ * 하루 막대 한 칸 — 근무 막대(지각한 날은 주황). 외근·출장 날은 칸 높이 전체를 그 색 빗금으로 칠하고,
+ * 실제 출퇴근 기록이 있으면 그 시간만 근무 막대로 얹는다(외근·출장으로 인정된 8시간은 막대로 그리지 않는다).
+ */
+function DayHoursColumn({ d, max, show, radius, dim, label }: {
+  d: { minutes: number; actualMin?: number; away?: AwayKind; bucket?: AttendanceBucket; late?: boolean };
+  max: number;
+  show: boolean;
+  radius: string;
+  dim?: boolean;
+  label: string;
+}) {
+  const late = d.late ?? d.bucket === 'late';
+  const work = d.away ? d.actualMin ?? 0 : d.minutes;
+  const title = d.away
+    ? `${label} ${AWAY_LOOK[d.away].label}${work > 0 ? ` · 출퇴근 기록 ${minText(work)}` : ' (출퇴근 기록 없음)'}`
+    : `${label} ${minText(d.minutes)}`;
+  return (
+    <div className="group relative flex h-full flex-1 items-end" title={title}>
+      {show && d.away && <div className={`absolute inset-0 ${radius}`} style={{ background: AWAY_LOOK[d.away].stripe }} />}
+      {show && work > 0 && (
+        <div className={`relative w-full ${radius} ${late && !d.away ? 'bg-[#f2a17e]' : 'bg-[#0876c8]'} ${dim ? 'opacity-80 group-hover:opacity-100' : ''}`} style={{ height: `${(Math.min(work, max) / max) * 100}%` }} />
+      )}
+    </div>
+  );
+}
+
+/** 막대 색 설명 — 근무·지각, 외근·출장은 그 기간에 있을 때만 */
+function HoursLegend({ days, late = true }: { days: Array<{ away?: AwayKind }>; late?: boolean }) {
+  const kinds = (['outside', 'trip'] as const).filter((k) => days.some((d) => d.away === k));
+  return (
+    <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[10.5px] text-ink3">
+      <span className="flex items-center gap-1.5"><i className="h-2.5 w-2.5 rounded-[3px] bg-[#0876c8]" />근무</span>
+      {late && <span className="flex items-center gap-1.5"><i className="h-2.5 w-2.5 rounded-[3px] bg-[#f2a17e]" />지각한 날</span>}
+      {kinds.map((k) => (
+        <span key={k} className="flex items-center gap-1.5"><i className="h-2.5 w-2.5 rounded-[3px]" style={{ background: AWAY_LOOK[k].stripe }} />{AWAY_LOOK[k].label}</span>
+      ))}
+    </div>
+  );
+}
+
+function HoursBars({ days, today }: { days: Array<{ date: string; minutes: number; actualMin?: number; away?: AwayKind; bucket: AttendanceBucket }>; today: string }) {
   const MAX = 12 * 60;
   return (
     <div className="pl-[26px]">
@@ -426,16 +477,9 @@ function HoursBars({ days, today }: { days: Array<{ date: string; minutes: numbe
           </div>
         ))}
         <div className="absolute inset-0 flex items-end gap-[2px]">
-          {days.map((d) => {
-            const h = Math.min(d.minutes, MAX) / MAX;
-            return (
-              <div key={d.date} className="group relative flex h-full flex-1 items-end" title={`${Number(d.date.slice(8))}일 ${Math.floor(d.minutes / 60)}시간 ${d.minutes % 60}분`}>
-                {d.date <= today && d.minutes > 0 && (
-                  <div className={`w-full rounded-t-[4px] ${d.bucket === 'late' ? 'bg-[#f2a17e]' : 'bg-[#0876c8]'} ${d.date === today ? 'opacity-100' : 'opacity-80 group-hover:opacity-100'}`} style={{ height: `${h * 100}%` }} />
-                )}
-              </div>
-            );
-          })}
+          {days.map((d) => (
+            <DayHoursColumn key={d.date} d={d} max={MAX} show={d.date <= today} radius="rounded-t-[4px]" dim={d.date !== today} label={`${Number(d.date.slice(8))}일`} />
+          ))}
         </div>
       </div>
       <div className="mt-1.5 flex gap-[2px]">
@@ -512,7 +556,13 @@ function useMyCommuteDays(month: string) {
       const rec = evaluate({ empId: myEmpId ?? 0, date, inAt: raw?.inAt ?? null, outAt: raw?.outAt ?? null }, approvalDays);
       let bucket = bucketOf(rec.status);
       if (date > today && bucket !== 'leave') bucket = 'pending';
-      return { date, bucket, status: rec.status, minutes: rec.totalMin ?? 0, inAt: rec.inAt, outAt: rec.outAt };
+      /*
+        외근·출장 날 — 근태 계산은 8시간을 쳐 주지만(결재로 인정) 실제 출퇴근 기록과는 다르다.
+        막대에는 외근·출장 색 영역으로 따로 보이고, 기록이 있으면 그 시간(결재 없이 계산한 시간)만 근무 막대로 얹는다.
+      */
+      const away: AwayKind = rec.status === 'outside' || rec.status === 'trip' ? rec.status : null;
+      const actualMin = away ? (raw?.inAt && raw?.outAt ? evaluate({ empId: myEmpId ?? 0, date, inAt: raw.inAt, outAt: raw.outAt }, NO_APPROVALS).totalMin ?? 0 : 0) : rec.totalMin ?? 0;
+      return { date, bucket, status: rec.status, minutes: rec.totalMin ?? 0, actualMin, away, inAt: rec.inAt, outAt: rec.outAt };
     });
   }, [month, myMonthQuery.data, evaluate, approvalDaysOf, me?.id, me?.name, myEmpId, today]);
   return { myDays, myEmpId, settled: boot.isSettled };
@@ -637,10 +687,7 @@ export function AttendanceWidget() {
               </span>
             </div>
             <HoursBars days={myDays} today={today} />
-            <div className="mt-3 flex gap-4 text-[10.5px] text-ink3">
-              <span className="flex items-center gap-1.5"><i className="h-2.5 w-2.5 rounded-[3px] bg-[#0876c8]" />근무</span>
-              <span className="flex items-center gap-1.5"><i className="h-2.5 w-2.5 rounded-[3px] bg-[#f2a17e]" />지각한 날</span>
-            </div>
+            <HoursLegend days={myDays.filter((d) => d.date <= today)} />
             <LeaveBar />
           </div>
         </div>
@@ -1038,7 +1085,10 @@ export function WeekHoursWidget() {
   const holidays = useHolidays(month.slice(0, 4)).data ?? [];
   const holidaySet = new Set(holidays.map((h) => h.date));
 
-  const weekDays = week.map((date) => ({ date, minutes: date <= today ? byDate.get(date)?.minutes ?? 0 : 0, late: byDate.get(date)?.bucket === 'late' }));
+  const weekDays = week.map((date) => {
+    const d = date <= today ? byDate.get(date) : undefined;
+    return { date, minutes: d?.minutes ?? 0, actualMin: d?.actualMin ?? 0, away: d?.away ?? null, late: d?.bucket === 'late' };
+  });
   const monthDays = b.myDays;
   const isWorkday = (d: string) => weekdayOf(d) !== 0 && weekdayOf(d) !== 6 && !holidaySet.has(d);
   const isWeek = mode === 'week';
@@ -1095,9 +1145,7 @@ export function WeekHoursWidget() {
           <div className="relative flex h-[84px] items-end gap-2">
             <div className="absolute inset-x-0 border-t border-dashed border-border" style={{ bottom: `${(DAY_GOAL_MIN / MAX) * 100}%` }} />
             {weekDays.map((d) => (
-              <div key={d.date} className="flex h-full flex-1 items-end" title={`${WEEKDAYS[weekdayOf(d.date)]} ${hoursText(d.minutes)}`}>
-                {d.minutes > 0 && <div className={`w-full rounded-t-[5px] ${d.late ? 'bg-[#f2a17e]' : 'bg-[#0876c8]'}`} style={{ height: `${(Math.min(d.minutes, MAX) / MAX) * 100}%` }} />}
-              </div>
+              <DayHoursColumn key={d.date} d={d} max={MAX} show radius="rounded-t-[5px]" label={WEEKDAYS[weekdayOf(d.date)]} />
             ))}
           </div>
           <div className="mt-1.5 flex gap-2">
@@ -1108,6 +1156,10 @@ export function WeekHoursWidget() {
         </>
       ) : (
         <HoursBars days={monthDays} today={today} />
+      )}
+      {/* 이 위젯은 원래 색 설명이 없다 — 외근·출장 날이 있을 때만 붙인다 */}
+      {(isWeek ? weekDays : monthDays.filter((d) => d.date <= today)).some((d) => d.away) && (
+        <HoursLegend days={isWeek ? weekDays : monthDays.filter((d) => d.date <= today)} />
       )}
     </Panel>
   );
