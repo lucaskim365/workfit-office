@@ -17,6 +17,10 @@ const EXTRA: Record<string, { url: string; row: Row }> = {
   S_ADM_ASSIGN: { url: '/base/authz/assign', row: { access: ['admin.authz'], create: ['admin.authz'], update: ['admin.authz'], delete: ['admin.authz'] } },
   S_ADM_PEOPLE: { url: '/base/authz/people', row: { access: ['admin.authz'] } },
   S_SYS_BACKUP: { url: '/sys/backup', row: { access: ['admin.backup'], create: ['admin.backup'], update: ['admin.backup'], delete: ['admin.backup'] } },
+  /** 기업분류 — 시스템 기준정보, 공통코드와 같은 권한 */
+  S_ADM_COMPANY_CLASS: { url: '/base/company-class', row: pairRow('admin.code') },
+  /** 사업구분 — 업무 기준정보, 사업 현황과 같은 권한 */
+  S_BIZ_CATEGORY: { url: '/biz/category', row: pairRow('biz.project') },
 };
 
 /** 옛 권한표 화면의 URL (SYSTEM_SCREENS 와 같음) */

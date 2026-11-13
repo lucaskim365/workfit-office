@@ -725,6 +725,41 @@ const COLLECTIONS: CollectionDef[] = [
     indexes: [IX('cflCompany', ['companyId'])],
   },
   {
+    id: 'companyClasses',
+    name: '기업분류',
+    /* 시스템 기준정보(관리자 콘솔). 프로젝트에서 기업이 맡는 자리 — 도입기업(프로젝트당 한 곳)·매입기업(여러 곳). 지우지 않고 use=false. */
+    attributes: [
+      S('id', 64, true),
+      S('name', 64, true),
+      BOOL('singlePerProject', false),
+      INT('order', false, 0, 0, 100000),
+      BOOL('use', true),
+      S('note', 200),
+      S('createdBy', 64),
+      S('createdAt', 40),
+      S('updatedBy', 64),
+      S('updatedAt', 40),
+    ],
+    indexes: [],
+  },
+  {
+    id: 'bizCategories',
+    name: '사업구분',
+    /* 업무 기준정보(사업관리). 정부사업 종류 — 부처협업형·제조AI 등. 지우지 않고 use=false. */
+    attributes: [
+      S('id', 64, true),
+      S('name', 64, true),
+      INT('order', false, 0, 0, 100000),
+      BOOL('use', true),
+      S('note', 200),
+      S('createdBy', 64),
+      S('createdAt', 40),
+      S('updatedBy', 64),
+      S('updatedAt', 40),
+    ],
+    indexes: [],
+  },
+  {
     id: 'items',
     name: '품목',
     attributes: [
