@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { roomFilesOf } from './roomFiles.ts';
+import { roomFilesOf, groupRoomFilesByDay } from './roomFiles.ts';
 import type { ChatMessage } from './schema';
 
 const att = (name: string, mime: string, id?: string) => ({ url: `u/${name}`, name, size: 1, mime, ...(id ? { id } : {}) });
@@ -19,4 +19,17 @@ test('예전 메시지(attachment)와 서식 메시지(attachments 여러 개)�
 
 test('지운 메시지의 파일은 빼고', () => {
   assert.equal(roomFilesOf([msg('d', '2026-11-01', { deletedAt: '2026-11-02', attachments: [att('x.pdf', 'application/pdf')] })]).length, 0);
+});
+
+test('사진을 날짜별로 묶는다(최신순 유지)', () => {
+  const files = roomFilesOf([
+    msg('a', '2026-11-12T09:00', { attachments: [att('a.png', 'image/png', 'a')] }),
+    msg('b', '2026-11-13T08:00', { attachments: [att('b.png', 'image/png', 'b')] }),
+    msg('c', '2026-11-13T18:00', { attachments: [att('c.png', 'image/png', 'c')] }),
+  ]);
+  const days = groupRoomFilesByDay(files);
+  assert.deepEqual(days.map((d) => [d.label, d.files.map((f) => f.attachment.name)]), [
+    ['2026년 11월 13일 (금)', ['c.png', 'b.png']],
+    ['2026년 11월 12일 (목)', ['a.png']],
+  ]);
 });

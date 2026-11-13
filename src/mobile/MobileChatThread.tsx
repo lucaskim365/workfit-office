@@ -2,7 +2,7 @@ import { useAuthz } from '@/features/authz/useAuthz';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Search, FileSignature, X, Pencil, Download, Eye } from 'lucide-react';
+import { Search, FileSignature, X, Pencil } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { CompositeMessageCard } from '@/features/chat/CompositeMessageCard';
@@ -26,9 +26,9 @@ import type { MentionCandidate } from '@/features/chat/rich/ChatRichEditor';
 import { ChatComposer } from '@/features/chat/ChatComposer';
 import { getRoomDisplayName, fmtBubbleTime, fmtSize, msgPreview, downloadAttachment, openAttachment } from './chatUtils';
 import { ChatFileStatusText } from './ChatFileStatusText';
-import { viewerKindOf } from './MobileFileViewer';
-import { roomFilesOf } from '@/domain/chatMessage/roomFiles';
+import { groupRoomFilesByDay, roomFilesOf, type RoomFile } from '@/domain/chatMessage/roomFiles';
 import { FileKindIcon } from '@/features/chat/FileKindIcon';
+import { RoomPhotoGrid } from '@/features/chat/RoomPhotoGrid';
 import { MobileActionSheet, type SheetAction } from './MobileActionSheet';
 import { MobileMemberPicker } from './MobileMemberPicker';
 import { MobileMemberSheet, MobileProfileSheet } from './MobileProfileSheet';
@@ -696,7 +696,7 @@ export default function MobileChatThread() {
         <MobileFileBoxModal
           files={filesInRoom}
           onClose={() => setShowFileBox(false)}
-          onOpenImage={(att) => setViewer({ attachments: [att], initialIdx: 0 })}
+          onOpenImage={(att, list) => setViewer({ attachments: list, initialIdx: Math.max(0, list.indexOf(att)) })}
         />,
         document.body
       )}
@@ -1421,7 +1421,7 @@ function ImageViewer({
   return createPortal(
     <div
       onClick={onClose}
-      className="fixed inset-0 z-[120] flex flex-col items-center justify-center bg-black/90 p-4 overflow-hidden select-none"
+      className="fixed inset-0 z-[160] flex flex-col items-center justify-center bg-black/90 p-4 overflow-hidden select-none"
       style={{ touchAction: 'none' }}
     >
       {/* 상단 헤더 영역 */}
@@ -1867,15 +1867,25 @@ function renderHighlightedText(text: string, query: string, isActive: boolean) {
   );
 }
 
+/**
+ * 파일함 모아보기 — [사진]은 바둑판으로, [파일]은 목록으로 나눠 보인다.
+ * - 사진: 날짜별 바둑판, 누르면 크게 보기(좌우로 넘기면 이 방의 다른 사진)
+ * - 파일: 날짜별 목록, 줄을 누르면 말풍선과 똑같이 연다(PDF·엑셀·워드는 앱 안 보기 화면, 그 밖은 휴대폰 공유 창·저장)
+ */
 function MobileFileBoxModal({
   files,
   onClose,
   onOpenImage,
 }: {
-  files: any[];
+  files: RoomFile[];
   onClose: () => void;
-  onOpenImage: (att: Attachment) => void;
+  onOpenImage: (att: Attachment, list: Attachment[]) => void;
 }) {
+  const photos = useMemo(() => files.filter((f) => f.type === 'image'), [files]);
+  const docs = useMemo(() => files.filter((f) => f.type !== 'image'), [files]);
+  const docDays = useMemo(() => groupRoomFilesByDay(docs), [docs]);
+  const [tab, setTab] = useState<'photo' | 'file'>(() => (photos.length === 0 && docs.length > 0 ? 'file' : 'photo'));
+
   const handleGoToMessage = (messageId: string) => {
     onClose();
     setTimeout(() => {
@@ -1891,73 +1901,70 @@ function MobileFileBoxModal({
     }, 150);
   };
 
+  const tabBtn = (key: 'photo' | 'file', label: string, count: number) => (
+    <button
+      type="button"
+      onClick={() => setTab(key)}
+      className={`flex-1 py-2.5 text-[13px] font-bold border-b-2 cursor-pointer ${tab === key ? 'border-[#1890ff] text-ink' : 'border-transparent text-ink3'}`}
+    >
+      {label} <span className="tabular-nums font-semibold">{count}</span>
+    </button>
+  );
+
   return (
     <div className="fixed inset-0 z-[150] flex flex-col bg-white" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
       <header className="m-header flex shrink-0 items-center justify-between border-b border-black/10 px-4 py-3 text-white">
         <span className="text-[15px] font-bold">📁 파일함 모아보기</span>
         <button onClick={onClose} className="text-[14px] font-semibold text-white/80 hover:text-white px-2 cursor-pointer">닫기</button>
       </header>
-      <div className="min-h-0 flex-1 overflow-y-auto p-4 space-y-3">
-        {files.length === 0 ? (
+      <div className="flex shrink-0 border-b border-black/10 bg-white">
+        {tabBtn('photo', '사진', photos.length)}
+        {tabBtn('file', '파일', docs.length)}
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        {tab === 'photo' ? (
+          <RoomPhotoGrid photos={photos} onOpen={onOpenImage} />
+        ) : docs.length === 0 ? (
           <div className="py-20 text-center text-[12px] text-ink3">공유된 파일이 없습니다.</div>
         ) : (
-          files.map((f) => {
-            const isImg = f.type === 'image';
-            return (
-              <div key={f.key} className="flex items-center gap-3 rounded-xl border border-black/5 bg-black/[0.01] p-3 shadow-3xs">
-                {isImg ? (
-                  <button onClick={() => onOpenImage(f.attachment)} className="w-12 h-12 rounded-lg border border-black/10 overflow-hidden shrink-0 block bg-black/5 cursor-pointer">
-                    <img src={f.attachment.url} alt={f.attachment.name} className="w-full h-full object-cover" />
-                  </button>
-                ) : (
-                  <FileKindIcon name={f.attachment.name} size={48} />
-                )}
-                <div className="min-w-0 flex-1">
-                  <button 
-                    onClick={() => openAttachment(f.attachment)}
-                    className="block text-left text-[12.5px] font-bold text-ink hover:underline truncate w-full cursor-pointer"
-                  >
-                    {f.attachment.name}
-                  </button>
-                  <div className="flex items-center gap-1.5 text-[10px] text-ink3 mt-0.5">
-                    <span>{f.senderName || '알 수 없음'}</span>
-                    <span>·</span>
-                    <span>{fmtSize(f.attachment.size)}</span>
-                    <span>·</span>
-                    <span className="tabular-nums">{new Date(f.at).toLocaleDateString()}</span>
+          <div className="pb-3">
+            {docDays.map((d) => (
+              <section key={d.day}>
+                <h3 className="sticky top-0 z-[1] bg-white/95 px-3 pb-1.5 pt-3 text-[11.5px] font-bold text-ink2">{d.label}</h3>
+                <div className="space-y-2 px-3">
+                {d.files.map((f) => (
+                  <div key={f.key} className="flex items-center gap-1 rounded-xl border border-black/5 bg-black/[0.01] shadow-3xs">
+                    <button
+                      type="button"
+                      onClick={() => void openAttachment(f.attachment)}
+                      className="flex min-w-0 flex-1 items-center gap-3 p-3 text-left cursor-pointer active:bg-black/5 rounded-xl"
+                    >
+                      <FileKindIcon name={f.attachment.name} size={40} />
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-[12.5px] font-bold text-ink">{f.attachment.name}</div>
+                        <div className="flex items-center gap-1.5 text-[10px] text-ink3 mt-0.5">
+                          <span>{f.senderName || '알 수 없음'}</span>
+                          <span>·</span>
+                          <span>{fmtSize(f.attachment.size)}</span>
+                          <span>·</span>
+                          <span className="tabular-nums">{f.at.slice(11, 16)}</span>
+                        </div>
+                      </div>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleGoToMessage(f.messageId)}
+                      className="mr-2 shrink-0 text-[15px] p-2 hover:bg-black/5 rounded-full active:scale-95 transition-transform cursor-pointer"
+                      title="대화 위치로 이동"
+                    >
+                      💬
+                    </button>
                   </div>
+                ))}
                 </div>
-                <div className="flex items-center gap-1 shrink-0">
-                  <button 
-                    onClick={() => handleGoToMessage(f.messageId)}
-                    className="shrink-0 text-[15px] p-2 hover:bg-black/5 rounded-full active:scale-95 transition-transform cursor-pointer"
-                    title="대화 위치로 이동"
-                  >
-                    💬
-                  </button>
-                  {/* PDF·엑셀·워드는 앱 안 보기 화면으로 연다(저장은 그 화면 위 [저장]) — 바로 내려받으면 휴대폰 다운로드 알림의
-                      [열기]가 다른 앱으로 넘겨 버려 뒤로가기로 대화방에 못 돌아왔다 */}
-                  {viewerKindOf(f.attachment.name, f.attachment.mime) ? (
-                    <button
-                      onClick={() => openAttachment(f.attachment)}
-                      className="shrink-0 p-2 hover:bg-black/5 rounded-full active:scale-95 transition-transform cursor-pointer"
-                      title="열기"
-                    >
-                      <Eye size={15} />
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => downloadAttachment(f.attachment)}
-                      className="shrink-0 p-2 hover:bg-black/5 rounded-full active:scale-95 transition-transform cursor-pointer"
-                      title="다운로드"
-                    >
-                      <Download size={15} />
-                    </button>
-                  )}
-                </div>
-              </div>
-            );
-          })
+              </section>
+            ))}
+          </div>
         )}
       </div>
     </div>

@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { ViewerFile } from './fileViewer/viewerShell';
 
 /**
@@ -83,9 +84,11 @@ export function MobileFileViewerHost() {
   if (!file) return null;
   const kind = viewerKindOf(file.name, file.mime);
   const Screen = kind === 'xlsx' ? XlsxScreen : kind === 'docx' ? DocxScreen : PdfScreen;
-  return (
+  // 문서 맨 위층(body)에 띄운다 — 앱 틀(z-100) 안에 두면 body 에 띄운 창(파일함 z-150 등)에서 열 때 그 뒤에 가려졌다
+  return createPortal(
     <Suspense fallback={<div className="fixed inset-0 z-[200] grid place-items-center bg-[#3a3a3a] text-[13px] text-white/80">여는 중…</div>}>
       <Screen file={file} onClose={close} />
-    </Suspense>
+    </Suspense>,
+    document.body,
   );
 }

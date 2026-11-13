@@ -6,7 +6,7 @@ import { useEffect, useSyncExternalStore } from 'react';
  * 처음엔 받고, 그다음부터는 바로 열기). 휴대폰에 남기려면 보기 화면의 [저장](다운로드).
  *
  * 보관 한도: 최근 MAX_ITEMS 개·MAX_BYTES 까지 — 넘으면 먼저 받은 것부터 지운다.
- * 보관함은 이 휴대폰·이 앱에만 있다(로그아웃·앱 데이터 삭제 때 함께 지워짐).
+ * 보관함은 이 휴대폰·이 앱에만 있다. 로그아웃하면 비운다(clearChatFiles — 휴대폰 한 대를 여럿이 쓸 때 앞사람 파일이 남지 않게).
  */
 const CACHE = 'workfit-chat-files';
 const MAX_ITEMS = 60;
@@ -107,6 +107,19 @@ async function evict(cache: Cache) {
     }
   }
   listeners.forEach((l) => l());
+}
+
+/** 보관함 비우기 — 로그아웃 때. 말풍선의 '받음' 표시도 처음으로 되돌린다 */
+export async function clearChatFiles(): Promise<void> {
+  statuses.clear();
+  checked.clear();
+  listeners.forEach((l) => l());
+  if (!hasCache()) return;
+  try {
+    await caches.delete(CACHE);
+  } catch {
+    /* 못 지워도 로그아웃은 계속 */
+  }
 }
 
 /** 말풍선용 — 이 파일을 받았는지·받는 중인지(처음 그릴 때 보관함을 한 번 들여다본다) */
