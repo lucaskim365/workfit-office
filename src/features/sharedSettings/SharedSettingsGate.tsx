@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { leaveAdjustmentStore } from '@/domain/leave/adjustmentStore';
 import { substituteHolidayStore } from '@/domain/leave/substituteHolidayStore';
+import { substituteLedgerStore } from '@/data/substituteLedger/substituteLedger.repo';
 import { migrateLegacySharedSettings } from './migrateLegacySharedSettings';
 
 /** 첫 로딩을 이보다 오래 막지 않는다 — DB가 느리거나 실패해도 화면은 뜨고, 다 읽히면 이벤트로 다시 그린다. */
@@ -9,7 +10,7 @@ const MAX_WAIT_MS = 5000;
 const REFRESH_MS = 5 * 60 * 1000;
 
 const hydrateAll = () =>
-  Promise.allSettled([leaveAdjustmentStore.hydrate(), substituteHolidayStore.hydrate()]).then(
+  Promise.allSettled([leaveAdjustmentStore.hydrate(), substituteHolidayStore.hydrate(), substituteLedgerStore.hydrate()]).then(
     (results) => {
       for (const r of results) if (r.status === 'rejected') console.warn('[sharedSettings] DB 조회 실패', r.reason);
     },

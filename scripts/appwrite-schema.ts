@@ -367,6 +367,26 @@ const COLLECTIONS: CollectionDef[] = [
     indexes: [],
   },
   {
+    id: 'substituteHolidayLedger',
+    name: '대체휴무 원장',
+    /* 결재 완료 휴일근로 → 분 × 1.5 지급(GRANT), 취소완료 → 같은 분 차감(REVOKE). 줄 id = 근거 문서(이중 지급 방지). 지우지 않는다. */
+    attributes: [
+      S('id', 64, true),
+      S('userId', 64, true),
+      EN('kind', ['GRANT', 'REVOKE'], true),
+      INT('minutes', true, undefined, -100000, 100000),
+      S('sourceDocId', 64, true),
+      S('sourceDocNo', 64),
+      S('workDate', 10),
+      S('expiresOn', 10),
+      INT('workMinutes', false, 0, 0, 100000),
+      S('createdAt', 40),
+      S('createdBy', 64),
+      S('note', 200),
+    ],
+    indexes: [IX('userId', ['userId']), IX('sourceDocId', ['sourceDocId'])],
+  },
+  {
     // 휴가관리 > 대체휴무 일괄 부여. targetScope = 'ALL' 또는 대상 ID·이름 배열의 JSON 문자열.
     id: 'substituteHolidayGrants',
     name: '대체휴무 부여',
