@@ -130,10 +130,12 @@ Appwrite 새 컬렉션 3개 + 공통코드 그룹 1개. 정의는 `scripts/appwr
 
 ## 6. 다음 단계(설계만 — 이번엔 만들지 않음)
 
-6.1 `companyClasses` — **기업분류(시스템 기준정보, 관리자 콘솔)**
+6.1 `companyClasses` — **기업분류(시스템 기준정보, 관리자 콘솔)** — 11-13 구현: 관리자 콘솔 › 회사·운영 › 기업분류(권한 admin.code.*), `maxPerProject` 대신 `singlePerProject`(boolean, 한 곳만/여러 곳), 초기값 CCL-INTRO 도입기업(한 곳)·CCL-BUY 매입기업(여러 곳) — scripts/seed-company-classes.ts.
+  원래 설계:
 `id, name(도입기업·매입기업…), maxPerProject(1 | null=여러 곳), order, use`. 화면 동작이 분류의 성격(maxPerProject)에 묶여 있어 담당자가 아니라 관리자가 관리.
 
-6.2 `bizCategories` — **사업구분(업무 기준정보, 사업관리)**
+6.2 `bizCategories` — **사업구분(업무 기준정보, 사업관리)** — 11-13 구현: 사업관리 › 사업 관리 › 사업구분(/biz/category, 권한 biz.project.*), 초기값 없음(담당자가 입력).
+  원래 설계:
 `id, name(부처협업형·제조AI…), order, use`. 공고가 날 때마다 사업 담당이 추가.
 
 6.3 정부사업 정보 — `workProjects` 에 **사업구분 칸(`bizCategoryId`)** 등 정부사업 항목을 붙인다. 프로젝트 = 정부사업이므로 1:1 별도 컬렉션을 두지 않고 프로젝트 칸으로 둔다(어느 항목인지는 다음 단계에서 사용자와 정함). `clientName` 은 쓰지 않는다(도입기업 연결로 대신).

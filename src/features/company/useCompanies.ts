@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { companyRepo } from '@/data/company/company.repo';
+import { bizCategoryRepo, companyClassRepo } from '@/data/company/masters.repo';
 import { BANK_GROUP_CODE } from '@/domain/company/banks';
 import { useMemo } from 'react';
 import { useCodeOptions, useCommonCodeGroups } from '@/features/commonCode/useCommonCodes';
@@ -36,4 +37,26 @@ export function useBankOptions() {
 export function useBankNames(): Map<string, string> {
   const { data: groups = [] } = useCommonCodeGroups();
   return useMemo(() => new Map((groups.find((g) => g.code === BANK_GROUP_CODE)?.codes ?? []).map((c) => [c.code, c.name])), [groups]);
+}
+
+/** 기업분류(관리자 콘솔)·사업구분(사업관리) — 목록과 저장. */
+export function useCompanyClasses() {
+  return useQuery({ queryKey: ['companyClasses'], queryFn: () => companyClassRepo.list() });
+}
+export function useSaveCompanyClass() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: Parameters<typeof companyClassRepo.save>[0]) => companyClassRepo.save(input),
+    onSettled: () => void qc.invalidateQueries({ queryKey: ['companyClasses'] }),
+  });
+}
+export function useBizCategories() {
+  return useQuery({ queryKey: ['bizCategories'], queryFn: () => bizCategoryRepo.list() });
+}
+export function useSaveBizCategory() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: Parameters<typeof bizCategoryRepo.save>[0]) => bizCategoryRepo.save(input),
+    onSettled: () => void qc.invalidateQueries({ queryKey: ['bizCategories'] }),
+  });
 }

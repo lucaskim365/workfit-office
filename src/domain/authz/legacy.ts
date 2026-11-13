@@ -44,6 +44,7 @@ export const LEGACY_MAP: Record<string, LegacyRow> = {
   S_BIZ_VENDOR: { access: ['biz.vendor.view'], create: ['biz.vendor.manage'], update: ['biz.vendor.manage'], delete: ['biz.vendor.manage'] },
   S_BIZ_PROJECT: { access: ['biz.project.view'], update: ['biz.project.manage'] },
   S_BIZ_PO: { access: ['biz.po.view'], update: ['biz.po.manage'] },
+  S_BIZ_PURCHASE: { access: ['biz.purchase.view'], update: ['biz.purchase.manage'] },
 };
 
 export function legacyPermissions(menuPermissions: Record<string, Partial<Record<Act, boolean>>> | undefined): string[] {

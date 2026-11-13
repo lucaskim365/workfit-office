@@ -17,6 +17,10 @@ const EXTRA: Record<string, { url: string; row: Row }> = {
   S_ADM_ASSIGN: { url: '/base/authz/assign', row: { access: ['admin.authz'], create: ['admin.authz'], update: ['admin.authz'], delete: ['admin.authz'] } },
   S_ADM_PEOPLE: { url: '/base/authz/people', row: { access: ['admin.authz'] } },
   S_SYS_BACKUP: { url: '/sys/backup', row: { access: ['admin.backup'], create: ['admin.backup'], update: ['admin.backup'], delete: ['admin.backup'] } },
+  /** 기업분류 — 시스템 기준정보, 공통코드와 같은 권한 */
+  S_ADM_COMPANY_CLASS: { url: '/base/company-class', row: pairRow('admin.code') },
+  /** 사업구분 — 업무 기준정보, 사업 현황과 같은 권한 */
+  S_BIZ_CATEGORY: { url: '/biz/category', row: pairRow('biz.project') },
 };
 
 /** 옛 권한표 화면의 URL (SYSTEM_SCREENS 와 같음) */
@@ -27,7 +31,7 @@ const URL_OF: Record<string, string> = {
   S_GW_ORGCHART: '/gw/orgchart', S_GW_GALLERY: '/gw/gallery', S_EXEC_DASH: '/exec', S_BASE_USER: '/base/user', S_BASE_DEPT: '/base/department',
   S_BASE_POSITION: '/base/position', S_BASE_HOLIDAY: '/base/holiday', S_BASE_CODE: '/base/code', S_BASE_APFORM: '/base/approval-form',
   S_BASE_APPROC: '/base/approval-process', S_BASE_APMON: '/base/approval-monitor', S_SYS_LOG: '/sys/log', S_SYS_COMPANY: '/sys/company',
-  S_SYS_IF: '/sys/interface', S_BIZ_VENDOR: '/biz/vendor', S_BIZ_PROJECT: '/biz/project', S_BIZ_PO: '/biz/po',
+  S_SYS_IF: '/sys/interface', S_BIZ_VENDOR: '/biz/vendor', S_BIZ_PROJECT: '/biz/project', S_BIZ_PO: '/biz/po', S_BIZ_PURCHASE: '/biz/purchase',
 };
 
 const ROWS = new Map<string, Row>();
