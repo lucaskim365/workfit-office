@@ -19,9 +19,15 @@ test('클릭 한 번 = 그 30분 칸', () => {
   assert.deepEqual(rangeFromDrag(605, 605), { start: 600, end: 630 });
 });
 
-test('위로 끌어도 같은 구간', () => {
-  assert.deepEqual(rangeFromDrag(700, 610), { start: 600, end: 720 });
-  assert.deepEqual(rangeFromDrag(610, 700), { start: 600, end: 720 });
+test('위로 끌어도 같은 구간 — 끌면 10분 단위', () => {
+  assert.deepEqual(rangeFromDrag(700, 610), { start: 610, end: 710 });
+  assert.deepEqual(rangeFromDrag(610, 700), { start: 610, end: 710 });
+});
+
+test('10분 단위로 쪼개기 — 10분·20분 계획', () => {
+  assert.deepEqual(rangeFromDrag(601, 611), { start: 600, end: 620 });
+  assert.deepEqual(rangeFromDrag(600, 609), { start: 600, end: 630 }, '같은 10분 안은 누르기(30분 칸)');
+  assert.deepEqual(rangeFromDrag(612, 618), { start: 600, end: 630 });
 });
 
 test('맨 아래 칸을 끌어도 24시를 넘지 않는다', () => {
@@ -30,16 +36,17 @@ test('맨 아래 칸을 끌어도 24시를 넘지 않는다', () => {
 });
 
 test('옮기기는 길이 유지·경계 안', () => {
-  assert.deepEqual(moveRange({ start: 600, end: 690 }, 20), { start: 630, end: 720 });
-  assert.deepEqual(moveRange({ start: 600, end: 690 }, 10), { start: 600, end: 690 });
+  assert.deepEqual(moveRange({ start: 600, end: 690 }, 20), { start: 620, end: 710 });
+  assert.deepEqual(moveRange({ start: 600, end: 690 }, 4), { start: 600, end: 690 });
+  assert.deepEqual(moveRange({ start: 600, end: 690 }, 12), { start: 610, end: 700 });
   assert.deepEqual(moveRange({ start: 600, end: 690 }, 1000), { start: 1350, end: 1440 });
   assert.deepEqual(moveRange({ start: 600, end: 690 }, -900), { start: 0, end: 90 });
 });
 
-test('끝 늘리기는 최소 30분, 최대 24시', () => {
-  assert.deepEqual(resizeEnd({ start: 600, end: 630 }, 590), { start: 600, end: 630 });
+test('끝 늘리기는 10분 단위, 최소 10분, 최대 24시', () => {
+  assert.deepEqual(resizeEnd({ start: 600, end: 630 }, 590), { start: 600, end: 610 });
   assert.deepEqual(resizeEnd({ start: 1380, end: 1410 }, 1500), { start: 1380, end: 1440 });
-  assert.deepEqual(resizeEnd({ start: 600, end: 630 }, 701), { start: 600, end: 720 });
+  assert.deepEqual(resizeEnd({ start: 600, end: 630 }, 701), { start: 600, end: 710 });
 });
 
 test('시각 변환: 1440은 23:59로', () => {
@@ -84,24 +91,24 @@ test('빠른 입력 기본값', () => {
   assert.deepEqual(quickDefaultRange(new Date(2026, 9, 21, 23, 30)), { start: 1410, end: 1440 });
 });
 
-test('시작 시각 목록 — 30분 간격 00:00~23:30, 칸에 없는 지금 값은 끼워 넣는다', () => {
+test('시작 시각 목록 — 10분 간격 00:00~23:50, 칸에 없는 지금 값은 끼워 넣는다', () => {
   const list = startTimeOptions(null);
-  assert.equal(list.length, 48);
-  assert.deepEqual(list.slice(0, 2), [0, 30]);
-  assert.equal(list.at(-1), 1410);
+  assert.equal(list.length, 144);
+  assert.deepEqual(list.slice(0, 2), [0, 10]);
+  assert.equal(list.at(-1), 1430);
   const odd = startTimeOptions(555); // 09:15
-  assert.equal(odd.length, 49);
-  assert.deepEqual(odd.slice(18, 21), [540, 555, 570]);
+  assert.equal(odd.length, 145);
+  assert.deepEqual(odd.slice(55, 58), [550, 555, 560]);
 });
 
-test('종료 시각 목록 — 시작 뒤 30분 간격(24:00까지)과 길이, 칸에 없는 지금 값도 포함', () => {
-  const list = endTimeOptions(1380, null); // 23:00 시작
-  assert.deepEqual(list.map((o) => o.minute), [1410, 1440]);
-  assert.deepEqual(list.map((o) => o.label), ['23:30 (30분)', '24:00 (1시간)']);
+test('종료 시각 목록 — 시작 뒤 10분 간격(24:00까지)과 길이, 칸에 없는 지금 값도 포함', () => {
+  const list = endTimeOptions(1410, null); // 23:30 시작
+  assert.deepEqual(list.map((o) => o.minute), [1420, 1430, 1440]);
+  assert.deepEqual(list.map((o) => o.label), ['23:40 (10분)', '23:50 (20분)', '24:00 (30분)']);
   const odd = endTimeOptions(600, 645); // 10:00 시작, 10:45 끝
-  assert.deepEqual(odd.slice(0, 3).map((o) => o.label), ['10:30 (30분)', '10:45 (45분)', '11:00 (1시간)']);
-  // 시작이 30분 경계가 아니어도 다음 경계부터
-  assert.equal(endTimeOptions(555, null)[0].minute, 570);
+  assert.deepEqual(odd.slice(3, 6).map((o) => o.label), ['10:40 (40분)', '10:45 (45분)', '10:50 (50분)']);
+  // 시작이 10분 경계가 아니어도 다음 경계부터
+  assert.equal(endTimeOptions(555, null)[0].minute, 560);
 });
 
 test('현재 시간대 — 그 시각이 속한 1시간 칸', () => {

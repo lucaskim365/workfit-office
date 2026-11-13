@@ -51,7 +51,7 @@ const DATA = {
   ],
 };
 
-function fixture() {
+function fixture(data = DATA) {
   const calls = [];
   const Query = {
     equal: (key, value) => ({ t: 'equal', key, values: Array.isArray(value) ? value : [value] }),
@@ -70,15 +70,16 @@ function fixture() {
   const anything = new Proxy(function () {}, { get: () => anything, apply: () => anything });
   const context = vm.createContext({ z: anything, Query, console, ...extra });
   const scope = read('appwrite/functions/caps-ingest/src/scope.js').replace(/^export /gm, '');
+  const authz = read('appwrite/functions/caps-ingest/src/authz.js').replace(/^export /gm, '');
   const source = read('appwrite/functions/caps-ingest/src/main.js')
     .replace(/^import [\s\S]*?;\r?\n/gm, '')
     .replace('export default async', 'const entry = async');
-  vm.runInContext(`${scope}\n${source}\nglobalThis.resolveViewerScope = resolveViewerScope; globalThis.handleAppRead = handleAppRead;`, context);
+  vm.runInContext(`${scope}\n${authz}\n${source}\nglobalThis.resolveViewerScope = resolveViewerScope; globalThis.handleAppRead = handleAppRead;`, context);
   const dbs = {
     listDocuments: async (_db, coll, queries) => {
       const filters = queries.filter((q) => q.t === 'equal');
       calls.push({ coll, filtered: filters.length > 0 });
-      let rows = (DATA[coll] ?? []).filter((r) => filters.every((f) => f.values.includes(r[f.key])));
+      let rows = (data[coll] ?? []).filter((r) => filters.every((f) => f.values.includes(r[f.key])));
       for (const q of queries) {
         if (q.t === 'gte') rows = rows.filter((r) => r[q.key] >= q.value);
         if (q.t === 'lte') rows = rows.filter((r) => r[q.key] <= q.value);
@@ -177,4 +178,61 @@ test('bootstrap: 관리자는 전 직원·전 직원 한 달, 내 사번이 없�
 test('bootstrap: 조회 월 형식이 틀리면 400', async () => {
   const { request } = fixture();
   assert.equal((await request('U001', 'bootstrap', { month: '2026/10' })).status, 400);
+});
+
+/* ── 새 권한 체계로 옮긴 뒤(authRoles 에 역할이 있으면) — 예전 매핑·직급·명단은 보지 않고 역할·지정만 본다 ── */
+const AUTHZ = {
+  ...DATA,
+  authRoles: [
+    { $id: 'ROLE-SUPER', id: 'ROLE-SUPER', kind: 'super', use: true, permissions: '[]' },
+    { $id: 'ROLE-BASE', id: 'ROLE-BASE', kind: 'base', use: true, permissions: '["commute.self"]' },
+    { $id: 'ROLE-HEAD', id: 'ROLE-HEAD', kind: 'custom', use: true, permissions: '["commute.view"]' },
+    { $id: 'ROLE-HR', id: 'ROLE-HR', kind: 'custom', use: true, permissions: '["commute.manage"]' },
+  ],
+  authAssignments: [
+    { $id: 'a-s', roleId: 'ROLE-SUPER', targetType: 'DEPT', targetId: 'D9', targetSub: false, scopeType: 'ALL', scopeDeptIds: '[]', scopeSub: true },
+    { $id: 'a-h', roleId: 'ROLE-HEAD', targetType: 'DEPT_HEAD', targetId: '', scopeType: 'OWN_DEPT', scopeDeptIds: '[]', scopeSub: false },
+    { $id: 'a-r', roleId: 'ROLE-HR', targetType: 'USER', targetId: 'U005', scopeType: 'DEPTS', scopeDeptIds: '["D1"]', scopeSub: true },
+  ],
+  departments: [...DATA.departments, { $id: 'D11', name: '개발1팀 1파트', parentId: 'D1', headUserId: null }],
+  // 운영 인명관리처럼 부서 ID 와 이름을 함께 둔다(웹 앱은 부서 이름 칸으로 소속을 본다)
+  employeeProfiles: [...DATA.employeeProfiles.map((p) => (p.$id === 'p6' ? { ...p, dept: '경영지원' } : p)), { $id: 'p8', userId: 'U008', deptId: 'D11', dept: '개발1팀 1파트', positionId: 'P1', jobTitleId: null }],
+  users: [...DATA.users, { $id: 'a8', id: 'U008', name: '하위원', empNo: '1008' }],
+  employees: [...DATA.employees, { $id: 'e8', empId: 18, name: '하위원' }],
+};
+
+test('새 체계: 예전 임원 매핑(U002)은 더는 전사가 아니다 — 역할 지정만 본다', async () => {
+  const { resolve } = fixture(AUTHZ);
+  assert.equal((await resolve('U002')).kind, 'self');
+});
+
+test('새 체계: 최고 관리자 부서 지정 — 그 부서 소속(U006, D9)은 전사', async () => {
+  const { resolve } = fixture(AUTHZ);
+  assert.equal((await resolve('U006')).kind, 'admin');
+});
+
+test('새 체계: 부서장 역할 — 맡은 부서만(하위 미포함)', async () => {
+  const { resolve } = fixture(AUTHZ);
+  assert.deepEqual(await resolve('U033'), { kind: 'head', empIds: [11, 13, 17], deptNames: ['개발1팀'], myEmpId: 13 });
+});
+
+test('새 체계: 지정 조직(하위 포함) — 관리 권한이 열람을 포함, 본인도 보인다', async () => {
+  const { resolve } = fixture(AUTHZ);
+  const s = await resolve('U005');
+  assert.equal(s.kind, 'head');
+  assert.deepEqual(s.deptNames.sort(), ['개발1팀', '개발1팀 1파트']);
+  assert.deepEqual(s.empIds, [11, 13, 15, 17, 18]);
+});
+
+test('새 체계: 아무 역할도 안 맞으면 본인만', async () => {
+  const { resolve } = fixture(AUTHZ);
+  assert.deepEqual(await resolve('U001'), { kind: 'self', empIds: [11], deptNames: [], myEmpId: 11 });
+});
+
+test('새 체계에서도 조건 없는 전량 조회를 하지 않는다', async () => {
+  for (const uid of ['U001', 'U002', 'U033', 'U004', 'U005', 'U006', 'U007', 'U008', 'U999']) {
+    const { resolve, calls } = fixture(AUTHZ);
+    await resolve(uid);
+    assert.deepEqual(calls.filter((c) => !c.filtered).map((c) => c.coll), [], uid);
+  }
 });

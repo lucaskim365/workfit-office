@@ -1,3 +1,4 @@
+import { useAuthz } from '@/features/authz/useAuthz';
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/app/auth/AuthProvider';
@@ -20,7 +21,6 @@ import ReservationReasonDialog from './ReservationReasonDialog';
 import ReservationRescheduleDialog from './ReservationRescheduleDialog';
 import { formatResourceDateTime } from './resourceDate';
 import { Button } from '@/shared/ui/Button';
-import { usePermission } from '@/features/auth/usePermission';
 
 type TabId = 'overview' | 'request' | 'my' | 'approvals' | 'admin';
 
@@ -44,8 +44,9 @@ const OVERVIEW_DETAIL_STATUSES = new Set<Reservation['status']>(['PENDING', 'CON
 
 function LocalResourceScreen() {
   const { user: authenticatedUser } = useAuth();
-  const { isAdmin, canAction } = usePermission();
-  const canCreate = canAction('S_GW_RESOURCE', 'create');
+  const { canManage: canManageKey } = useAuthz();
+  const isAdmin = canManageKey('resource.manage');
+  const canCreate = canManageKey('resource.manage');
   const [searchParams, setSearchParams] = useSearchParams();
   const [demoUserId, setDemoUserId] = useState('U011');
   const [modalTarget, setModalTarget] = useState<{ resource: Resource; date?: string } | null>(null);
@@ -73,7 +74,8 @@ function LocalResourceScreen() {
   const requestedTab = searchParams.get('tab') as TabId | null;
   const tab: TabId = requestedTab && requestedTab in TAB_LABELS ? requestedTab : 'overview';
 
-  const canManage = isAdmin || canAction('S_GW_RESOURCE', 'update');
+  const { can: canAuthz } = useAuthz();
+  const canManage = canAuthz('resource.manage');
   const canApprove = useMemo(() => isAdmin || (actor ? resources.some((resource) => canApproveResource(actor, resource)) : false), [isAdmin, actor, resources]);
   const tabs = (Object.keys(TAB_LABELS) as TabId[]).filter((item) => item !== 'approvals' || canApprove).filter((item) => item !== 'admin' || canManage);
   const loading = resourcesQuery.isLoading || reservationsQuery.isLoading || usersQuery.isLoading || departmentsQuery.isLoading;

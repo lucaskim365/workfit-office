@@ -1,3 +1,4 @@
+import { useAuthz } from '@/features/authz/useAuthz';
 import { useMemo, useState, type ReactNode } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Calendar, CalendarClock, Car, CheckCircle2, FileText, History, Link2, MapPin, Phone, Target, User as UserIcon, Users, StickyNote } from 'lucide-react';
@@ -8,7 +9,6 @@ import type { OutsideWorkActor } from '@/data/outsideWork/outsideWork.repo';
 import { useLinkOutsideWork, useOutsideSchedulesOf, useRemoveOutsideWork } from '@/features/outsideWork/useOutsideWorks';
 import { Modal } from '@/shared/ui/Modal';
 import { Button } from '@/shared/ui/Button';
-import { usePermission } from '@/features/auth/usePermission';
 import { useAllApprovals } from '@/features/gw/useApprovals';
 import { useChangeSchedule, useScheduleChangeList, useScheduleChanges } from '@/features/scheduleChange/useScheduleChanges';
 import { canChangeSchedule } from '@/data/scheduleChange/scheduleChange.repo';
@@ -82,7 +82,8 @@ export function OutsideWorkDetailModal({ view, viewer, users, onClose, onEdit, z
 
   const owner = users.find((u) => u.id === view.ownerUserId);
   const ownerLabel = [owner?.name ?? view.ownerName ?? '', owner?.position ?? ''].filter(Boolean).join(' ');
-  const { isAdmin } = usePermission();
+  const { canManage } = useAuthz();
+  const isAdmin = canManage('commute.manage');
   const actor: OutsideWorkActor = { userId: viewer.userId, active: viewer.active, isAdmin };
   const isMine = view.ownerUserId === viewer.userId;
   // 직접 등록 건은 본인과 관리자가 고치고 지운다. 결재 건과 연결은 본인만.

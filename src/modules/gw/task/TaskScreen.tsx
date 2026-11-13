@@ -1,3 +1,4 @@
+import { useAuthz } from '@/features/authz/useAuthz';
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/app/auth/AuthProvider';
@@ -6,7 +7,6 @@ import type { ProjectAccessContext } from '@/domain/workProject/engine';
 import { useDepartments } from '@/features/department/useDepartments';
 import { useProject, useProjects } from '@/features/project/useProjects';
 import { useUsers } from '@/features/user/useUsers';
-import { usePermission } from '@/features/auth/usePermission';
 import { GwHead, GwSideNav, GwSplit } from '@/modules/gw/_gw';
 import ProjectDetail from './ProjectDetail';
 import ProjectList, { PROJECT_TABS, type ProjectTab } from './ProjectList';
@@ -14,7 +14,8 @@ import { Button } from '@/shared/ui/Button';
 
 function LocalProjectScreen() {
   const { user: authenticatedUser, loading: authLoading } = useAuth();
-  const { isAdmin } = usePermission();
+  const { canManage } = useAuthz();
+  const isAdmin = canManage('workplan.manage');
   const [searchParams, setSearchParams] = useSearchParams();
   const [demoUserId, setDemoUserId] = useState('U009');
   const usersQuery = useUsers();

@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { managerLabel, pickDeptHeadId } from '@/domain/org/deptHead';
 import { useQuery } from '@tanstack/react-query';
 import { departmentRepo } from '@/data/department/department.repo';
 import { userRepo } from '@/data/user/user.repo';
@@ -45,6 +46,8 @@ export interface OrgTree {
   managerChain: (userId: string, depth?: number) => User[];
   deptHeadOf: (userId: string) => User | null;
   directManagerOf: (userId: string) => User | null;
+  /** 조직도 '직속 상급자' 표시 글(부서장 없는 위원회 소속이면 '위원장'). */
+  directManagerLabelOf: (userId: string) => string;
 }
 
 export function useOrgTree() {
@@ -114,19 +117,8 @@ export function useOrgTree() {
       }
     }
 
-    /** 부서의 부서장 — 1) 직책(팀장/본부장/소장) 2) 마스터 headUserId 3) 소속원 중 최상위 직급 */
-    const seniorHeadId = (members: User[]): string | null => {
-      if (members.length === 0) return null;
-      const leader = members.find(
-        (m) =>
-          m.jobTitle?.includes('팀장') ||
-          m.jobTitle?.includes('본부장') ||
-          m.jobTitle?.includes('소장') ||
-          m.jobTitle?.includes('대표'),
-      );
-      if (leader) return leader.id;
-      return members.slice().sort((a, b) => rankOf(a.position) - rankOf(b.position))[0].id;
-    };
+    /** 부서장 미지정 부서의 부서장 — 직책 우선, 없으면 본직 소속원 중 최상위 직급(겸직자 제외). */
+    const seniorHeadId = (members: OrgMemberUser[]): string | null => pickDeptHeadId(members, rankOf);
 
     const headIdOfDept = (name: string): string | null => {
       const m = masterByName.get(name);
@@ -202,6 +194,13 @@ export function useOrgTree() {
       return null;
     };
 
+    const directManagerLabelOf = (userId: string): string => {
+      const u = usersById.get(userId);
+      if (!u) return '—';
+      const h = headIdOfDept(u.dept);
+      return managerLabel({ deptName: u.dept, ownDeptHasOtherHead: Boolean(h && h !== userId) }, directManagerOf(userId));
+    };
+
     const deptHeadOf = (userId: string): User | null => directManagerOf(userId);
 
     const managerChain = (userId: string, depth = 5): User[] => {
@@ -219,7 +218,7 @@ export function useOrgTree() {
     };
 
     const depts = [...nodeByName.values()].map((n) => n.dept);
-    return { roots, depts, users, positions, userById, rankOf, managerChain, deptHeadOf, directManagerOf };
+    return { roots, depts, users, positions, userById, rankOf, managerChain, deptHeadOf, directManagerOf, directManagerLabelOf };
   }, [deptsQ.data, usersQ.data, profilesQ.data, positionsQ.data, deptMembersQ.data]);
 
   const isLoading = deptsQ.isLoading || usersQ.isLoading || profilesQ.isLoading || positionsQ.isLoading || deptMembersQ.isLoading;

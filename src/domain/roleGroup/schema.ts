@@ -75,7 +75,7 @@ export const SYSTEM_SCREENS: SystemScreenDef[] = [
   { id: 'S_SYS_IF', name: '인터페이스 관리', url: '/sys/interface', category: 'SYS', desc: '외부 시스템 연동 및 API 관리', supportedActions: ['access', 'create', 'update', 'delete'] },
 
   // 5. 사업관리 (2개) — 영업 & 수주 관리(S_SALES_*)는 2026-10-20 숨김 처리되어 목록에서 뺐다
-  { id: 'S_BIZ_VENDOR', name: '도입기업 정보', url: '/biz/vendor', category: 'BIZ', desc: '도입기업 등록·수정 및 도입기업별 진행 사업', supportedActions: ['access', 'create', 'update', 'delete'] },
+  { id: 'S_BIZ_VENDOR', name: '기업 정보', url: '/biz/vendor', category: 'BIZ', desc: '기업 등록·수정, 계좌 관리', supportedActions: ['access', 'create', 'update', 'delete'] },
   { id: 'S_BIZ_PROJECT', name: '사업 현황', url: '/biz/project', category: 'BIZ', desc: '사업(프로젝트) 목록과 연결 도입기업', supportedActions: ['access', 'update'] },
   { id: 'S_BIZ_PO', name: '발주 현황', url: '/biz/po', category: 'BIZ', desc: '결재 완료 발주서 목록·PDF·회신 문서', supportedActions: ['access', 'update'] },
 ];

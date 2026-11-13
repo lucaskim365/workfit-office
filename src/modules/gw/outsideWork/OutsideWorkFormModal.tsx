@@ -1,3 +1,4 @@
+import { useAuthz } from '@/features/authz/useAuthz';
 import { useMemo, useState } from 'react';
 import type { User } from '@/domain/user/schema';
 import {
@@ -17,7 +18,6 @@ import { DEFAULT_COMMUTE_POLICY } from '@/domain/commutePolicy/schema';
 import { MemberPicker } from '@/modules/gw/task/MemberPicker';
 import { Modal } from '@/shared/ui/Modal';
 import { Button } from '@/shared/ui/Button';
-import { usePermission } from '@/features/auth/usePermission';
 import { Field } from '@/shared/ui/form/Field';
 import { TextField } from '@/shared/ui/form/TextField';
 
@@ -42,7 +42,8 @@ const textareaClass =
  */
 export function OutsideWorkFormModal({ actor: baseActor, initialDate, work, users, onClose, onSaved }: OutsideWorkFormModalProps) {
   // 관리자는 남의 직접 등록 건도 고칠 수 있다 — 그때 겹침 경고·동행자 판단은 등록한 사람 기준
-  const { isAdmin } = usePermission();
+  const { canManage } = useAuthz();
+  const isAdmin = canManage('commute.manage');
   const actor: OutsideWorkActor = { ...baseActor, isAdmin };
   const ownerId = work?.ownerUserId ?? actor.userId;
   // 같은 사람의 이미 잡힌 외근·출장(결재 완료 + 직접 등록) — 기간이 겹치면 경고만 한다(등록은 막지 않음)

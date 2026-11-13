@@ -127,6 +127,21 @@ export function packLanes<T extends { start: string | null; end: string | null }
 export const GRID_COLS = 12;
 /** 위젯 기본 폭 — 12칸 중 몇 칸 */
 export type WidgetSize = 4 | 6 | 8 | 12;
+
+/**
+ * 위젯 크기 단계 — 소(4칸, 한 줄에 3개)·중(6칸, 2개)·대(12칸, 1개). 모든 위젯이 세 단계를 다 가진다.
+ * 중 1 + 소 1 줄은 두 위젯을 비율대로 늘려 줄을 채운다(stretchRows).
+ */
+export type Tier = 'S' | 'M' | 'L';
+export const TIERS: readonly Tier[] = ['S', 'M', 'L'];
+export const TIER_COLS: Record<Tier, 4 | 6 | 12> = { S: 4, M: 6, L: 12 };
+export const TIER_LABEL: Record<Tier, string> = { S: '소', M: '중', L: '대' };
+/** 칸 수 → 가장 가까운 단계(예전에 끌어서 맞춘 폭도 여기로). 같은 거리면 작은 쪽 */
+export function tierOf(cols: number): Tier {
+  let best: Tier = 'S';
+  for (const t of TIERS) if (Math.abs(TIER_COLS[t] - cols) < Math.abs(TIER_COLS[best] - cols)) best = t;
+  return best;
+}
 /** size — 가로 칸 수, rows — 세로 칸 수(없으면 위젯 기본), x·y — 왼쪽 위 칸(없으면 빈자리에 놓는다) */
 export interface WidgetSlot<Id extends string = string> { id: Id; size: number; rows?: number; x?: number; y?: number }
 
@@ -180,30 +195,25 @@ export function firstFit(boxes: Box[], w: number, h: number): { x: number; y: nu
 export interface Placement { id: string; w: number; h: number; x?: number; y?: number }
 
 /**
- * 자리 잡기 — 방금 옮기거나 키운 위젯(pinned)을 먼저 그 자리에 두고, 자리가 정해진 나머지는 위에서부터 놓되
- * 겹치면 겹친 위젯 바로 아래로 밀어 낸다. 자리가 없는 위젯은 첫 빈자리에. 빈칸은 그대로 둔다(당겨 올리지 않는다).
+ * 자리 잡기 — 위젯을 순서대로(자리가 있으면 위→아래, 왼→오 순, 없으면 맨 뒤) 첫 빈자리에 채워 넣는다.
+ * 늘 왼쪽 위부터 빈틈없이 깔리고, 빈칸은 높이가 달라 아무것도 들어가지 않는 곳에만 남는다.
+ * 방금 옮긴 위젯(pinned)은 놓은 칸의 순서를 차지한다 — 같은 칸이면 원래 있던 위젯보다 앞에.
  */
 export function arrange(items: Placement[], pinned?: string | null): Map<string, Box> {
+  const has = (it: Placement) => it.x !== undefined && it.y !== undefined;
+  const clampX = (it: Placement) => Math.min(Math.max(0, it.x ?? 0), GRID_COLS - Math.min(Math.max(1, it.w), GRID_COLS));
+  const placedOrder = items
+    .filter(has)
+    .sort((a, b) => a.y! - b.y! || clampX(a) - clampX(b) || Number(b.id === pinned) - Number(a.id === pinned));
+  const order = [...placedOrder, ...items.filter((it) => !has(it))];
   const out = new Map<string, Box>();
   const placed: Box[] = [];
-  const clamp = (it: Placement): Box => {
+  for (const it of order) {
     const w = Math.min(Math.max(1, it.w), GRID_COLS);
-    return { x: Math.min(Math.max(0, it.x ?? 0), GRID_COLS - w), y: Math.max(0, it.y ?? 0), w, h: Math.max(1, it.h) };
-  };
-  const put = (id: string, b: Box) => { out.set(id, b); placed.push(b); };
-  const has = (it: Placement) => it.x !== undefined && it.y !== undefined;
-  const pin = pinned ? items.find((it) => it.id === pinned && has(it)) : undefined;
-  if (pin) put(pin.id, clamp(pin));
-  const rest = items.filter((it) => it !== pin && has(it)).sort((a, b) => a.y! - b.y! || a.x! - b.x!);
-  for (const it of rest) {
-    const b = clamp(it);
-    for (let hit = placed.find((p) => overlaps(p, b)); hit; hit = placed.find((p) => overlaps(p, b))) b.y = hit.y + hit.h;
-    put(it.id, b);
-  }
-  for (const it of items) {
-    if (out.has(it.id)) continue;
-    const w = Math.min(Math.max(1, it.w), GRID_COLS);
-    put(it.id, { ...firstFit(placed, w, it.h), w, h: Math.max(1, it.h) });
+    const h = Math.max(1, it.h);
+    const b = { ...firstFit(placed, w, h), w, h };
+    placed.push(b);
+    out.set(it.id, b);
   }
   return out;
 }
@@ -262,4 +272,53 @@ export function mobilePath(path: string): string {
     default:
       return '/m';
   }
+}
+
+/** 그릴 때의 가로 칸 수 — 한 칸을 5로 나눠 중+소 줄(10칸)도 줄 끝까지 맞춰 늘릴 수 있게 한다 */
+export const DRAW_COLS = GRID_COLS * 5;
+
+/**
+ * 그릴 자리 — 같은 줄의 위젯 폭 합이 10~11칸이라 빈 끝이 소(4칸)보다 좁으면(중+소),
+ * 그 줄의 위젯을 폭 비율대로 늘려 줄을 채운다. 나머지는 칸 그대로(×5).
+ */
+export function stretchRows(boxes: Map<string, Box>): Map<string, { x: number; w: number }> {
+  const out = new Map<string, { x: number; w: number }>();
+  const rows = new Map<number, [string, Box][]>();
+  for (const [id, b] of boxes) {
+    out.set(id, { x: b.x * 5, w: b.w * 5 });
+    rows.set(b.y, [...(rows.get(b.y) ?? []), [id, b]]);
+  }
+  for (const row of rows.values()) {
+    if (row.length < 2 || row.some(([, b]) => b.h !== row[0][1].h)) continue;
+    const used = row.reduce((n, [, b]) => n + b.w, 0);
+    if (used >= GRID_COLS || GRID_COLS - used >= TIER_COLS.S) continue;
+    row.sort((a, b) => a[1].x - b[1].x);
+    let x = 0;
+    row.forEach(([id, b], i) => {
+      const w = i === row.length - 1 ? DRAW_COLS - x : Math.round((b.w * DRAW_COLS) / used);
+      out.set(id, { x, w });
+      x += w;
+    });
+  }
+  return out;
+}
+
+/**
+ * 오늘 일정 줄 순서 — 종일 업무가 맨 위, 그다음 시작 시각 순(외근·출장도 예외 없이), 시간 미정은 맨 아래.
+ * 같은 시작이면 먼저 끝나는 것부터, 그것도 같으면 들어온 순서대로.
+ */
+export function orderDayItems<T extends { allDay: boolean; start: string | null; end: string | null }>(items: T[]): T[] {
+  const rank = (i: T) => (i.allDay ? 0 : minutesOf(i.start) === null ? 2 : 1);
+  return items
+    .map((item, n) => ({ item, n }))
+    .sort((a, b) => {
+      const r = rank(a.item) - rank(b.item);
+      if (r) return r;
+      if (rank(a.item) !== 1) return a.n - b.n;
+      const s = minutesOf(a.item.start)! - minutesOf(b.item.start)!;
+      if (s) return s;
+      const e = (minutesOf(a.item.end) ?? 9999) - (minutesOf(b.item.end) ?? 9999);
+      return e || a.n - b.n;
+    })
+    .map((x) => x.item);
 }

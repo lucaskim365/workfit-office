@@ -37,7 +37,7 @@ function useTextEntryFocused() {
 }
 
 /**
- * 하단 탭 4개(경영 현황·그룹웨어·Widdy·메신저)의 공통 틀 — 상단바와 하단바를 함께 둔다.
+ * 하단 탭 4개(홈·그룹웨어·Widdy·메신저)의 공통 틀 — 상단바와 하단바를 함께 둔다.
  * 채팅방·결재 문서 같은 안쪽 화면은 이 틀 밖이라 자기 헤더(뒤로가기)만 쓴다.
  */
 export default function MobileTabLayout() {

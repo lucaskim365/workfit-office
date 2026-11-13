@@ -245,11 +245,7 @@ export default function OrgChartScreen() {
                   <div>
                     <span className="block text-[11px] text-ink3">직속 상급자</span>
                     <span className="mt-1 block font-semibold text-ink">
-                      {(() => {
-                        const mgr = org.directManagerOf(selectedUser.id);
-                        if (!mgr) return '—';
-                        return `${mgr.name} (${mgr.position || mgr.jobTitle || '부서장'})`;
-                      })()}
+                      {org.directManagerLabelOf(selectedUser.id)}
                     </span>
                   </div>
                 </div>

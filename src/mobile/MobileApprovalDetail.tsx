@@ -1,3 +1,4 @@
+import { useAuthz } from '@/features/authz/useAuthz';
 import { useEffect, useRef, useState } from 'react';
 import { SheetDocView, isSheetDoc } from '@/modules/gw/approval/sheetForm/SheetDocView';
 import { SHEET_VERSION_KEY, VISIBILITY_LABEL, korDateText } from '@/domain/approvalForm/sheet/approvalSheet';
@@ -166,8 +167,10 @@ export default function MobileApprovalDetail() {
   const { isAdmin, isExecutive: hasExecRole } = usePermission();
   const userObj = users.find((u) => u.id === me);
   const userPos = userObj?.position ?? '';
-  const isExecutive =
-    isAdmin ||
+  const authz = useAuthz();
+  const isExecutive = authz.active
+    ? Boolean(authz.result.grants.get('approval.secure')?.all)
+    : isAdmin ||
     hasExecRole ||
     ['대표이사', '상무', '상무이사', '전무', '부사장', '사장'].includes(userPos) ||
     userObj?.dept === '대표이사';

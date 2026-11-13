@@ -81,14 +81,28 @@ test('자리 잡기 — 빈자리 채우기, 겹치면 아래로 밀기, 빈칸�
   assert.deepEqual(a.get('b'), { x: 0, y: 2, w: 8, h: 3 });
   assert.deepEqual(a.get('c'), { x: 8, y: 2, w: 4, h: 2 });
   assert.deepEqual(a.get('d'), { x: 8, y: 4, w: 4, h: 2 });
-  // 원하는 칸에 두면 그 위에 빈칸이 남아도 그대로
-  assert.deepEqual(arrange([{ id: 'a', w: 4, h: 2, x: 6, y: 5 }]).get('a'), { x: 6, y: 5, w: 4, h: 2 });
-  // 옮긴 위젯이 이기고, 겹친 위젯은 바로 아래로
-  const m = arrange([{ id: 'a', w: 6, h: 3, x: 0, y: 0 }, { id: 'b', w: 6, h: 2, x: 3, y: 1 }], 'b');
-  assert.deepEqual(m.get('b'), { x: 3, y: 1, w: 6, h: 2 });
-  assert.deepEqual(m.get('a'), { x: 0, y: 3, w: 6, h: 3 });
-  // 오른쪽 끝을 넘으면 안으로 들인다
-  assert.deepEqual(arrange([{ id: 'a', w: 6, h: 1, x: 10, y: 0 }]).get('a'), { x: 6, y: 0, w: 6, h: 1 });
+  // 빈 곳에 두면 왼쪽 위로 당겨 붙는다
+  assert.deepEqual(arrange([{ id: 'a', w: 4, h: 2, x: 6, y: 5 }]).get('a'), { x: 0, y: 0, w: 4, h: 2 });
+  // 옮긴 위젯이 놓은 칸의 순서를 차지하고, 원래 있던 위젯은 그 뒤로
+  const m = arrange([{ id: 'a', w: 6, h: 3, x: 0, y: 0 }, { id: 'b', w: 6, h: 2, x: 0, y: 0 }], 'b');
+  assert.deepEqual(m.get('b'), { x: 0, y: 0, w: 6, h: 2 });
+  assert.deepEqual(m.get('a'), { x: 6, y: 0, w: 6, h: 3 });
+  // 빈틈없이 — 넓은 위젯이 못 들어가는 빈칸에는 뒤의 작은 위젯이 들어간다
+  const d = arrange([
+    { id: 'half', w: 6, h: 4, x: 0, y: 0 },
+    { id: 'wide', w: 12, h: 5, x: 0, y: 4 },
+    { id: 'small', w: 6, h: 3, x: 0, y: 9 },
+  ]);
+  assert.deepEqual(d.get('small'), { x: 6, y: 0, w: 6, h: 3 });
+  assert.deepEqual(d.get('wide'), { x: 0, y: 4, w: 12, h: 5 });
+  // 빈칸은 높이가 다를 때만 — 짧은 위젯 아래 빈칸은 옆의 긴 위젯 때문에 넓은 위젯이 못 들어가서 남는다
+  const g = arrange([
+    { id: 'tall', w: 8, h: 6, x: 0, y: 0 },
+    { id: 'short', w: 4, h: 2, x: 8, y: 3 },
+    { id: 'wide', w: 12, h: 2, x: 0, y: 9 },
+  ]);
+  assert.deepEqual(g.get('short'), { x: 8, y: 0, w: 4, h: 2 });
+  assert.deepEqual(g.get('wide'), { x: 0, y: 6, w: 12, h: 2 });
   assert.deepEqual(firstFit([{ x: 0, y: 0, w: 12, h: 1 }], 4, 1), { x: 0, y: 1 });
   assert.equal(overlaps({ x: 0, y: 0, w: 4, h: 2 }, { x: 4, y: 0, w: 4, h: 2 }), false);
 });
@@ -135,4 +149,25 @@ test('위젯 링크 → 모바일 화면 주소', () => {
   assert.equal(mobilePath('/gw/leave'), '/m/commute');
   assert.equal(mobilePath('/gw/work-plan'), '/m/task');
   assert.equal(mobilePath('/gw/unknown'), '/m');
+});
+
+import { tierOf } from './dashboard';
+
+test('위젯 크기 단계 — 칸 수는 가장 가까운 소·중·대로', () => {
+  assert.deepEqual([1, 4, 5, 6, 8, 9, 10, 12].map(tierOf), ['S', 'S', 'S', 'M', 'M', 'M', 'L', 'L']);
+});
+
+import { stretchRows } from './dashboard';
+
+test('stretchRows: 중+소 줄만 줄 끝까지 비율대로 늘리고, 소3·중2·대·덜 찬 줄은 칸 그대로', () => {
+  const m = (list: [string, number, number, number][]) => new Map(list.map(([id, x, y, w]) => [id, { x, y, w, h: 6 }]));
+  const r = stretchRows(m([['mid', 0, 0, 6], ['sm', 6, 0, 4], ['a', 0, 6, 4], ['b', 4, 6, 4], ['c', 8, 6, 4], ['d', 0, 12, 4], ['e', 4, 12, 4], ['big', 0, 18, 12]]));
+  assert.deepEqual(r.get('mid'), { x: 0, w: 36 });
+  assert.deepEqual(r.get('sm'), { x: 36, w: 24 });
+  assert.deepEqual(r.get('c'), { x: 40, w: 20 });
+  assert.deepEqual(r.get('e'), { x: 20, w: 20 });
+  assert.deepEqual(r.get('big'), { x: 0, w: 60 });
+  // 소 먼저, 중 나중
+  const s = stretchRows(m([['sm', 0, 0, 4], ['mid', 4, 0, 6]]));
+  assert.deepEqual([s.get('sm'), s.get('mid')], [{ x: 0, w: 24 }, { x: 24, w: 36 }]);
 });

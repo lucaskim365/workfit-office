@@ -1,3 +1,4 @@
+import { LEGACY_AUTH_SCREENS, useAuthz } from '@/features/authz/useAuthz';
 import { lazy as reactLazy, Suspense, useEffect, type ComponentType } from 'react';
 import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import AppShell from './shell/AppShell';
@@ -5,6 +6,7 @@ const SheetEditorPage = lazy(() => import('@/modules/base/approvalForm/sheet/She
 import MobileApp from '@/mobile/MobileApp';
 import PlaceholderScreen from '@/modules/common/PlaceholderScreen';
 import { flattenScreens } from './routes';
+import { ADMIN_URL, adminPath } from './shell/screens';
 import { loadUserTheme } from '@/shared/lib/theme';
 
 /**
@@ -51,7 +53,9 @@ function lazy<T extends ComponentType<any>>(factory: () => Promise<{ default: T 
   });
 }
 
-const SCREENS = flattenScreens();
+/** 업무 화면(셸 안) / 관리자 콘솔 화면(/admin 아래) */
+const SCREENS = flattenScreens().filter((s) => s.area !== 'admin');
+const ADMIN_SCREENS = flattenScreens().filter((s) => s.area === 'admin');
 const HOME = '/exec';
 
 /**
@@ -80,6 +84,8 @@ const GwComingSoon = lazy(() => import('@/modules/gw/common/GwComingSoon'));
 const ProfileScreen = lazy(() => import('@/modules/profile/ProfileScreen'));
 const SettingsScreen = lazy(() => import('@/modules/settings/SettingsScreen'));
 const StandaloneDockScreen = lazy(() => import('@/modules/dock/StandaloneDockScreen'));
+const AdminConsole = lazy(() => import('./admin/AdminConsole'));
+const AdminHome = lazy(() => import('./admin/AdminHome'));
 
 const SCREEN_COMPONENTS: Record<string, ComponentType> = {
   // 경영 현황 (로그인 후 랜딩) — 성과 관리 섹션 포함(통합)
@@ -98,11 +104,14 @@ const SCREEN_COMPONENTS: Record<string, ComponentType> = {
   '/base/approval-form': lazy(() => import('@/modules/base/approvalForm/ApprovalFormScreen')),
   '/base/approval-monitor': lazy(() => import('@/modules/base/approvalMonitor/ApprovalMonitorScreen')),
   // 사업관리
-  '/biz/vendor': lazy(() => import('@/modules/biz/vendor/BizVendorScreen')),
+  '/biz/vendor': lazy(() => import('@/modules/biz/company/CompanyScreen')),
   '/biz/project': lazy(() => import('@/modules/biz/project/BizProjectScreen')),
   '/biz/po': lazy(() => import('@/modules/biz/po/BizPoScreen')),
   '/base/code': lazy(() => import('@/modules/base/code/CodeScreen')),
   '/base/auth': lazy(() => import('@/modules/base/auth/AuthScreen')),
+  '/base/authz/roles': lazy(() => import('@/modules/base/authz/RoleScreen')),
+  '/base/authz/assign': lazy(() => import('@/modules/base/authz/AssignScreen')),
+  '/base/authz/people': lazy(() => import('@/modules/base/authz/PeopleScreen')),
   // 시스템 관리
   '/sys/company': lazy(() => import('@/modules/sys/company/CompanyScreen')),
   '/sys/menu': lazy(() => import('@/modules/sys/menu/MenuMgmtScreen')),
@@ -121,10 +130,19 @@ import { shouldSuppressChatPopup } from '@/shared/lib/viewedChatRoom';
 
 import { usePermission } from '@/features/auth/usePermission';
 
+/** 예전 주소(/base/…, /sys/…) — 관리자 콘솔의 같은 화면으로 옮긴다(즐겨찾기·알림 링크 호환) */
+function ToAdmin() {
+  const { pathname, search } = useLocation();
+  return <Navigate to={`${adminPath(pathname)}${search}`} replace />;
+}
+
 function ProtectedRoute({ url, children }: { url: string; children: React.ReactNode }) {
   const { canAccess, isLoading } = usePermission();
+  const authz = useAuthz();
   if (isLoading) return null;
   if (!canAccess(url)) {
+    // 옛 그룹 권한 관리 주소(즐겨찾기 등)는 새 역할 관리로
+    if (authz.active && LEGACY_AUTH_SCREENS.has(url)) return <Navigate to={adminPath('/base/authz/roles')} replace />;
     return <Navigate to="/exec" replace />;
   }
   return <>{children}</>;
@@ -250,8 +268,34 @@ export default function App() {
     </>
   );
 
+  // 관리자 콘솔 안의 화면 라우트 — /admin 아래 상대 경로(base/user …)
+  const adminRoutes = (
+    <>
+      <Route index element={<AdminHome />} />
+      {ADMIN_SCREENS.map((screen) => {
+        const Impl = SCREEN_COMPONENTS[screen.url];
+        return (
+          <Route
+            key={screen.id}
+            path={screen.url.slice(1)}
+            element={
+              <ProtectedRoute url={screen.url}>
+                {Impl ? <Impl /> : <PlaceholderScreen screen={screen} />}
+              </ProtectedRoute>
+            }
+          />
+        );
+      })}
+      <Route path="*" element={<Navigate to={ADMIN_URL} replace />} />
+    </>
+  );
+
   return (
     <Routes>
+      {/* 관리자 콘솔 — 업무 화면 셸 밖의 따로 된 페이지 */}
+      <Route path={`${ADMIN_URL}/*`} element={<AdminConsole routes={adminRoutes} />} />
+      <Route path="/base/*" element={<ToAdmin />} />
+      <Route path="/sys/*" element={<ToAdmin />} />
       {/* 모바일 메신저 PWA — 데스크톱 셸 밖의 전체화면 라우트 */}
       <Route path="/m/*" element={<MobileApp />} />
       {/* 타 MES 시스템 슬라이드/iframe 전용 독립 도크 라우트 */}

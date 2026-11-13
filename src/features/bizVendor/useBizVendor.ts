@@ -1,3 +1,4 @@
+import { useAuthz } from '@/features/authz/useAuthz';
 import { useMemo } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/app/auth/AuthProvider';
@@ -7,7 +8,6 @@ import { resolveDeptId } from '@/domain/department/engine';
 import type { VendorProjectRole } from '@/domain/bizVendor/schema';
 import type { Vendor } from '@/domain/vendor/schema';
 import type { ProjectAccessContext } from '@/domain/workProject/engine';
-import { usePermission } from '@/features/auth/usePermission';
 import { useDepartments } from '@/features/department/useDepartments';
 
 const LINKS_KEY = 'bizVendorProjects';
@@ -48,7 +48,8 @@ export function useUpsertVendor() {
 /** 사업 목록 조회용 접근 맥락 — 업무관리 프로젝트의 열람 규칙(비공개·팀 공개)을 그대로 따른다. */
 export function useProjectAccess(): ProjectAccessContext {
   const { user } = useAuth();
-  const { isAdmin } = usePermission();
+  const { canManage } = useAuthz();
+  const isAdmin = canManage('biz.vendor.manage');
   const { data: departments = [] } = useDepartments();
   return useMemo(
     () => ({

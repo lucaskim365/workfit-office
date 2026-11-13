@@ -21,14 +21,24 @@ export function syncTab(tabs: ShellTab[], screen: FlatScreen, href: string): She
   return tabs.map((t, idx) => (idx === i ? { ...t, url: screen.url, href } : t));
 }
 
-/** 탭을 닫는다. 활성 탭을 닫으면 오른쪽(없으면 왼쪽) 탭의 주소로 이동해야 한다. */
+/** 홈 탭을 늘 맨 앞에 둔다(없으면 넣고, 다른 자리에 있으면 앞으로) */
+export function pinHome(tabs: ShellTab[], home: ShellTab | undefined): ShellTab[] {
+  if (!home) return tabs;
+  const i = tabs.findIndex((t) => t.id === home.id);
+  if (i === 0) return tabs;
+  if (i === -1) return [home, ...tabs];
+  return [tabs[i], ...tabs.filter((_, k) => k !== i)];
+}
+
+/** 탭을 닫는다. 활성 탭을 닫으면 오른쪽(없으면 왼쪽) 탭의 주소로 이동해야 한다. 고정 탭(홈)은 닫지 않는다. */
 export function closeTab(
   tabs: ShellTab[],
   id: string,
   activeId: string | null,
+  pinnedId?: string,
 ): { tabs: ShellTab[]; nextHref: string | null } {
   const idx = tabs.findIndex((t) => t.id === id);
-  if (idx === -1) return { tabs, nextHref: null };
+  if (idx === -1 || id === pinnedId) return { tabs, nextHref: null };
   const next = tabs.filter((t) => t.id !== id);
   if (id !== activeId) return { tabs: next, nextHref: null };
   const neighbor = next[idx] ?? next[idx - 1];

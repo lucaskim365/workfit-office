@@ -1,3 +1,4 @@
+import { useAuthz } from '@/features/authz/useAuthz';
 import { useState, useMemo } from 'react';
 import {
   Search,
@@ -24,14 +25,12 @@ import {
 import { useLocation, useSearchParams } from 'react-router-dom';
 import { useApplyDeepLinkOnce } from '@/shared/lib/deepLink';
 import { useAuth } from '@/app/auth/AuthProvider';
-import { usePermission } from '@/features/auth/usePermission';
 import { useDocument } from '@/features/document/useDocument';
 import { DateInput } from '@/shared/ui/form/DateInput';
 import { useDepartments } from '@/features/department/useDepartments';
 
 export default function DocumentScreen() {
   const { user } = useAuth();
-  const { isAdmin, canAction } = usePermission();
   const {
     boxes,
     documents,
@@ -76,7 +75,9 @@ export default function DocumentScreen() {
   }, [user]);
 
   // 권한 요약 (기준정보 > 권한그룹관리 연동)
-  const hasWriteAccess = isAdmin || canAction('S_GW_DOCUMENT', 'create') || canAction('S_GW_DOCUMENT', 'update');
+  const { can: canAuthz } = useAuthz();
+  // 문서관리는 보류 중이라 권한 목록에 없다 — 다시 열 때 문서 권한을 만들어 연결한다
+  const hasWriteAccess = canAuthz('document.manage');
 
   // 사이드바 카테고리 필터
   const [activeCategory, setActiveCategory] = useState<'public' | 'dept' | 'personal' | 'all' | 'po'>('all');

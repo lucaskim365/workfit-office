@@ -22,7 +22,7 @@ export type EventForm = ReturnType<typeof useWorkPlanEventForm>;
 
 const DEFAULT_LENGTH = 60;
 /** 길이 버튼(분) */
-const LENGTH_PRESETS = [30, 60, 90, 120] as const;
+const LENGTH_PRESETS = [10, 20, 30, 60, 90, 120] as const;
 /** 종료 목록의 '미정' 값 */
 const OPEN_END = -1;
 
@@ -405,7 +405,7 @@ function TimeFields({ form, stacked = false, showEndDate = true }: { form: Event
   // 업무만 — 종료 미정(시작만)
   const openEnd = isItem && state.openEnd;
 
-  // 시각 = 입력 + 30분 목록(TimeCombo). 시작을 바꾸면 길이를 유지하고, 종료는 시작보다 늦어야 한다
+  // 시각 = 입력 + 10분 간격 목록(TimeCombo). 시작을 바꾸면 길이를 유지하고, 종료는 시작보다 늦어야 한다
   const onStart = (start: number) => {
     if (start >= DAY_END) return;
     const length = range ? range.end - range.start : DEFAULT_LENGTH;

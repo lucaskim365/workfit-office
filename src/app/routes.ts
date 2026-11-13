@@ -19,6 +19,7 @@ export function flattenScreens(tree: MenuNode[] = MENU_TREE): FlatScreen[] {
           moduleName: mod.name,
           groupId: grp.id,
           groupName: grp.name,
+          ...(mod.area ? { area: mod.area } : {}),
         });
       }
     }

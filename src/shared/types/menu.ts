@@ -6,6 +6,8 @@ export interface MenuNode {
   icon?: string;
   order: number;
   use: boolean;
+  /** 'admin' — 관리자 콘솔(/admin)에만 나오는 모듈. 업무 화면의 상단 메뉴·탭·사이드바에는 나오지 않는다 */
+  area?: 'admin';
   children?: MenuNode[];
 }
 
@@ -19,4 +21,6 @@ export interface FlatScreen {
   moduleName: string;
   groupId: string;
   groupName: string;
+  /** 모듈의 area — 'admin' 이면 관리자 콘솔 화면 */
+  area?: 'admin';
 }

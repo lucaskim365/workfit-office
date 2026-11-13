@@ -1,8 +1,5 @@
+import { useAuthz } from '@/features/authz/useAuthz';
 import { Navigate } from 'react-router-dom';
-import { useAuth } from '@/app/auth/AuthProvider';
-import { usePermission } from '@/features/auth/usePermission';
-import { useOrgTree } from '@/features/gw/useOrgTree';
-import { resolveCommuteScope } from '@/features/auth/scopeHelper';
 
 /**
  * 휴가 관리 라우트 (/gw/leave)
@@ -12,11 +9,8 @@ import { resolveCommuteScope } from '@/features/auth/scopeHelper';
  * - 일반 사원: /gw/commute?tab=leave (내 연차·휴가 화면)
  */
 export default function LeaveScreen() {
-  const { user } = useAuth();
-  const { userRoles } = usePermission();
-  const org = useOrgTree();
-
-  const commuteScope = resolveCommuteScope(user, userRoles, org);
+  const { commuteScope: authzCommuteScope } = useAuthz();
+  const commuteScope = authzCommuteScope();
   const canAll = commuteScope === 'ALL';
 
   if (canAll) {

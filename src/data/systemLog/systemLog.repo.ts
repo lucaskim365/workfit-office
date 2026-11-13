@@ -55,6 +55,28 @@ export const systemLogRepo = {
     await backend.save(systemLogSchema.parse(item));
   },
 
+  /** 변경 기록 — 관리 화면에서 바꾼 내용을 사람이 읽는 문장으로 남긴다. 실패해도 저장 자체는 막지 않는다 */
+  async recordChange(p: { user: { id: string; empNo?: string; name: string }; screen: string; detail: string }): Promise<void> {
+    try {
+      const now = new Date();
+      const pad = (n: number) => String(n).padStart(2, '0');
+      const at = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+      await backend.insert(
+        systemLogSchema.parse({
+          id: `LOG-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          at,
+          user: `${p.user.name} (${p.user.empNo || p.user.id})`,
+          type: '변경',
+          screen: p.screen,
+          detail: p.detail.slice(0, 990),
+          ip: typeof window !== 'undefined' ? `${window.navigator.userAgent.includes('Mobile') ? 'Mobile' : 'Web'} Client` : '',
+        }),
+      );
+    } catch (err) {
+      console.error('Failed to record change log:', err);
+    }
+  },
+
   /** 실시간 로그인 로그 기록 헬퍼 */
   async recordLogin(user: { id: string; empNo?: string; name: string; dept?: string }, platform: 'Web' | 'Mobile' = 'Web'): Promise<void> {
     try {

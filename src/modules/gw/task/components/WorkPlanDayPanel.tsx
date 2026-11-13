@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { WorkPlanMemoView } from './memo/WorkPlanMemoView';
 import { ChevronLeft, ChevronRight, Plus, X } from 'lucide-react';
 import type { User } from '@/domain/user/schema';
@@ -130,13 +131,14 @@ export function WorkPlanDayPanel({ date, today, actor, members, cellOf, onDateCh
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-4" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+  // 화면 틀(상단바·탭) 위에 뜨게 문서 맨 위로 띄운다 — 표 안에 두면 상단바 아래에 깔려 위가 잘린다
+  return createPortal(
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
     <section
       role="dialog"
       aria-modal="true"
       aria-label={`${dateLabel(date)} 일정`}
-      className="flex max-h-[min(720px,calc(100vh-2rem))] w-[min(460px,100%)] flex-col overflow-hidden rounded-2xl border border-border bg-panel shadow-2xl"
+      className="flex max-h-[min(720px,calc(100vh/var(--font-scale,1)-2rem))] w-[min(460px,100%)] flex-col overflow-hidden rounded-2xl border border-border bg-panel shadow-2xl"
     >
       <div className="flex items-center gap-1 border-b border-border px-3 py-2">
         <button type="button" aria-label="전날" onClick={() => onDateChange(shiftDate(date, -1))} className="rounded p-1 text-ink2 hover:bg-panel-alt">
@@ -168,7 +170,7 @@ export function WorkPlanDayPanel({ date, today, actor, members, cellOf, onDateCh
         )}
       </div>
 
-      <div className="flex-1 space-y-3 overflow-y-auto px-2 py-2">
+      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-2 py-2">
         {shown.length === 0 && <p className="py-8 text-center text-[12px] text-ink3">일정이 없습니다.</p>}
         {untimed.length > 0 && (
           <section>
@@ -195,6 +197,7 @@ export function WorkPlanDayPanel({ date, today, actor, members, cellOf, onDateCh
         )}
       </div>
     </section>
-    </div>
+    </div>,
+    document.body,
   );
 }

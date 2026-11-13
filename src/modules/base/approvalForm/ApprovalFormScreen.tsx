@@ -335,7 +335,7 @@ export default function ApprovalFormScreen() {
             <div>
               <h1 className="text-xl font-extrabold tracking-tight text-ink">결재서식 관리</h1>
               <p className="mt-0.5 text-xs text-ink3">
-                기준 정보 / 결재서식 관리 · 전사 전자결재 문서 양식 및 위지윅 A4 디자인 관리
+                전자결재 / 결재서식 관리 · 전사 전자결재 문서 양식 및 위지윅 A4 디자인 관리
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -364,7 +364,7 @@ export default function ApprovalFormScreen() {
             onStarter={startFromStarter}
           />
 
-          <div className="grid grid-cols-[260px_1fr] items-start gap-3.5">
+          <div className="grid grid-cols-[260px_minmax(0,1fr)] items-start gap-3.5">
             {/* 좌측: 폴더 탐색 트리 패널 */}
             <div className="flex flex-col overflow-hidden rounded-xl border border-border bg-panel">
               <div className="flex items-center justify-between border-b border-border px-3.5 py-2.5 text-[11.5px] font-bold text-ink2">

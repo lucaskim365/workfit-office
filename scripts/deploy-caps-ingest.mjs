@@ -128,7 +128,7 @@ rmSync(tar, { force: true });
 // tar 에는 상대 경로를 넘긴다 — `C:\...`처럼 콜론이 든 경로를 GNU tar(Git Bash 가 PATH 앞에 둔다)는 원격 호스트로
 // 읽어 실패하고, `--force-local` 로 막으려 하면 Windows 기본 bsdtar 가 그 옵션을 몰라 실패한다. 상대 경로면 둘 다 된다.
 const tarRel = relative(process.cwd(), tar).split('\\').join('/');
-execFileSync('tar', ['-czf', tarRel, '--exclude=*.test.js', '--exclude=node_modules', '-C', DIR, '.'], { stdio: 'inherit' });
+execFileSync('tar', ['-czf', tarRel, '--exclude=*.test.js', '--exclude=*.test.mjs', '--exclude=node_modules', '-C', DIR, '.'], { stdio: 'inherit' });
 
 let dep = await retry('deployment', () => fn.createDeployment({
   functionId: FUNCTION_ID, code: InputFile.fromPath(tar, `${FUNCTION_ID}.tar.gz`), activate: true,

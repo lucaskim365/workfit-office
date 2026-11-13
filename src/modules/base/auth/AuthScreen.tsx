@@ -1,3 +1,6 @@
+import { Navigate } from 'react-router-dom';
+import { useAuthz } from '@/features/authz/useAuthz';
+import { adminPath } from '@/app/shell/screens';
 import React, { useState, useMemo } from 'react';
 import { ShieldCheck } from 'lucide-react';
 import { Card } from '@/shared/ui/Card';
@@ -41,7 +44,15 @@ function Checkbox({
   );
 }
 
+/** 새 권한 체계로 옮긴 뒤에는 역할 관리로 보낸다 — 옮기기 전(운영)에는 지금처럼 이 화면이 권한 원본 */
 export default function AuthScreen() {
+  const { active, isLoading } = useAuthz();
+  if (isLoading) return null;
+  if (active) return <Navigate to={adminPath('/base/authz/roles')} replace />;
+  return <LegacyAuthScreen />;
+}
+
+function LegacyAuthScreen() {
   const org = useOrgTree();
   const { data: rawGroups = [] } = useRoleGroups() as { data: RoleGroup[] | undefined };
   const saveGroup = useSaveRoleGroup();
@@ -292,9 +303,9 @@ export default function AuthScreen() {
       {/* 상단 타이틀 바 */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-extrabold tracking-tight text-ink">그룹권한관리</h1>
+          <h1 className="text-xl font-extrabold tracking-tight text-ink">그룹 권한 관리</h1>
           <p className="mt-0.5 text-xs text-ink3">
-            역할 그룹별로 전체 {SYSTEM_SCREENS.length}개 화면의 접근 권한 및 세부 액션(작성·수정·삭제·엑셀·관리)을 설정합니다.
+            권한 / 그룹 권한 관리 · 역할 그룹별로 전체 {SYSTEM_SCREENS.length}개 화면의 접근 권한 및 세부 액션(작성·수정·삭제·엑셀·관리)을 설정합니다.
           </p>
         </div>
         <div className="flex items-center gap-2">

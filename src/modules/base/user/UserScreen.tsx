@@ -12,6 +12,7 @@ import { useRoleGroups } from '@/features/roleGroup/useRoleGroups';
 import { useOrgTree } from '@/features/gw/useOrgTree';
 import { resolveUserRoleNames } from '@/domain/roleGroup/roleResolver';
 import UserFormModal, { type UserFormValues } from './UserFormModal';
+import { useUserLockoutGuard } from '@/features/authz/useUserLockoutGuard';
 
 
 const STATUS_TONE: Record<User['status'], Tone> = { 사용: 'ok', 잠금: 'warn', 미사용: 'mute' };
@@ -41,6 +42,7 @@ export default function UserScreen() {
   const { data: roleGroups = [] } = useRoleGroups();
   const org = useOrgTree();
   const upsert = useUpsertUser();
+  const lockoutOk = useUserLockoutGuard();
   const removeUsers = useRemoveUsers();
 
 
@@ -100,6 +102,7 @@ export default function UserScreen() {
   ];
 
   const handleSubmit = (values: UserFormValues, id?: string) => {
+    if (id && !lockoutOk({ changed: [{ ...(all.find((u) => u.id === id) as User), dept: values.dept, position: values.position, status: values.status as User['status'] }] })) return;
     upsert.mutate({ values, id }, {
       // 저장 규칙(예: 미사용은 인명관리 퇴직 처리로만)에 걸리면 이유를 알린다
       onError: (e) => alert(`계정을 저장하지 못했습니다: ${e instanceof Error ? e.message : String(e)}`),
@@ -107,6 +110,7 @@ export default function UserScreen() {
   };
   const handleDelete = () => {
     if (selected.length === 0) return;
+    if (!lockoutOk({ removedIds: selected.map(String) })) return;
     removeUsers.mutate(selected);
     setSelected([]);
   };
@@ -116,8 +120,8 @@ export default function UserScreen() {
     <div className="flex flex-col gap-3.5">
       <div className="flex items-end justify-between">
         <div>
-          <h1 className="text-xl font-extrabold tracking-tight text-ink">사용자관리</h1>
-          <p className="mt-0.5 text-xs text-ink3">기준 정보 / 사용자관리</p>
+          <h1 className="text-xl font-extrabold tracking-tight text-ink">사용자 관리</h1>
+          <p className="mt-0.5 text-xs text-ink3">구성원·조직 / 사용자 관리</p>
         </div>
         <ActionBar actions={['refresh']} />
       </div>

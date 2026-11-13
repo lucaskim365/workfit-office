@@ -1,3 +1,4 @@
+import { useAuthz } from '@/features/authz/useAuthz';
 import { useMemo, useState, useEffect } from 'react';
 import { useUpdateWorkPlanItem } from '@/features/workPlan/useWorkPlanItems';
 import { movedDraft, type WorkPlanItem } from '@/domain/workPlan/item';
@@ -81,9 +82,10 @@ const NOTICE_MS = 3000;
 
 export default function WorkPlanScreen() {
   const { user: authenticatedUser } = useAuth();
-  const { userRoles, isSuperAdmin, canAction } = usePermission();
+  const { userRoles } = usePermission();
   // 전 직원 정렬 순서 편집 — 최고관리자·'팀·전사 업무 종합 현황' 수정 권한자 전용(전사 공통 설정)
-  const canEditRosterOrder = isSuperAdmin || canAction('S_GW_WORK_PLAN_ADMIN', 'update');
+  const { can: canAuthz } = useAuthz();
+  const canEditRosterOrder = canAuthz('workplan.manage');
   const [isOrderOpen, setIsOrderOpen] = useState(false);
   const org = useOrgTree();
   const usersQuery = useUsers();

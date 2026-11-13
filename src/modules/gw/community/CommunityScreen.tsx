@@ -1,13 +1,14 @@
+import { useAuthz } from '@/features/authz/useAuthz';
 import { useState, useMemo, useRef } from 'react';
 import { Paperclip, Search, X, Plus, Pencil, AlertTriangle } from 'lucide-react';
 import { useAuth } from '@/app/auth/AuthProvider';
-import { usePermission } from '@/features/auth/usePermission';
 import { useCommunity } from '@/features/community/useCommunity';
 import type { Club, JoinPolicy } from '@/domain/community/schema';
 
 export default function CommunityScreen() {
   const { user } = useAuth();
-  const { isAdmin } = usePermission();
+  const { canManage } = useAuthz();
+  const isAdmin = canManage('board.manage');
   const {
     clubs,
     createClub,

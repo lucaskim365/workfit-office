@@ -1,3 +1,4 @@
+import { useAuthz } from '@/features/authz/useAuthz';
 import { useState } from 'react';
 import type { Department } from '@/domain/department/schema';
 import type { Resource, ResourceDraft, ResourceType, ResourceBookingMode, ResourceApprovalMode, ResourceStatus } from '@/domain/resource/schema';
@@ -6,7 +7,6 @@ import type { User } from '@/domain/user/schema';
 import { useSaveResource, useDeleteResource } from '@/features/resource/useResources';
 import { useCancelUpcomingByResource } from '@/features/resource/useReservations';
 import { reservationRepo } from '@/data/reservation/reservation.repo';
-import { usePermission } from '@/features/auth/usePermission';
 import { Modal } from '@/shared/ui/Modal';
 import { ResourceStatusBadge } from './ResourceBadges';
 import { Button } from '@/shared/ui/Button';
@@ -169,11 +169,11 @@ function ResourceEditor({ actor, canManage, resource, users, departments, onClos
 }
 
 export default function ResourceAdmin({ actor, resources, users, departments }: ResourceAdminProps) {
-  const { isAdmin, canAction } = usePermission();
   const [editing, setEditing] = useState<Resource | 'new' | null>(null);
   const [listError, setListError] = useState('');
   const deleteResource = useDeleteResource();
-  const canManage = isAdmin || canAction('S_GW_RESOURCE', 'update');
+  const { can: canAuthz } = useAuthz();
+  const canManage = canAuthz('resource.manage');
 
   if (!canManage) return <div className="rounded-xl border border-dashed border-border bg-panel py-16 text-center text-[12px] text-ink3">자원 관리는 관리자만 사용할 수 있습니다.</div>;
 

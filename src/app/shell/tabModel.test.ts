@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { FlatScreen } from '@/shared/types/menu';
-import { closeTab, syncTab, type ShellTab } from './tabModel';
+import { closeTab, pinHome, syncTab, type ShellTab } from './tabModel';
 
 const screen = (id: string, url: string): FlatScreen => ({
   id,
@@ -56,4 +56,17 @@ test('마지막 탭을 닫으면 탭이 비고 이동할 곳이 없다', () => {
   const r = closeTab(syncTab([], approval, '/gw/approval'), 'gw:approval', 'gw:approval');
   assert.deepEqual(r.tabs, []);
   assert.equal(r.nextHref, null);
+});
+
+test('홈 탭은 늘 맨 앞에 있고 닫히지 않는다', () => {
+  const home: ShellTab = { ...screen('exec', '/exec'), href: '/exec' };
+  const a: ShellTab = { ...approval, href: '/gw/approval' };
+  assert.deepEqual(pinHome([a], home).map((t) => t.id), ['exec', 'gw:approval']);
+  assert.deepEqual(pinHome([a, home], home).map((t) => t.id), ['exec', 'gw:approval']);
+  const tabs = [home, a];
+  assert.equal(pinHome(tabs, home), tabs);
+  const r = closeTab(tabs, 'exec', 'exec', 'exec');
+  assert.equal(r.tabs, tabs);
+  assert.equal(r.nextHref, null);
+  assert.deepEqual(closeTab(tabs, 'gw:approval', 'gw:approval', 'exec').tabs.map((t) => t.id), ['exec']);
 });

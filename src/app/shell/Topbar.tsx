@@ -1,3 +1,4 @@
+import { useAuthz } from '@/features/authz/useAuthz';
 import { useLayoutEffect, useRef, useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { MENU_TREE } from '../menu-tree';
@@ -6,6 +7,9 @@ import { MenuGlyph } from '@/shared/ui/MenuGlyph';
 import { UserMenu } from './UserMenu';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { usePermission } from '@/features/auth/usePermission';
+import { ADMIN_WINDOW_NAME, useAdminConsoleAccess } from '@/features/auth/useAdminConsoleAccess';
+import { Settings2 } from 'lucide-react';
+import { ADMIN_URL } from './screens';
 import { ThemeCustomizerModal } from './ThemeCustomizerModal';
 
 import { useCompanyInfo } from '@/features/companyInfo/useCompanyInfo';
@@ -72,10 +76,13 @@ export function Topbar({ activeModuleId, activeUrl, openModule, setOpenModule, u
     if (delta !== 0) setShift((prev) => prev + delta);
   }, [openModule, shift]);
   const { user } = useAuth();
-  const { canAccess, isSuperAdmin } = usePermission();
+  const { canAccess } = usePermission();
   // 최고관리자 전용 — 사람 목록에 테스트 계정을 보일지 전환(테스트 계정 본인은 항상 보이므로 숨김)
-  const showTestToggle = isSuperAdmin && !isTestAccount(user);
+  const { can: canAuthz } = useAuthz();
+  const showTestToggle = canAuthz('admin.testAccounts') && !isTestAccount(user);
   const showTestAccounts = useShowTestAccounts();
+  // 관리자 콘솔 입구 — 들어갈 수 있는 사람에게만 보인다
+  const { canUse: canUseAdminConsole } = useAdminConsoleAccess();
   const { data: companyInfo } = useCompanyInfo();
   const logoUrl = companyInfo?.logoUrl;
   const navigate = useNavigate();
@@ -167,6 +174,8 @@ export function Topbar({ activeModuleId, activeUrl, openModule, setOpenModule, u
         <nav className="flex gap-0.5">
           {MENU_TREE.filter((m) => {
             if (m.use === false) return false;
+            // 관리자 콘솔 화면은 업무 화면 메뉴에 두지 않는다(헤더 오른쪽 '관리자 콘솔' 단추로 새 창에서 연다)
+            if (m.area === 'admin') return false;
             if (m.id === 'M_MSG' || m.id === 'M_WIDDY') return true;
             if (m.id === 'M_GW') {
               const gwScreens = ['/gw/approval', '/gw/leave', '/gw/calendar', '/gw/mail', '/gw/resource', '/gw/survey', '/gw/board', '/gw/community', '/gw/document', '/gw/employee', '/gw/task', '/gw/work-plan', '/gw/orgchart', '/gw/commute', '/gw/gallery'];
@@ -178,7 +187,9 @@ export function Topbar({ activeModuleId, activeUrl, openModule, setOpenModule, u
             return accessibleCount > 0;
           }).map((m) => {
             const active = m.id === activeModuleId;
-            const isSpecial = m.id === 'M_GW' || m.id === 'M_WIDDY' || m.id === 'M_MSG';
+            // 홈은 화면이 하나뿐이라 펼침 메뉴 없이 바로 연다
+            const isHome = m.id === 'M_EXEC';
+            const isSpecial = isHome || m.id === 'M_GW' || m.id === 'M_WIDDY' || m.id === 'M_MSG';
             const isOpen = isSpecial
               ? (m.id === 'M_GW' && dockOpen === 'gw') ||
               (m.id === 'M_WIDDY' && dockOpen === 'bot') ||
@@ -201,7 +212,11 @@ export function Topbar({ activeModuleId, activeUrl, openModule, setOpenModule, u
               >
                 <button
                   onClick={() => {
-                    if (m.id === 'M_GW') {
+                    if (isHome) {
+                      const g = m.children?.[0];
+                      const s = g?.children?.[0];
+                      if (g && s?.url) onPick({ id: s.id, name: s.name, url: s.url, icon: s.icon, moduleId: m.id, moduleName: m.name, groupId: g.id, groupName: g.name });
+                    } else if (m.id === 'M_GW') {
                       setDockOpen(dockOpen === 'gw' ? null : 'gw');
                     } else if (m.id === 'M_WIDDY') {
                       setDockOpen(dockOpen === 'bot' ? null : 'bot');
@@ -299,6 +314,22 @@ export function Topbar({ activeModuleId, activeUrl, openModule, setOpenModule, u
                 className={`absolute top-0.5 h-3 w-3 rounded-full bg-white shadow transition-all ${showTestAccounts ? 'left-3.5' : 'left-0.5'}`}
               />
             </span>
+          </button>
+        )}
+
+        {canUseAdminConsole && (
+          <button
+            type="button"
+            onClick={() => {
+              // 새 창으로 연다. 로그인은 같은 브라우저 저장소를 써서 그대로 이어진다. 이미 열려 있으면 그 창을 쓴다
+              const w = window.open(ADMIN_URL, ADMIN_WINDOW_NAME);
+              w?.focus();
+            }}
+            title="관리자 콘솔 (새 창)"
+            className="flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-[12px] font-semibold opacity-85 transition-all hover:bg-white/[0.08] hover:opacity-100"
+          >
+            <Settings2 size={16} />
+            <span className="@max-[900px]:hidden">관리자 콘솔</span>
           </button>
         )}
 

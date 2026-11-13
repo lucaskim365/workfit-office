@@ -73,4 +73,6 @@ export interface SecurityContext {
   canMenuAction: (urlOrId: string, action: keyof ActionPermission) => boolean;
   /** 메뉴 접근 허용 여부 */
   canMenuAccess: (urlOrId: string) => boolean;
+  /** 새 권한 체계로 옮긴 뒤의 근태 판정 — 있으면 정책이 이것만 본다 */
+  authzCommute?: { scope: DataScope; canManage: boolean; deptNames: Set<string> | null };
 }

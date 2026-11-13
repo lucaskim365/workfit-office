@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import type { FlatScreen, MenuNode } from '@/shared/types/menu';
 import { MenuGlyph } from '@/shared/ui/MenuGlyph';
 import { SCREENS, SCREEN_BY_NAME } from './screens';
@@ -15,22 +16,28 @@ interface SidebarProps {
   favs: string[];
   toggleFav: (name: string) => void;
   openTab: (s: FlatScreen) => void;
+  /** 검색·즐겨찾기 대상 화면 — 기본은 업무 화면 전체(관리자 콘솔은 콘솔 화면을 넘긴다) */
+  screens?: FlatScreen[];
+  /** 검색칸 아래, 메뉴 위에 끼울 칸(관리자 콘솔의 '콘솔 홈') */
+  topSlot?: ReactNode;
 }
 
 export function Sidebar(props: SidebarProps) {
-  const { module, activeUrl, collapsed, setCollapsed, query, setQuery, railOpen, setRailOpen, favs, toggleFav, openTab } = props;
+  const { module, activeUrl, collapsed, setCollapsed, query, setQuery, railOpen, setRailOpen, favs, toggleFav, openTab, topSlot } = props;
+  const screens = props.screens ?? SCREENS;
+  const byName = props.screens ? Object.fromEntries(props.screens.map((x) => [x.name, x])) : SCREEN_BY_NAME;
   const { canAccess } = usePermission();
 
   const railW = collapsed ? 64 : 210;
   const q = query.trim().toLowerCase();
   
   const searchResults = q
-    ? SCREENS.filter((x) => x.name.toLowerCase().includes(q) || x.groupName.toLowerCase().includes(q))
+    ? screens.filter((x) => x.name.toLowerCase().includes(q) || x.groupName.toLowerCase().includes(q))
         .filter((x) => canAccess(x.url))
     : [];
     
   const favScreens = favs
-    .map((n) => SCREEN_BY_NAME[n])
+    .map((n) => byName[n])
     .filter(Boolean)
     .filter((x) => canAccess(x.url)) as FlatScreen[];
 
@@ -91,6 +98,8 @@ export function Sidebar(props: SidebarProps) {
             )}
           </div>
         )}
+
+        {!q && topSlot}
 
         {/* 즐겨찾기 */}
         {favScreens.length > 0 && !collapsed && !q && (

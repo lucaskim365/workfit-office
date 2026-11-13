@@ -124,7 +124,7 @@ export default function MobileOrgChartScreen() {
         <EmployeeDetailModal
           user={selectedUser}
           profile={selectedProfile}
-          directManager={org.directManagerOf(selectedUser.id)}
+          directManagerLabel={org.directManagerLabelOf(selectedUser.id)}
           onClose={() => setSelectedUserId(null)}
         />
       )}
@@ -616,12 +616,12 @@ function EmergencyContactMobileView({
 function EmployeeDetailModal({
   user,
   profile,
-  directManager,
+  directManagerLabel,
   onClose,
 }: {
   user: User;
   profile: any;
-  directManager?: User | null;
+  directManagerLabel: string;
   onClose: () => void;
 }) {
   const [copied, setCopied] = useState(false);
@@ -712,7 +712,7 @@ function EmployeeDetailModal({
             <div className="rounded-xl border border-border/60 bg-white p-3">
               <span className="text-[10.5px] text-ink3 block">직속 상급자</span>
               <span className="mt-0.5 font-bold text-ink block">
-                {directManager ? `${directManager.name} (${directManager.position})` : '—'}
+                {directManagerLabel}
               </span>
             </div>
 

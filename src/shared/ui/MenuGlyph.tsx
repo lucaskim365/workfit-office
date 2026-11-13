@@ -1,6 +1,7 @@
 import type { ComponentType } from 'react';
 import type { LucideProps } from 'lucide-react';
 import {
+  House,
   Building2,
   FileSignature,
   Palmtree,
@@ -46,6 +47,8 @@ import {
 
 /** 유니코드 이모지/키 → Lucide SVG 아이콘 컴포넌트 매핑 */
 const LUCIDE_GLYPHS: Record<string, ComponentType<LucideProps>> = {
+  // 홈(경영 대시보드)
+  'home': House,
   // 그룹웨어 탭 및 앱 메타 (이모지 & 슬러그)
   '🏢': Building2,
   'orgchart': Building2,

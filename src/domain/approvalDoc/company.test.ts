@@ -25,6 +25,10 @@ test('루미팹 서식 — 코드나 이름으로', () => {
   assert.ok(isLumefabForm({ code: '채용', name: '아무 이름' }));
   assert.ok(isLumefabForm({ code: 'X2', name: '채용품의서' }));
   assert.ok(!isLumefabForm({ code: 'X3', name: '채용 계획서' }));
+  // 외근 신청서 — 코드로, 이름(띄어쓰기 달라도)으로. 출장 신청서는 아님
+  assert.ok(isLumefabForm({ code: '외근', name: '아무 이름' }));
+  assert.ok(isLumefabForm({ code: 'X4', name: '외근신청서' }));
+  assert.ok(!isLumefabForm({ code: '국내출장', name: '국내출장 신청서' }));
 });
 
 test('루미팹 문서 판별 — 기존 문서(company 없음)는 워크핏', () => {

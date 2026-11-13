@@ -1,3 +1,4 @@
+import { useAuthz } from '@/features/authz/useAuthz';
 import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useSearchParams } from 'react-router-dom';
@@ -86,8 +87,9 @@ export default function MobileTaskScreen() {
  * [+] → 전체 화면 일정 창(PC와 같은 저장·같은 규칙). 다른 사람에게는 회의 초대만.
  */
 function MobileTaskBody({ actor }: { actor: User }) {
-  const { userRoles, isSuperAdmin, canAction } = usePermission();
-  const canManageTags = isSuperAdmin || canAction('S_GW_WORK_PLAN_ADMIN', 'update');
+  const { userRoles } = usePermission();
+  const { can: canAuthz } = useAuthz();
+  const canManageTags = canAuthz('workplan.manage');
   const org = useOrgTree();
   const usersQuery = useUsers();
   const departmentsQuery = useDepartments();

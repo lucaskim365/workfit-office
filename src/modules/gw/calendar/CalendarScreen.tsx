@@ -1,3 +1,4 @@
+import { useAuthz } from '@/features/authz/useAuthz';
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/app/auth/AuthProvider';
@@ -84,9 +85,10 @@ function LocalCalendarScreen() {
     setSearchParams(next, { replace: true });
   }, [linkedDate, searchParams, setSearchParams]);
   const [demoUserId, setDemoUserId] = useState('U009');
-  const { userRoles, isOperator, isExecutive } = usePermission();
+  const { userRoles } = usePermission();
   /** 사내행사 등록 권한 — 달력 칸의 +와 [+ 사내행사] 버튼(사내행사 전용)은 이 권한이 있을 때만 보인다. */
-  const canManageCompanyEvent = isOperator || isExecutive;
+  const { can } = useAuthz();
+  const canManageCompanyEvent = can('calendar.company');
   const org = useOrgTree();
 
   const [modalTarget, setModalTarget] = useState<{

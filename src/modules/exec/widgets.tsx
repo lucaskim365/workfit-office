@@ -5,8 +5,10 @@ import { useAuth } from '@/app/auth/AuthProvider';
 import { useBoardPosts } from '@/features/board/useBoardPosts';
 import { useCommuteBootstrap, useCommuteEmployees, useCommuteMonth, useCommuteViewer } from '@/features/commute/useCommute';
 import { useCommuteEvaluation } from '@/features/commute/useCommuteEvaluation';
+import type { ApprovalDayMap } from '@/domain/commute/approvalDayIndex';
 import { useDepartments } from '@/features/department/useDepartments';
 import { useEmployeeProfiles } from '@/features/employeeProfile/useEmployeeProfiles';
+import { useApprovalUnread } from '@/features/gw/useApprovalUnread';
 import { useApprovalBoxes } from '@/features/gw/useApprovals';
 import { useLeave } from '@/features/gw/useLeave';
 import { useReservations } from '@/features/resource/useReservations';
@@ -17,12 +19,13 @@ import { COMPANY_PLAN_OWNER } from '@/features/workPlan/useCompanyImportant';
 import { stripInlineMarks } from '@/domain/workPlan/richText';
 import { currentApproverIds } from '@/domain/approvalDoc/engine';
 import { COMMUTE_STATUS_LABELS } from '@/domain/commute/schema';
+import type { DayEntry } from '@/domain/workPlan/dayEntries';
+import { EntryDetailModal, entryTimeKind } from './EntryDetailModal';
 import { birthdaysInMonth } from '@/domain/birthday/engine';
 import { sortPostsForList } from '@/domain/board/rules';
 import { BOARDS_SEED } from '@/data/seeds/board.seed';
 import { resolveDeptId } from '@/domain/department/engine';
 import { USER_PRESENCE_META, type UserPresenceStatus } from '@/domain/userPresence/schema';
-import type { DayEntry } from '@/domain/workPlan/dayEntries';
 import { chipLook, entryDotClass } from '@/modules/gw/task/components/entryChipLook';
 import { useHolidays } from '@/features/holiday/useHolidays';
 import type { Post } from '@/domain/board/schema';
@@ -39,11 +42,12 @@ import {
   weekDates,
   monthDates,
   nowPercent,
-  packLanes,
+  orderDayItems,
   shiftMonth,
   timelineSpan,
   todayKst,
   type AttendanceBucket,
+  type Tier,
 } from './dashboard';
 
 /**
@@ -54,12 +58,6 @@ import {
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
 
 /** 근태 4분류 색 — 시안 색을 따르고 다크 모드는 같은 계열 반투명 */
-const BUCKET_FILL: Record<AttendanceBucket, string> = {
-  work: 'bg-[#49b1e1]',
-  pending: 'bg-[#c4c8ce] dark:bg-white/25',
-  late: 'bg-[#f2a17e]',
-  leave: 'bg-[#d9dd7a]',
-};
 const BUCKET_STROKE: Record<AttendanceBucket, string> = {
   work: '#49b1e1',
   pending: '#c4c8ce',
@@ -120,7 +118,34 @@ export function Panel({ className = '', children }: { className?: string; childr
  * 높이가 정해진 위젯의 목록 — 칸에 다 들어가는 줄까지만 보이고 나머지는 숨는다(스크롤 없음).
  * 세로 flex 를 줄바꿈시켜 넘치는 줄을 오른쪽 보이지 않는 열로 보낸다. 높이가 자유로운 모바일에서는 다 보인다.
  */
-const FIT_LIST = 'min-h-0 flex-1 flex flex-col flex-wrap content-start overflow-hidden [&>li]:w-full';
+const FIT_LIST =
+  'min-h-0 flex-1 flex flex-col flex-wrap content-start overflow-hidden [&>li]:w-full in-data-[tier=L]:gap-x-10 in-data-[tier=L]:[&>li]:w-[calc(50%-20px)]';
+
+/** 위젯 크기 단계(소·중·대) — 웹 모눈에서만 정해 준다. 없으면(휴대폰 등) 위젯 기본 모양.
+ *  대(한 줄 전체)에서는 목록이 두 단으로 흐른다(FIT_LIST) */
+const TierContext = createContext<Tier | null>(null);
+export const WidgetTierProvider = TierContext.Provider;
+const useTier = () => useContext(TierContext);
+
+/** 높이가 내용에 따라 바뀌는 위젯 — 웹 모눈이 내용 높이(px)를 받아 칸 수를 맞춘다. 없으면(휴대폰 등) 그냥 늘어난다 */
+const AutoHeightContext = createContext<((px: number) => void) | null>(null);
+export const WidgetAutoHeightProvider = AutoHeightContext.Provider;
+/** 위젯 판 위아래 안쪽 여백 + 테두리(sm:p-6) */
+const PANEL_PAD_Y = 50;
+/** 내용을 감싼 요소에 ref 로 붙이면 그 높이(+위젯 안쪽 여백)를 알린다 */
+function useAutoHeight() {
+  const report = useContext(AutoHeightContext);
+  const [el, setEl] = useState<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!report || !el) return;
+    const send = () => report(el.offsetHeight + PANEL_PAD_Y);
+    send();
+    const ro = new ResizeObserver(send);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [report, el]);
+  return setEl;
+}
 
 /** 작게 보기 — 모바일에서 반 칸짜리 위젯. 지원하는 위젯은 요약만 크게 보여 준다 */
 const MiniContext = createContext(false);
@@ -153,97 +178,41 @@ function useDeptId() {
 
 /* ───────────────────────── 오늘 일정 ───────────────────────── */
 
-type Tone = 'special' | 'general';
-
-interface TimelineItem {
+interface DayRow {
   key: string;
   title: string;
   start: string | null;
   end: string | null;
   allDay: boolean;
-  tone: Tone;
-  /** 칸 색(업무계획과 같은 색) · 태그 색 점 */
-  badgeClass: string;
-  dotClass?: string;
-  onClick: () => void;
+  /** 일정 색(업무계획과 같은 색) — 점과 시간 막대 */
+  color: string;
+  /** 종일(외근·출장·휴가 종일) / 시각 있음 / 시간 미정(시각 없는 업무) */
+  kind: 'allDay' | 'timed' | 'undecided';
+  entry: DayEntry;
 }
 
-/** 회의·외근·출장·휴가는 위 줄, 업무·일정은 아래 줄 */
-function isSpecial(e: DayEntry): boolean {
-  return e.source === 'MEETING' || e.source === 'OUTSIDE' || e.source === 'APPROVAL';
+/**
+ * 줄 종류 — 업무계획과 같은 규칙: 시각 없는 업무는 '시간 미정'(업무계획도 종일로 저장하고 '미정'으로 보인다),
+ * 외근·출장·휴가·회의 등의 시각 없는 일정은 '종일'.
+ */
+function rowKindOf(e: DayEntry): DayRow['kind'] {
+  return entryTimeKind(e);
 }
 
-const LANE_H = 30;
-const LANE_GAP = 3;
-
-/** 한 묶음(위 줄 또는 아래 줄) — 겹치면 칸을 늘려 아래로 내린다 */
-function LaneGroup({ items }: { items: TimelineItem[] }) {
-  const { lanes, count } = packLanes(items);
-  return (
-    <div className="relative rounded-lg bg-panel-alt" style={{ height: count * LANE_H + (count + 1) * LANE_GAP }}>
-      {lanes.map(({ item: i, lane }) => {
-        const sp = timelineSpan(i.start, i.end);
-        if (!sp) return null;
-        return (
-          <button
-            key={i.key}
-            type="button"
-            onClick={i.onClick}
-            title={i.start === '08:00' && i.end === '20:00' ? i.title : `${i.start?.slice(0, 5)}${i.end ? `~${i.end.slice(0, 5)}` : ''} ${i.title}`}
-            className={`absolute flex cursor-pointer items-center gap-1 overflow-hidden rounded-md px-1.5 text-left text-[11px] font-bold whitespace-nowrap ${i.badgeClass}`}
-            style={{
-              left: `calc(${sp.left}% + 1px)`,
-              width: `calc(${sp.width}% - 2px)`,
-              top: LANE_GAP + lane * (LANE_H + LANE_GAP),
-              height: LANE_H,
-              lineHeight: `${LANE_H - 2}px`,
-            }}
-          >
-            {i.dotClass && <i className={`h-1.5 w-1.5 shrink-0 rounded-full ${i.dotClass}`} />}
-            <span className="truncate">{i.title}</span>
-          </button>
-        );
-      })}
-    </div>
-  );
+/** 줄의 시간 글자 */
+function timeLabel(r: DayRow): string {
+  if (r.kind === 'allDay') return '종일';
+  if (r.kind === 'undecided') return '시간 미정';
+  return `${r.start!.slice(0, 5)}${r.end ? `~${r.end.slice(0, 5)}` : ''}`;
 }
 
-function DayTimeline({ items }: { items: TimelineItem[] }) {
-  // 지금 시각 선 — 1분마다 옮긴다
-  const [now, setNow] = useState(() => nowPercent());
-  useEffect(() => {
-    const t = setInterval(() => setNow(nowPercent()), 60_000);
-    return () => clearInterval(t);
-  }, []);
-  const hours = Array.from({ length: (DAY_END_MIN - DAY_START_MIN) / 60 + 1 }, (_, i) => DAY_START_MIN / 60 + i);
-  // 종일·시간 미정(외근·출장·휴가)은 위 칸에 하루 전체 길이로 — 따로 줄을 두지 않는다
-  const fullDay = { start: '08:00', end: '20:00' };
-  const timed = items.filter((i) => !i.allDay && timelineSpan(i.start, i.end));
-  const untimed = items.filter((i) => i.allDay || !timelineSpan(i.start, i.end)).map((i) => ({ ...i, ...fullDay, allDay: false }));
-  const special = [...untimed, ...timed.filter((i) => i.tone === 'special')];
-  const general = timed.filter((i) => i.tone !== 'special');
-  return (
-    <div className="flex flex-col gap-2">
-      <div className="relative h-4">
-        {hours.map((h, i) => (
-          <span key={h} className="absolute -translate-x-1/2 text-[10px] tabular-nums text-ink3" style={{ left: `${(i / (hours.length - 1)) * 100}%` }}>
-            {h}
-          </span>
-        ))}
-      </div>
-      <div className="relative flex flex-col gap-1.5">
-        {special.length > 0 && <LaneGroup items={special} />}
-        {(general.length > 0 || special.length === 0) && <LaneGroup items={general} />}
-        {now !== null && (
-          <div className="pointer-events-none absolute inset-y-[-6px] w-0.5 rounded-full bg-[#e5484d]" style={{ left: `${now}%` }}>
-            <span className="absolute -top-1 -left-[3px] h-2 w-2 rounded-full bg-[#e5484d]" />
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
+/**
+ * 오늘 일정 — 왼쪽에 업무 제목, 오른쪽에 시간 막대(08~20시). 한 줄에 일정 하나.
+ * 종일이 맨 위, 그다음 시작 시각 순(외근·출장도 같은 규칙), 시간 미정은 맨 아래.
+ * 막대: 종일은 꽉 찬 색 막대('종일'), 시간 미정은 점선 빈 칸('시간 미정')으로 구분한다.
+ * 일정 수만큼 높이가 늘어난다(웹 모눈에서는 내용 높이를 알려 칸 수를 맞춘다).
+ * 일정 줄을 누르면 업무계획으로 가지 않고 그 일정의 상세를 읽기 전용으로 띄운다.
+ */
 export function TodayWidget() {
   const navigate = useGo();
   const { user: me } = useAuth();
@@ -260,53 +229,136 @@ export function TodayWidget() {
     .map((l) => stripInlineMarks(l).replace(/^\s*(?:[-*]\s*(?:\[[ xX]\]\s*)?|\d+[.)]\s*)/, '').trim())
     .filter(Boolean);
 
-  const items: TimelineItem[] = [
-    ...myEntries.map((e) => ({
-      key: e.key,
-      title: chipLook(e).label,
-      badgeClass: chipLook(e).badgeClass,
-      dotClass: chipLook(e).dotClass,
-      start: e.startTime,
-      end: e.endTime,
-      allDay: e.allDay,
-      tone: (isSpecial(e) ? 'special' : 'general') as Tone,
-      onClick: () => navigate('/gw/work-plan'),
-    })),
-  ];
+  const rows: DayRow[] = orderDayItems(
+    myEntries.map((e) => {
+      const kind = rowKindOf(e);
+      return {
+        key: e.key,
+        title: chipLook(e).label,
+        color: entryDotClass(e),
+        kind,
+        // 정렬용 — 종일은 맨 위, 시간 미정은 시각을 비워 맨 아래로
+        allDay: kind === 'allDay',
+        start: kind === 'timed' ? e.startTime : null,
+        end: kind === 'timed' ? e.endTime : null,
+        entry: e,
+      };
+    }),
+  );
+
+  // 지금 시각 선 — 1분마다 옮긴다
+  const [now, setNow] = useState(() => nowPercent());
+  useEffect(() => {
+    const t = setInterval(() => setNow(nowPercent()), 60_000);
+    return () => clearInterval(t);
+  }, []);
+  const hours = Array.from({ length: (DAY_END_MIN - DAY_START_MIN) / 60 + 1 }, (_, i) => DAY_START_MIN / 60 + i);
+  const bodyRef = useAutoHeight();
+  /** 누른 일정 — 읽기 전용 상세 창 */
+  const [picked, setPicked] = useState<DayEntry | null>(null);
+  const open = () => navigate('/gw/work-plan');
+  /** 왼쪽 제목 칸 · 오른쪽 시간 막대 칸 */
+  const COLS = 'grid grid-cols-[minmax(120px,38%)_minmax(0,1fr)] gap-x-4 sm:grid-cols-[minmax(200px,320px)_minmax(0,1fr)]';
 
   return (
     <Panel className="sm:p-6">
-      <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
-        <div className="flex items-end gap-3 sm:gap-4">
-          <div className="text-[40px] sm:text-[52px] leading-[0.9] font-black tracking-[-.06em] text-[#0876c8] tabular-nums">{Number(today.slice(8))}</div>
-          <div className="pb-0.5">
-            <div className="text-[13px] font-bold text-ink2">{Number(today.slice(0, 4))}년 {Number(today.slice(5, 7))}월 {WEEKDAYS[weekdayOf(today)]}요일</div>
-            <h1 className="mt-0.5 text-[17px] sm:text-[22px] font-extrabold tracking-[-.04em] text-ink">
-              {me?.name ? `${me.name}님, 오늘 일정은 ${items.length}건입니다` : `오늘 일정은 ${items.length}건입니다`}
-            </h1>
+      <div ref={bodyRef}>
+        <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
+          <div className="flex items-end gap-3 sm:gap-4">
+            <div className="text-[40px] sm:text-[52px] leading-[0.9] font-black tracking-[-.06em] text-[#0876c8] tabular-nums">{Number(today.slice(8))}</div>
+            <div className="pb-0.5">
+              <div className="text-[13px] font-bold text-ink2">{Number(today.slice(0, 4))}년 {Number(today.slice(5, 7))}월 {WEEKDAYS[weekdayOf(today)]}요일</div>
+              <h1 className="mt-0.5 text-[17px] sm:text-[22px] font-extrabold tracking-[-.04em] text-ink">
+                {me?.name ? `${me.name}님, 오늘 일정은 ${rows.length}건입니다` : `오늘 일정은 ${rows.length}건입니다`}
+              </h1>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button type="button" onClick={() => navigate('/gw/calendar')} className="cursor-pointer rounded-lg border border-border px-3 py-1.5 text-[12px] font-bold text-ink2 hover:border-[#0876c8] hover:text-[#0876c8]">캘린더</button>
+            <button type="button" onClick={open} className="cursor-pointer rounded-lg bg-[#0876c8] px-3 py-1.5 text-[12px] font-bold text-white hover:bg-[#066aaf]">업무계획</button>
           </div>
         </div>
-        <div className="flex gap-2">
-          <button type="button" onClick={() => navigate('/gw/calendar')} className="cursor-pointer rounded-lg border border-border px-3 py-1.5 text-[12px] font-bold text-ink2 hover:border-[#0876c8] hover:text-[#0876c8]">캘린더</button>
-          <button type="button" onClick={() => navigate('/gw/work-plan')} className="cursor-pointer rounded-lg bg-[#0876c8] px-3 py-1.5 text-[12px] font-bold text-white hover:bg-[#066aaf]">업무계획</button>
-        </div>
+        {companyLines.length > 0 && (
+          <button
+            type="button"
+            onClick={open}
+            title={companyLines.join('\n')}
+            className="-mt-1 mb-3 flex w-full cursor-pointer items-center gap-2.5 rounded-r-lg border-l-[3px] border-[#0876c8] bg-[#f2f8fd] px-3 py-1.5 text-left hover:bg-[#e8f2fb] dark:bg-sky-500/10 dark:hover:bg-sky-500/15"
+          >
+            <Megaphone size={14} className="shrink-0 text-[#0876c8]" />
+            <span className="shrink-0 text-[11.5px] font-extrabold text-[#0876c8]">전사 주요 일정</span>
+            <span className="min-w-0 flex-1 truncate text-[12.5px] font-semibold text-ink">{companyLines.join('  ·  ')}</span>
+          </button>
+        )}
+
+        {rows.length === 0 ? (
+          <div className="py-6 text-center text-[13px] text-ink3">오늘 일정이 없습니다.</div>
+        ) : (
+          <div className="flex flex-col">
+            {/* 시간 눈금 */}
+            <div className={`${COLS} mb-1`}>
+              <span />
+              <div className="relative h-4">
+                {hours.map((h, i) => (
+                  <span key={h} className="absolute -translate-x-1/2 text-[10px] tabular-nums text-ink3" style={{ left: `${(i / (hours.length - 1)) * 100}%` }}>
+                    {h}
+                  </span>
+                ))}
+              </div>
+            </div>
+            <div className="relative">
+              <ul className="m-0 flex list-none flex-col gap-1 p-0">
+                {rows.map((r) => {
+                  const sp = r.kind === 'timed' ? timelineSpan(r.start, r.end) : null;
+                  return (
+                    <li key={r.key}>
+                      <button type="button" onClick={() => setPicked(r.entry)} title={`${timeLabel(r)} ${r.title}`} className={`${COLS} group w-full cursor-pointer items-center rounded-lg py-1 text-left hover:bg-panel-alt/60`}>
+                        <span className="flex min-w-0 items-center gap-2 pl-1">
+                          <i className={`h-2 w-2 shrink-0 rounded-full ${r.color}`} />
+                          <span className="min-w-0 truncate text-[13px] font-semibold text-ink group-hover:text-[#0876c8]">{r.title}</span>
+                          <span className="ml-auto shrink-0 pl-2 text-[11px] tabular-nums text-ink3">{timeLabel(r)}</span>
+                        </span>
+                        {r.kind === 'undecided' ? (
+                          // 시간 미정 — 색 없이 점선 빈 칸
+                          <span className="grid h-7 place-items-center rounded-md border border-dashed border-border-hi text-[11px] font-bold text-ink3">시간 미정</span>
+                        ) : r.kind === 'allDay' ? (
+                          // 종일 — 하루 전체를 채운 색 막대
+                          <span className="relative block h-7 rounded-md bg-panel-alt">
+                            <span className="absolute inset-1 grid place-items-center overflow-hidden rounded">
+                              <span className={`absolute inset-0 opacity-35 ${r.color}`} />
+                              <span className="relative text-[11px] font-bold text-ink2">종일</span>
+                            </span>
+                          </span>
+                        ) : (
+                          <span className="relative block h-7 rounded-md bg-panel-alt">
+                            {sp && <span className={`absolute top-1.5 bottom-1.5 rounded opacity-45 ${r.color}`} style={{ left: `calc(${sp.left}% + 1px)`, width: `calc(${sp.width}% - 2px)` }} />}
+                          </span>
+                        )}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+              {/* 지금 시각 선 — 시간 막대 칸 위에만 */}
+              {now !== null && (
+                <div className={`${COLS} pointer-events-none absolute inset-0`}>
+                  <span />
+                  <div className="relative">
+                    <div className="absolute inset-y-[-4px] w-0.5 rounded-full bg-[#e5484d]" style={{ left: `${now}%` }}>
+                      <span className="absolute -top-1 -left-[3px] h-2 w-2 rounded-full bg-[#e5484d]" />
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
-      {companyLines.length > 0 && (
-        <button
-          type="button"
-          onClick={() => navigate('/gw/work-plan')}
-          title={companyLines.join('\n')}
-          className="-mt-1 mb-3 flex w-full cursor-pointer items-center gap-2.5 rounded-r-lg border-l-[3px] border-[#0876c8] bg-[#f2f8fd] px-3 py-1.5 text-left hover:bg-[#e8f2fb] dark:bg-sky-500/10 dark:hover:bg-sky-500/15"
-        >
-          <Megaphone size={14} className="shrink-0 text-[#0876c8]" />
-          <span className="shrink-0 text-[11.5px] font-extrabold text-[#0876c8]">전사 주요 일정</span>
-          <span className="min-w-0 flex-1 truncate text-[12.5px] font-semibold text-ink">{companyLines.join('  ·  ')}</span>
-        </button>
-      )}
-      <DayTimeline items={items} />
+      <EntryDetailModal entry={picked} date={today} all={rows.map((r) => r.entry)} onPick={setPicked} onClose={() => setPicked(null)} />
     </Panel>
   );
 }
+
 
 /* ───────────────────────── 내 근태 ───────────────────────── */
 
@@ -316,7 +368,7 @@ function Donut({ counts, centerTop, centerBottom }: { counts: Record<AttendanceB
   const C = 2 * Math.PI * R;
   const GAP = slices.length > 1 ? 2 : 0; // 조각 사이 2px 틈
   return (
-    <svg viewBox="0 0 132 132" className="h-[116px] w-[116px] shrink-0" role="img" aria-label={`이번 달 근태 ${ATTENDANCE_BUCKETS.map((k) => `${ATTENDANCE_LABELS[k]} ${counts[k]}일`).join(', ')}`}>
+    <svg viewBox="0 0 132 132" className="h-[104px] w-[104px] shrink-0" role="img" aria-label={`이번 달 근태 ${ATTENDANCE_BUCKETS.map((k) => `${ATTENDANCE_LABELS[k]} ${counts[k]}일`).join(', ')}`}>
       <circle cx="66" cy="66" r={R} fill="none" strokeWidth="14" className="stroke-panel-alt" />
       {slices.map((s) => (
         <circle
@@ -341,27 +393,93 @@ function Donut({ counts, centerTop, centerBottom }: { counts: Record<AttendanceB
 }
 
 /** 일별 근무시간 막대 — 4·8·12시간 기준선 */
-function HoursBars({ days, today }: { days: Array<{ date: string; minutes: number; bucket: AttendanceBucket }>; today: string }) {
+/** 오늘 출근·퇴근 시각 — 내 근태 위젯의 도넛 옆 */
+function TodayClock({ rec }: { rec?: { inAt: string | null; outAt: string | null; bucket: AttendanceBucket; status: string } }) {
+  const inClock = clockOf(rec?.inAt);
+  const outClock = clockOf(rec?.outAt);
+  // 외근·출장·휴가처럼 기록 없이 인정된 날은 그 상태를 적는다
+  const note = rec && !rec.inAt && rec.bucket !== 'pending' && rec.status !== 'unknown' ? COMMUTE_STATUS_LABELS[rec.status as keyof typeof COMMUTE_STATUS_LABELS] : null;
+  return (
+    <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+      <span className="text-[11px] font-bold text-ink3">오늘</span>
+      {[
+        { label: '출근', value: inClock, late: rec?.bucket === 'late' },
+        { label: '퇴근', value: outClock, late: false },
+      ].map((x) => (
+        <div key={x.label} className="flex items-center justify-between gap-2 rounded-lg bg-panel-alt px-3 py-1.5">
+          <span className="text-[11.5px] font-bold text-ink3">{x.label}</span>
+          <span className={`text-[17px] leading-tight font-black tabular-nums ${x.value ? (x.late ? 'text-[#c4602f]' : 'text-ink') : 'text-ink3'}`}>{x.value ?? '--:--'}</span>
+        </div>
+      ))}
+      {note && <span className="text-[11px] font-bold text-ink2">{note}</span>}
+    </div>
+  );
+}
+
+type AwayKind = 'outside' | 'trip' | null;
+const NO_APPROVALS: ApprovalDayMap = new Map();
+/** 외근·출장 영역 — 근무 막대(꽉 찬 파랑)와 헷갈리지 않게 빗금 */
+const AWAY_LOOK: Record<'outside' | 'trip', { label: string; stripe: string }> = {
+  outside: { label: '외근', stripe: 'repeating-linear-gradient(135deg, rgb(20 184 166 / 0.42) 0 3px, rgb(20 184 166 / 0.16) 3px 6px)' },
+  trip: { label: '출장', stripe: 'repeating-linear-gradient(135deg, rgb(139 92 246 / 0.42) 0 3px, rgb(139 92 246 / 0.16) 3px 6px)' },
+};
+const minText = (m: number) => `${Math.floor(m / 60)}시간 ${m % 60}분`;
+
+/**
+ * 하루 막대 한 칸 — 근무 막대(지각한 날은 주황). 외근·출장 날은 칸 높이 전체를 그 색 빗금으로 칠하고,
+ * 실제 출퇴근 기록이 있으면 그 시간만 근무 막대로 얹는다(외근·출장으로 인정된 8시간은 막대로 그리지 않는다).
+ */
+function DayHoursColumn({ d, max, show, radius, dim, label }: {
+  d: { minutes: number; actualMin?: number; away?: AwayKind; bucket?: AttendanceBucket; late?: boolean };
+  max: number;
+  show: boolean;
+  radius: string;
+  dim?: boolean;
+  label: string;
+}) {
+  const late = d.late ?? d.bucket === 'late';
+  const work = d.away ? d.actualMin ?? 0 : d.minutes;
+  const title = d.away
+    ? `${label} ${AWAY_LOOK[d.away].label}${work > 0 ? ` · 출퇴근 기록 ${minText(work)}` : ' (출퇴근 기록 없음)'}`
+    : `${label} ${minText(d.minutes)}`;
+  return (
+    <div className="group relative flex h-full flex-1 items-end" title={title}>
+      {show && d.away && <div className={`absolute inset-0 ${radius}`} style={{ background: AWAY_LOOK[d.away].stripe }} />}
+      {show && work > 0 && (
+        <div className={`relative w-full ${radius} ${late && !d.away ? 'bg-[#f2a17e]' : 'bg-[#0876c8]'} ${dim ? 'opacity-80 group-hover:opacity-100' : ''}`} style={{ height: `${(Math.min(work, max) / max) * 100}%` }} />
+      )}
+    </div>
+  );
+}
+
+/** 막대 색 설명 — 근무·지각, 외근·출장은 그 기간에 있을 때만 */
+function HoursLegend({ days, late = true }: { days: Array<{ away?: AwayKind }>; late?: boolean }) {
+  const kinds = (['outside', 'trip'] as const).filter((k) => days.some((d) => d.away === k));
+  return (
+    <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[10.5px] text-ink3">
+      <span className="flex items-center gap-1.5"><i className="h-2.5 w-2.5 rounded-[3px] bg-[#0876c8]" />근무</span>
+      {late && <span className="flex items-center gap-1.5"><i className="h-2.5 w-2.5 rounded-[3px] bg-[#f2a17e]" />지각한 날</span>}
+      {kinds.map((k) => (
+        <span key={k} className="flex items-center gap-1.5"><i className="h-2.5 w-2.5 rounded-[3px]" style={{ background: AWAY_LOOK[k].stripe }} />{AWAY_LOOK[k].label}</span>
+      ))}
+    </div>
+  );
+}
+
+function HoursBars({ days, today }: { days: Array<{ date: string; minutes: number; actualMin?: number; away?: AwayKind; bucket: AttendanceBucket }>; today: string }) {
   const MAX = 12 * 60;
   return (
     <div className="pl-[26px]">
-      <div className="relative h-[110px]">
+      <div className="relative h-[96px]">
         {[4, 8, 12].map((h) => (
           <div key={h} className="absolute inset-x-0 border-t border-dashed border-border" style={{ bottom: `${(h * 60 / MAX) * 100}%` }}>
             <span className="absolute -top-[7px] -left-[26px] w-[22px] text-right text-[9.5px] tabular-nums text-ink3">{h}h</span>
           </div>
         ))}
         <div className="absolute inset-0 flex items-end gap-[2px]">
-          {days.map((d) => {
-            const h = Math.min(d.minutes, MAX) / MAX;
-            return (
-              <div key={d.date} className="group relative flex h-full flex-1 items-end" title={`${Number(d.date.slice(8))}일 ${Math.floor(d.minutes / 60)}시간 ${d.minutes % 60}분`}>
-                {d.date <= today && d.minutes > 0 && (
-                  <div className={`w-full rounded-t-[4px] ${d.bucket === 'late' ? 'bg-[#f2a17e]' : 'bg-[#0876c8]'} ${d.date === today ? 'opacity-100' : 'opacity-80 group-hover:opacity-100'}`} style={{ height: `${h * 100}%` }} />
-                )}
-              </div>
-            );
-          })}
+          {days.map((d) => (
+            <DayHoursColumn key={d.date} d={d} max={MAX} show={d.date <= today} radius="rounded-t-[4px]" dim={d.date !== today} label={`${Number(d.date.slice(8))}일`} />
+          ))}
         </div>
       </div>
       <div className="mt-1.5 flex gap-[2px]">
@@ -393,7 +511,7 @@ function LeaveBar({ standalone = false }: { standalone?: boolean }) {
   ].filter((s) => s.value > 0);
   const fmt = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
   return (
-    <button type="button" onClick={() => navigate('/gw/leave')} className={`group block w-full cursor-pointer text-left ${standalone ? '' : 'mt-5 border-t border-border pt-4'}`}>
+    <button type="button" onClick={() => navigate('/gw/leave')} className={`group block w-full cursor-pointer text-left ${standalone ? '' : 'mt-3 border-t border-border pt-3'}`}>
       <div className="mb-2.5 flex items-baseline justify-between">
         <span className={`font-bold text-ink group-hover:text-[#0876c8] ${standalone ? 'text-[15px] font-extrabold' : 'text-[12.5px]'}`}>연차</span>
         <span className="text-[11.5px] text-ink3">
@@ -438,7 +556,13 @@ function useMyCommuteDays(month: string) {
       const rec = evaluate({ empId: myEmpId ?? 0, date, inAt: raw?.inAt ?? null, outAt: raw?.outAt ?? null }, approvalDays);
       let bucket = bucketOf(rec.status);
       if (date > today && bucket !== 'leave') bucket = 'pending';
-      return { date, bucket, status: rec.status, minutes: rec.totalMin ?? 0, inAt: rec.inAt, outAt: rec.outAt };
+      /*
+        외근·출장 날 — 근태 계산은 8시간을 쳐 주지만(결재로 인정) 실제 출퇴근 기록과는 다르다.
+        막대에는 외근·출장 색 영역으로 따로 보이고, 기록이 있으면 그 시간(결재 없이 계산한 시간)만 근무 막대로 얹는다.
+      */
+      const away: AwayKind = rec.status === 'outside' || rec.status === 'trip' ? rec.status : null;
+      const actualMin = away ? (raw?.inAt && raw?.outAt ? evaluate({ empId: myEmpId ?? 0, date, inAt: raw.inAt, outAt: raw.outAt }, NO_APPROVALS).totalMin ?? 0 : 0) : rec.totalMin ?? 0;
+      return { date, bucket, status: rec.status, minutes: rec.totalMin ?? 0, actualMin, away, inAt: rec.inAt, outAt: rec.outAt };
     });
   }, [month, myMonthQuery.data, evaluate, approvalDaysOf, me?.id, me?.name, myEmpId, today]);
   return { myDays, myEmpId, settled: boot.isSettled };
@@ -455,18 +579,53 @@ export function AttendanceWidget() {
   const avgMin = workedDays.length ? Math.round(workedDays.reduce((s, d) => s + d.minutes, 0) / workedDays.length) : 0;
   const todayRec = myDays.find((d) => d.date === today);
   const isThisMonth = month === today.slice(0, 7);
+  const tier = useTier();
+  // 오늘 출퇴근 — 다른 달을 보고 있어도 오늘 것(같은 달 조회는 한 번만 읽는다)
+  const cur = useMyCommuteDays(today.slice(0, 7));
+  const nowRec = cur.myDays.find((d) => d.date === today);
+
+  if (tier === 'S') {
+    const stats = [
+      { label: '출근', value: counts.work + counts.late, unit: '일' },
+      { label: '지각', value: counts.late, unit: '일', warn: counts.late > 0 },
+      { label: '휴가', value: counts.leave, unit: '일' },
+    ];
+    return (
+      <Panel>
+        <Head
+          title="내 근태"
+          note={todayRec?.inAt ? `오늘 ${new Date(todayRec.inAt).toTimeString().slice(0, 5)} 출근` : '오늘 출근 기록 없음'}
+          to={() => navigate('/gw/commute')}
+          toLabel="근태 화면"
+        />
+        {myEmpId === null && settled ? (
+          <Empty>근태 기록과 연결된 사번이 없습니다.</Empty>
+        ) : (
+          <>
+            <div className="grid grid-cols-3 gap-1.5">
+              {stats.map((t) => (
+                <div key={t.label} className="rounded-xl bg-panel-alt px-2 py-2.5 text-center">
+                  <div className={`text-[22px] leading-none font-black tabular-nums ${t.warn ? 'text-[#e0703f]' : 'text-ink'}`}>
+                    {t.value}<span className="ml-0.5 text-[11px] font-bold text-ink3">{t.unit}</span>
+                  </div>
+                  <div className="mt-1.5 text-[10.5px] font-bold text-ink3">{t.label}</div>
+                </div>
+              ))}
+            </div>
+            <div className="mt-auto flex items-baseline justify-between pt-3 text-[11.5px] text-ink3">
+              <span>{Number(month.slice(5))}월 하루 평균</span>
+              <strong className="text-[13px] tabular-nums text-ink">{Math.floor(avgMin / 60)}시간 {avgMin % 60}분</strong>
+            </div>
+          </>
+        )}
+      </Panel>
+    );
+  }
 
   return (
     <Panel>
       <div className="mb-4 flex items-center justify-between gap-3">
-        <div className="flex items-baseline gap-2.5">
-          <h2 className="text-[15px] font-extrabold tracking-tight text-ink">내 근태</h2>
-          {todayRec && isThisMonth && (
-            <span className="text-[11.5px] text-ink3">
-              오늘 {todayRec.inAt ? `${new Date(todayRec.inAt).toTimeString().slice(0, 5)} 출근` : '출근 기록 없음'}
-            </span>
-          )}
-        </div>
+        <h2 className="text-[15px] font-extrabold tracking-tight text-ink">내 근태</h2>
         <div className="flex items-center gap-1.5">
           <button type="button" aria-label="지난달" onClick={() => setMonth((m) => shiftMonth(m, -1))} className="grid h-7 w-7 cursor-pointer place-items-center rounded-lg text-ink3 hover:bg-panel-alt"><ChevronLeft size={15} /></button>
           <span className="min-w-[78px] text-center text-[13px] font-extrabold tabular-nums text-ink">{month.replace('-', '. ')}</span>
@@ -481,27 +640,29 @@ export function AttendanceWidget() {
       {myEmpId === null && settled ? (
         <Empty>근태 기록과 연결된 사번이 없어 근태를 불러오지 못했습니다. 인사 담당자에게 사번 연결을 요청하세요.</Empty>
       ) : (
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
-          {/* 왼쪽: 도넛 + 범례, 달력 */}
-          <div>
-            <div className="mb-4 flex items-center gap-4">
+        <div className={`grid gap-6 ${tier ? 'min-h-0 flex-1 grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]' : 'lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]'}`}>
+          {/* 왼쪽: 도넛 + 범례, 달력(달력 칸은 남은 높이에 맞춰 줄어든다) */}
+          <div className="flex min-h-0 flex-col">
+            <div className="mb-3 flex items-center gap-4">
               <Donut counts={counts} centerTop={`${counts.work + counts.late}일`} centerBottom="출근한 날" />
-              <ul className="m-0 flex shrink-0 list-none flex-col gap-2 p-0">
-                {ATTENDANCE_BUCKETS.map((k) => (
-                  <li key={k} className="flex items-center gap-2 whitespace-nowrap text-[12px] text-ink2">
-                    <i className={`h-2.5 w-2.5 shrink-0 rounded-[3px] ${BUCKET_FILL[k]}`} />
-                    <span className="min-w-[52px]">{ATTENDANCE_LABELS[k]}</span>
-                    <strong className="tabular-nums text-ink">{counts[k]}일</strong>
-                  </li>
-                ))}
-              </ul>
+              <TodayClock rec={nowRec} />
             </div>
+            {/* 도넛 색 설명 — 작게 한 줄 */}
+            <ul className="m-0 -mt-1 mb-3 flex list-none flex-wrap gap-x-3 gap-y-1 p-0">
+              {ATTENDANCE_BUCKETS.map((k) => (
+                <li key={k} className="flex items-center gap-1 whitespace-nowrap text-[10.5px] text-ink3">
+                  <i className="h-2 w-2 shrink-0 rounded-[2px]" style={{ background: BUCKET_STROKE[k] }} />
+                  {ATTENDANCE_LABELS[k]}
+                  <strong className="tabular-nums text-ink2">{counts[k]}</strong>
+                </li>
+              ))}
+            </ul>
             <div className="mb-1 grid grid-cols-7 gap-1">
               {WEEKDAYS.map((w, i) => (
                 <span key={w} className={`text-center text-[10px] font-bold ${i === 0 ? 'text-[#d97a7a]' : i === 6 ? 'text-[#6f9cc4]' : 'text-ink3'}`}>{w}</span>
               ))}
             </div>
-            <div className="grid grid-cols-7 gap-1">
+            <div className="grid min-h-0 flex-1 auto-rows-fr grid-cols-7 gap-1">
               {Array.from({ length: firstWeekday(month) }, (_, i) => <div key={`e${i}`} />)}
               {myDays.map((d) => (
                 <button
@@ -509,7 +670,7 @@ export function AttendanceWidget() {
                   type="button"
                   onClick={() => navigate('/gw/commute')}
                   title={`${Number(d.date.slice(8))}일 ${d.date > today && d.bucket === 'pending' ? '' : ATTENDANCE_LABELS[d.bucket]}`}
-                  className={`h-8 cursor-pointer rounded-md text-[11px] font-bold tabular-nums ${BUCKET_CELL[d.bucket]} ${d.date === today ? 'ring-2 ring-[#0876c8] ring-offset-1 ring-offset-panel' : ''} ${d.date > today ? 'opacity-50' : ''}`}
+                  className={`h-full max-h-8 min-h-[22px] cursor-pointer rounded-md text-[11px] font-bold tabular-nums ${BUCKET_CELL[d.bucket]} ${d.date === today ? 'ring-2 ring-[#0876c8] ring-offset-1 ring-offset-panel' : ''} ${d.date > today ? 'opacity-50' : ''}`}
                 >
                   {Number(d.date.slice(8))}
                 </button>
@@ -526,10 +687,7 @@ export function AttendanceWidget() {
               </span>
             </div>
             <HoursBars days={myDays} today={today} />
-            <div className="mt-3 flex gap-4 text-[10.5px] text-ink3">
-              <span className="flex items-center gap-1.5"><i className="h-2.5 w-2.5 rounded-[3px] bg-[#0876c8]" />근무</span>
-              <span className="flex items-center gap-1.5"><i className="h-2.5 w-2.5 rounded-[3px] bg-[#f2a17e]" />지각한 날</span>
-            </div>
+            <HoursLegend days={myDays.filter((d) => d.date <= today)} />
             <LeaveBar />
           </div>
         </div>
@@ -543,19 +701,25 @@ export function AttendanceWidget() {
 export function ApprovalWidget() {
   const navigate = useGo();
   const { user: me } = useAuth();
-  const { byBox, counts } = useApprovalBoxes(me?.id);
+  const { byBox, counts, isLoading: boxesLoading } = useApprovalBoxes(me?.id);
+  const unreadState = useApprovalUnread(me?.id ?? '', byBox, boxesLoading);
   const pending = useMemo(
     () => (me ? (byBox['대기'] ?? []).filter((d) => currentApproverIds(d).includes(me.id)) : []),
     [byBox, me],
   );
   const inProgressDocs = useMemo(() => (byBox['상신'] ?? []).filter((d) => d.status === '진행중'), [byBox]);
   const mineInProgress = inProgressDocs.length;
+  // 수신 — 남에게서 받은 문서 중 안 읽은 것만(내가 기안해 수신으로 잡힌 문서는 뺀다)
+  const receivedUnread = useMemo(
+    () => (byBox['수신'] ?? []).filter((d) => d.drafterId !== me?.id && unreadState.unread['수신'].ids.has(d.id)),
+    [byBox, me?.id, unreadState.unread],
+  );
   // 카드를 누르면 화면을 옮기지 않고 아래 목록이 그 문서함으로 바뀐다
   const tiles = [
     { key: '대기', label: '결재 대기', value: pending.length, docs: pending, empty: '결재할 문서가 없습니다.' },
     { key: '상신', label: '진행 중', value: mineInProgress, docs: inProgressDocs, empty: '진행 중인 문서가 없습니다.' },
     { key: '반려', label: '반려', value: counts['반려'] ?? 0, docs: byBox['반려'] ?? [], empty: '반려된 문서가 없습니다.' },
-    { key: '수신', label: '수신', value: counts['수신'] ?? 0, docs: byBox['수신'] ?? [], empty: '수신한 문서가 없습니다.' },
+    { key: '수신', label: '수신', value: receivedUnread.length, docs: receivedUnread, empty: '새로 받은 문서가 없습니다.' },
   ];
   const [boxKey, setBoxKey] = useState('대기');
   const active = tiles.find((t) => t.key === boxKey) ?? tiles[0];
@@ -864,53 +1028,139 @@ export function TodayCommuteWidget() {
   );
 }
 
-/* ───────────────────────── 근태: 이번 주 근무시간 ───────────────────────── */
+/* ───────────────────────── 근태: 근무시간(주간·월간) ───────────────────────── */
 
+type HoursMode = 'week' | 'month';
+const HOURS_MODE_KEY = 'workfit.home.hoursMode';
+function loadHoursMode(): HoursMode {
+  try {
+    return localStorage.getItem(HOURS_MODE_KEY) === 'month' ? 'month' : 'week';
+  } catch {
+    return 'week';
+  }
+}
+
+/** 주간·월간 고르기 */
+function HoursModeSwitch({ mode, onChange }: { mode: HoursMode; onChange: (m: HoursMode) => void }) {
+  return (
+    <div role="radiogroup" aria-label="기간" className="flex rounded-lg bg-panel-alt p-0.5">
+      {(['week', 'month'] as const).map((m) => (
+        <button
+          key={m}
+          type="button"
+          role="radio"
+          aria-checked={mode === m}
+          onClick={() => onChange(m)}
+          className={`cursor-pointer rounded-md px-2 py-0.5 text-[11px] font-bold ${mode === m ? 'bg-panel text-ink shadow-[0_1px_2px_rgba(0,0,0,.08)]' : 'text-ink3 hover:text-ink2'}`}
+        >
+          {m === 'week' ? '주간' : '월간'}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * 근무시간 — 주간(이번 주 월~일, 기준 40시간)과 월간(이번 달, 기준 = 이번 달 평일(공휴일 뺌) × 8시간)을 오간다.
+ * 고른 보기는 이 브라우저에 기억한다.
+ */
 export function WeekHoursWidget() {
   const navigate = useGo();
   const today = todayKst();
+  const month = today.slice(0, 7);
   const week = weekDates(today);
+  const [mode, setModeState] = useState<HoursMode>(loadHoursMode);
+  const setMode = (m: HoursMode) => {
+    setModeState(m);
+    try {
+      localStorage.setItem(HOURS_MODE_KEY, m);
+    } catch {
+      /* 기억 못 해도 보기는 바뀐다 */
+    }
+  };
   // 주가 두 달에 걸칠 수 있어 두 달을 읽는다(같은 달이면 한 번만 읽는다)
   const a = useMyCommuteDays(week[0].slice(0, 7));
-  const b = useMyCommuteDays(today.slice(0, 7));
+  const b = useMyCommuteDays(month);
   const byDate = new Map([...a.myDays, ...b.myDays].map((d) => [d.date, d]));
-  const days = week.map((date) => ({ date, minutes: date <= today ? byDate.get(date)?.minutes ?? 0 : 0, late: byDate.get(date)?.bucket === 'late' }));
-  const total = days.reduce((s, d) => s + d.minutes, 0);
-  const GOAL = 40 * 60;
+  const holidays = useHolidays(month.slice(0, 4)).data ?? [];
+  const holidaySet = new Set(holidays.map((h) => h.date));
+
+  const weekDays = week.map((date) => {
+    const d = date <= today ? byDate.get(date) : undefined;
+    return { date, minutes: d?.minutes ?? 0, actualMin: d?.actualMin ?? 0, away: d?.away ?? null, late: d?.bucket === 'late' };
+  });
+  const monthDays = b.myDays;
+  const isWorkday = (d: string) => weekdayOf(d) !== 0 && weekdayOf(d) !== 6 && !holidaySet.has(d);
+  const isWeek = mode === 'week';
+  const total = isWeek ? weekDays.reduce((s, d) => s + d.minutes, 0) : monthDays.filter((d) => d.date <= today).reduce((s, d) => s + d.minutes, 0);
+  const goal = isWeek ? 40 * 60 : monthDates(month).filter(isWorkday).length * DAY_GOAL_MIN;
+  // 오늘까지 채웠어야 할 시간 — 월간에서 앞섰는지·뒤졌는지
+  const dueSoFar = monthDates(month).filter((d) => d <= today && isWorkday(d)).length * DAY_GOAL_MIN;
+  const worked = monthDays.filter((d) => d.date <= today && d.minutes > 0);
+  const avg = worked.length ? Math.round(worked.reduce((s, d) => s + d.minutes, 0) / worked.length) : 0;
   const MAX = 12 * 60;
+
   if (useMini()) {
     return (
-      <MiniPanel title="이번 주 근무" onClick={() => navigate('/gw/commute')}>
+      <MiniPanel title={isWeek ? '이번 주 근무' : '이번 달 근무'} onClick={() => setMode(isWeek ? 'month' : 'week')}>
         <span className={MINI_BIG}>{hoursText(total)}</span>
         <span className="mt-1 block h-1.5 overflow-hidden rounded-full bg-panel-alt">
-          <span className="block h-full rounded-full bg-[#0876c8]" style={{ width: `${Math.min(100, (total / GOAL) * 100)}%` }} />
+          <span className="block h-full rounded-full bg-[#0876c8]" style={{ width: `${goal ? Math.min(100, (total / goal) * 100) : 0}%` }} />
         </span>
       </MiniPanel>
     );
   }
   return (
     <Panel>
-      <Head title="이번 주 근무시간" to={() => navigate('/gw/commute')} toLabel="근태 화면" />
-      <div className="mb-3 flex items-baseline gap-2">
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <h2 className="text-[15px] font-extrabold tracking-tight text-ink">근무시간</h2>
+        <div className="flex items-center gap-2">
+          <HoursModeSwitch mode={mode} onChange={setMode} />
+          <button type="button" onClick={() => navigate('/gw/commute')} className="shrink-0 cursor-pointer text-[11.5px] font-bold text-[#2f86c4] hover:underline">근태 화면</button>
+        </div>
+      </div>
+      <div className="mb-1 flex items-baseline gap-2">
         <span className="text-[24px] leading-none font-black tabular-nums text-ink">{hoursText(total)}</span>
-        <span className="text-[12px] text-ink3">/ 40시간</span>
+        <span className="text-[12px] text-ink3">/ {hoursText(goal)}</span>
+        <span className="ml-auto text-[11px] text-ink3">{isWeek ? '이번 주' : `${Number(month.slice(5))}월`}</span>
       </div>
-      <div className="mb-4 h-1.5 overflow-hidden rounded-full bg-panel-alt">
-        <div className="h-full rounded-full bg-[#0876c8]" style={{ width: `${Math.min(100, (total / GOAL) * 100)}%` }} />
+      <div className="mb-1.5 h-1.5 overflow-hidden rounded-full bg-panel-alt">
+        <div className="h-full rounded-full bg-[#0876c8]" style={{ width: `${goal ? Math.min(100, (total / goal) * 100) : 0}%` }} />
       </div>
-      <div className="relative flex h-[84px] items-end gap-2">
-        <div className="absolute inset-x-0 border-t border-dashed border-border" style={{ bottom: `${(DAY_GOAL_MIN / MAX) * 100}%` }} />
-        {days.map((d) => (
-          <div key={d.date} className="flex h-full flex-1 items-end" title={`${WEEKDAYS[weekdayOf(d.date)]} ${hoursText(d.minutes)}`}>
-            {d.minutes > 0 && <div className={`w-full rounded-t-[5px] ${d.late ? 'bg-[#f2a17e]' : 'bg-[#0876c8]'}`} style={{ height: `${(Math.min(d.minutes, MAX) / MAX) * 100}%` }} />}
+      <div className="mb-3 flex justify-between text-[11px] text-ink3">
+        {isWeek ? (
+          <span>남은 시간 <strong className="tabular-nums text-ink2">{hoursText(Math.max(0, goal - total))}</strong></span>
+        ) : (
+          <span>
+            오늘까지 기준보다{' '}
+            <strong className={`tabular-nums ${total >= dueSoFar ? 'text-[#0876c8]' : 'text-[#c4602f]'}`}>
+              {hoursText(Math.abs(total - dueSoFar))} {total >= dueSoFar ? '더' : '덜'}
+            </strong>
+          </span>
+        )}
+        <span>하루 평균 <strong className="tabular-nums text-ink2">{hoursText(avg)}</strong></span>
+      </div>
+      {isWeek ? (
+        <>
+          <div className="relative flex h-[84px] items-end gap-2">
+            <div className="absolute inset-x-0 border-t border-dashed border-border" style={{ bottom: `${(DAY_GOAL_MIN / MAX) * 100}%` }} />
+            {weekDays.map((d) => (
+              <DayHoursColumn key={d.date} d={d} max={MAX} show radius="rounded-t-[5px]" label={WEEKDAYS[weekdayOf(d.date)]} />
+            ))}
           </div>
-        ))}
-      </div>
-      <div className="mt-1.5 flex gap-2">
-        {days.map((d) => (
-          <span key={d.date} className={`flex-1 text-center text-[10.5px] font-bold ${d.date === today ? 'text-[#0876c8]' : 'text-ink3'}`}>{WEEKDAYS[weekdayOf(d.date)]}</span>
-        ))}
-      </div>
+          <div className="mt-1.5 flex gap-2">
+            {weekDays.map((d) => (
+              <span key={d.date} className={`flex-1 text-center text-[10.5px] font-bold ${d.date === today ? 'text-[#0876c8]' : 'text-ink3'}`}>{WEEKDAYS[weekdayOf(d.date)]}</span>
+            ))}
+          </div>
+        </>
+      ) : (
+        <HoursBars days={monthDays} today={today} />
+      )}
+      {/* 이 위젯은 원래 색 설명이 없다 — 외근·출장 날이 있을 때만 붙인다 */}
+      {(isWeek ? weekDays : monthDays.filter((d) => d.date <= today)).some((d) => d.away) && (
+        <HoursLegend days={isWeek ? weekDays : monthDays.filter((d) => d.date <= today)} />
+      )}
     </Panel>
   );
 }
@@ -968,7 +1218,7 @@ export function CalendarWidget() {
               type="button"
               onClick={() => setPicked(date)}
               title={holiday}
-              className={`flex h-11 cursor-pointer flex-col items-center gap-1 rounded-lg pt-1 ${isPicked ? 'bg-[#e6f1fb] dark:bg-sky-500/15' : 'hover:bg-panel-alt'}`}
+              className={`flex h-9 cursor-pointer flex-col items-center gap-0.5 rounded-lg pt-0.5 ${isPicked ? 'bg-[#e6f1fb] dark:bg-sky-500/15' : 'hover:bg-panel-alt'}`}
             >
               <span
                 className={`grid h-6 w-6 place-items-center rounded-full text-[12px] font-bold tabular-nums ${
@@ -1162,6 +1412,29 @@ export function ResourceTodayWidget() {
   }, [rows]);
   const now = nowPercent();
   const hours = [8, 10, 12, 14, 16, 18, 20];
+  const tier = useTier();
+  if (tier === 'S') {
+    return (
+      <Panel>
+        <Head title="오늘 자원 사용" to={() => navigate('/gw/resource')} toLabel="예약하기" />
+        {byResource.length === 0 ? (
+          <Empty>오늘 예약이 없습니다.</Empty>
+        ) : (
+          <ul className={`m-0 list-none p-0 ${FIT_LIST}`}>
+            {byResource.map((g) => (
+              <li key={g.name} className="flex items-center gap-3 py-1.5">
+                <span className="min-w-0 flex-1 truncate text-[13px] font-bold text-ink2" title={g.name}>{g.name}</span>
+                <span className="shrink-0 truncate text-[11.5px] tabular-nums text-ink3">
+                  {g.items.slice(0, 2).map((r) => kstTime(r.startAt)).join(' · ')}
+                  {g.items.length > 2 ? ` 외 ${g.items.length - 2}` : ''}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Panel>
+    );
+  }
   return (
     <Panel>
       <Head title="오늘 자원 사용" to={() => navigate('/gw/resource')} toLabel="예약하기" />
