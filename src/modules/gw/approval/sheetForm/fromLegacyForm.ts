@@ -98,12 +98,24 @@ export function spreadColumns(weights: number[], n: number): number[] {
   return floor.map((x) => x + 1);
 }
 
-/** 기존 표 열의 너비 어림(px) — 정해 둔 너비가 있으면 그 값, 없으면(자동 너비) 그 열에서 가장 긴 글자 길이로 */
-function legacyColWeight(t: { rows: Array<Record<string, string>>; colWidths: Record<string, string> }, col: string): number {
+/** 너비를 정해 두지 않은 열의 어림 범위(px) — 빈 입력 열도 금액 하나는 들어가게, 긴 글 열이 다른 열을 한 칸으로 밀어내지 않게(최소의 3배까지) */
+const AUTO_COL_MIN = 100;
+const AUTO_COL_MAX = 300;
+
+/**
+ * 기존 표 열의 너비 어림(px) — 정해 둔 너비가 있으면 그 값, 없으면(자동 너비) 그 열에서 가장 긴 글자 길이로.
+ * 여러 열을 합친 칸의 글자는 보지 않는다(한 열의 너비가 아니다 — '본 발주금액 (VAT 포함)'처럼 두 열에 걸친 이름표)
+ */
+function legacyColWeight(
+  t: { cols: string[]; rows: Array<Record<string, string>>; colWidths: Record<string, string>; merges: Array<{ startRow: number; startCol: number; rowSpan: number; colSpan: number }> },
+  col: string
+): number {
   const set = parseFloat(t.colWidths[col] ?? '');
   if (Number.isFinite(set) && set > 0) return set;
-  const longest = Math.max(0, ...t.rows.map((row) => Math.max(0, ...String(row[col] ?? '').split(/\r?\n/).map((line) => line.length))));
-  return Math.min(360, Math.max(48, longest * 13 + 16));
+  const c = t.cols.indexOf(col);
+  const wide = (r: number) => t.merges.some((m) => m.colSpan > 1 && r >= m.startRow && r < m.startRow + m.rowSpan && c >= m.startCol && c < m.startCol + m.colSpan);
+  const longest = Math.max(0, ...t.rows.map((row, r) => (wide(r) ? 0 : Math.max(0, ...String(row[col] ?? '').split(/\r?\n/).map((line) => line.length)))));
+  return Math.min(AUTO_COL_MAX, Math.max(AUTO_COL_MIN, longest * 13 + 16));
 }
 
 /** 표 열 자리 — 열 키 또는 머리 줄(0번 줄) 글자 */

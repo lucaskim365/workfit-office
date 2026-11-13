@@ -362,8 +362,11 @@ test('기존 표 변환 — 금액 칸·금액 수식 칸은 오른쪽 정렬(�
   const head = findText(s, '품명')!;
   const r = head.r + 1;
   assert.equal(s.styles[`${r}:${s.cols[0]}`]?.align, 'center', '글자 칸은 기존 정렬');
-  assert.equal(s.styles[`${r}:${s.cols[1]}`]?.align, 'right', '금액 입력 칸');
-  assert.equal(s.styles[`${r}:${s.cols[2]}`]?.align, 'right', '금액 수식 칸');
+  // 표 열이 시트보다 적어 나뉘어 놓인다 — 열 자리는 머리 글자로 찾는다
+  const price = findText(s, '단가')!.c;
+  const supply = findText(s, '공급가액')!.c;
+  assert.equal(s.styles[`${r}:${s.cols[price]}`]?.align, 'right', '금액 입력 칸');
+  assert.equal(s.styles[`${r}:${s.cols[supply]}`]?.align, 'right', '금액 수식 칸');
 });
 
 test('표 열 나누기 — 기존 양식의 열 너비 비율대로, 모든 열이 한 칸은 받고 합은 시트 열 수', () => {
