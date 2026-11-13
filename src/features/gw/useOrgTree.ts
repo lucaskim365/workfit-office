@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { pickDeptHeadId } from '@/domain/org/deptHead';
 import { useQuery } from '@tanstack/react-query';
 import { departmentRepo } from '@/data/department/department.repo';
 import { userRepo } from '@/data/user/user.repo';
@@ -114,19 +115,8 @@ export function useOrgTree() {
       }
     }
 
-    /** 부서의 부서장 — 1) 직책(팀장/본부장/소장) 2) 마스터 headUserId 3) 소속원 중 최상위 직급 */
-    const seniorHeadId = (members: User[]): string | null => {
-      if (members.length === 0) return null;
-      const leader = members.find(
-        (m) =>
-          m.jobTitle?.includes('팀장') ||
-          m.jobTitle?.includes('본부장') ||
-          m.jobTitle?.includes('소장') ||
-          m.jobTitle?.includes('대표'),
-      );
-      if (leader) return leader.id;
-      return members.slice().sort((a, b) => rankOf(a.position) - rankOf(b.position))[0].id;
-    };
+    /** 부서장 미지정 부서의 부서장 — 직책 우선, 없으면 본직 소속원 중 최상위 직급(겸직자 제외). */
+    const seniorHeadId = (members: OrgMemberUser[]): string | null => pickDeptHeadId(members, rankOf);
 
     const headIdOfDept = (name: string): string | null => {
       const m = masterByName.get(name);
