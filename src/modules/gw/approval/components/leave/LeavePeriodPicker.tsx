@@ -329,7 +329,7 @@ function TimeChart({ day, pick }: { day: WorkDay; pick: LeavePick | null }) {
   const ticks: number[] = [];
   for (let t = f.ws; t <= f.we; t += 60) ticks.push(t);
   // 오전반차는 근무 4시간 뒤(12:30~13:30)가 휴게, 오후반차는 휴게 없이 퇴근
-  const lunch: [number, number] | null = pick?.type === 'am-half' ? [f.le, f.we - 240] : pick?.type === 'pm-half' ? null : [f.ls, f.le];
+  const lunch: [number, number] | null = pick?.type === 'am-half' ? [f.ws + 240, f.we - 240] : pick?.type === 'pm-half' ? null : [f.ls, f.le];
   const blocks: Array<[number, number]> = [];
   if (pick) {
     const [a, b] = leaveRange(pick, day).map(toMin);

@@ -103,7 +103,8 @@ export function leaveRange(pick: LeavePick, day: WorkDay): [string, string] {
   const f = dayFrame(day);
   const s = toMin(pick.start);
   switch (pick.type) {
-    case 'am-half': return [toClock(f.ws), toClock(f.le)];
+    // 반차는 점심 위치와 상관없이 오전 근무 시작 4시간 / 오후 퇴근 전 4시간(사용자 확정)
+    case 'am-half': return [toClock(f.ws), toClock(f.ws + 240)];
     case 'pm-half': return [toClock(f.we - 240), toClock(f.we)];
     case 'am-quarter':
     case 'pm-quarter': return [pick.start, toClock(addWork(s, 120, f))];
@@ -117,7 +118,7 @@ export function timeNotice(pick: LeavePick, day: WorkDay): string {
   const f = dayFrame(day);
   const [a, b] = leaveRange(pick, day);
   switch (pick.type) {
-    case 'am-half': return `${toClock(f.we - 240)} 출근 · ${toClock(f.le)}~${toClock(f.we - 240)} 휴게`;
+    case 'am-half': return `${toClock(f.we - 240)} 출근 · ${toClock(f.ws + 240)}~${toClock(f.we - 240)} 휴게`;
     case 'pm-half': return `${toClock(f.ws + 240)} 퇴근 · 오전 4시간 근무`;
     case 'am-quarter': return toMin(b) >= f.ls ? `점심 후 ${toClock(f.le)} 업무 복귀` : `${b} 업무 복귀`;
     case 'pm-quarter': return toMin(b) >= f.we ? `${a} 퇴근` : `${b} 업무 복귀`;

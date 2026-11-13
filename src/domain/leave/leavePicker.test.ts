@@ -81,3 +81,14 @@ test('문서 값 — 휴가종류·기간·시각·대체휴무 단위·반반�
   assert.equal(v({ type: 'am-quarter', start: '09:00' }).leaveType, '반반차');
   assert.equal(v({ type: 'official', start: '08:30' }).leaveType, '공가');
 });
+
+test('운영 휴게 12:00~13:00 이어도 반차는 오전 08:30~12:30·오후 13:30~17:30 (사용자 확정)', () => {
+  const prod = { ...day, breakStartTime: '12:00', breakEndTime: '13:00' };
+  assert.deepEqual(leaveRange({ type: 'am-half', start: '08:30' }, prod), ['08:30', '12:30']);
+  assert.deepEqual(leaveRange({ type: 'pm-half', start: '13:30' }, prod), ['13:30', '17:30']);
+  assert.equal(timeNotice({ type: 'am-half', start: '08:30' }, prod), '13:30 출근 · 12:30~13:30 휴게');
+  assert.equal(timeNotice({ type: 'pm-half', start: '13:30' }, prod), '12:30 퇴근 · 오전 4시간 근무');
+  assert.deepEqual(leaveTimeOptions('am-quarter', prod), ['08:30', '09:00', '09:30', '10:00']);
+  assert.deepEqual(leaveTimeOptions('pm-quarter', prod), ['13:00', '13:30', '14:00', '14:30', '15:00', '15:30']);
+  assert.deepEqual(leaveRange({ type: 'comp-half', start: '08:30' }, prod), ['08:30', '13:30']);
+});
