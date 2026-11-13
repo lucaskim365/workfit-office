@@ -737,6 +737,41 @@ const COLLECTIONS: CollectionDef[] = [
     indexes: [IX('cbaCompany', ['companyId'])],
   },
   {
+    id: 'purchasePayments',
+    name: '매입 결제',
+    /*
+      사업관리 › 매입 결제 관리. 발주서 지급 조건의 한 번(선금·중도금·잔금)이 한 줄, $id = `${결재 문서 ID}__${줄 순번}`.
+      결재가 끝난 발주서(시트 서식·연동 기능 '발주')의 이름 붙은 칸 값을 한 번 복사해 만든다 — approvalDocs 는 읽기만 한다.
+      세금계산서 발행·결제·구축일·지출결의서 연결은 이 줄에만 적는다. 발주처 계좌는 기업 정보(companies)에서 이름으로 찾는다.
+    */
+    attributes: [
+      S('id', 128, true),
+      S('docId', 64, true),
+      S('docNo', 64),
+      INT('seq', true, undefined, 1, 1000),
+      S('bizType', 100),
+      S('client', 200),
+      S('vendor', 200),
+      SA('items', 200),
+      S('term', 50),
+      { kind: 'float', key: 'rate' },
+      INT('supply', false, 0),
+      S('planTaxDate', 10),
+      S('planPayDate', 10),
+      BOOL('salesVatCollected', false),
+      S('buildFrom', 10),
+      S('buildTo', 10),
+      S('expenseDocId', 64),
+      BOOL('taxRequested', false),
+      S('taxDate', 10),
+      S('payDate', 10),
+      S('createdAt', 40),
+      S('updatedAt', 40),
+      S('updatedBy', 64),
+    ],
+    indexes: [IX('ppDoc', ['docId']), IX('ppPlanPay', ['planPayDate'])],
+  },
+  {
     id: 'companyFiles',
     name: '기업 첨부파일',
     /* 사업자등록증·통장 사본 등. 이번엔 자리만(화면 없음). 파일은 파일서버 chat/company/{companyId}/ 아래, 업로드 URL 그대로 저장. */

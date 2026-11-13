@@ -1,18 +1,22 @@
 import type { ReactNode } from 'react';
+import { Button } from '@/shared/ui/Button';
 import { Modal } from '@/shared/ui/Modal';
 import { bizTd, bizTh } from '../_biz';
-import { vatOf, type PurchasePayment } from './purchaseMock';
+import { vatOf, type PurchasePayment } from '@/domain/purchasePayment/ledger';
 
 const won = (n: number) => n.toLocaleString('ko-KR');
 const num = `${bizTd} text-right tabular-nums`;
 
-/** 발주 내역을 누르면 뜨는 창 — 실제 화면에서는 발주서 문서를 읽기 전용으로 연다. siblings: 같은 발주의 지급 줄 모두 */
-export function PurchaseOrderPeek({ row, siblings, onClose }: { row: PurchasePayment; siblings: PurchasePayment[]; onClose: () => void }) {
+/**
+ * 발주 내역을 누르면 뜨는 창 — 발주 요약과 지급 조건. siblings: 같은 발주의 지급 줄 모두.
+ * onOpenDoc 이 있으면(실제 발주서) [발주서 열기]로 결재 문서를 연다. 없으면 예시 데이터다
+ */
+export function PurchaseOrderPeek({ row, siblings, onOpenDoc, onClose }: { row: PurchasePayment; siblings: PurchasePayment[]; onOpenDoc?: () => void; onClose: () => void }) {
   const supply = siblings.reduce((a, r) => a + r.supply, 0);
   return (
-    <Modal open onClose={onClose} title={`발주서 · ${row.poDocNo}`} width={640}>
+    <Modal open onClose={onClose} title={`발주서 · ${row.poDocNo}`} width={640} footer={onOpenDoc ? <Button onClick={onOpenDoc}>발주서 열기</Button> : undefined}>
       <div className="flex flex-col gap-4 text-[12px] text-ink2">
-        <p className="rounded-lg bg-panel-alt px-3 py-2 text-[11px] text-ink3">실제 화면에서는 이 자리에 결재가 끝난 발주서 문서가 읽기 전용으로 열립니다.</p>
+        {!onOpenDoc && <p className="rounded-lg bg-panel-alt px-3 py-2 text-[11px] text-ink3">예시 데이터라 발주서 문서는 없습니다. 실제 발주서는 [발주서 열기]로 결재 문서를 엽니다.</p>}
         <dl className="grid grid-cols-2 gap-x-6 gap-y-3">
           <Info label="사업구분">{row.bizType}</Info>
           <Info label="도입기업">{row.client}</Info>

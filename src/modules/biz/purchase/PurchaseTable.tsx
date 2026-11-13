@@ -17,18 +17,20 @@ import {
 } from './purchaseFilter';
 import {
   EXPENSE_LABEL,
-  MOCK_VENDOR_ACCOUNTS,
   groupPayments,
   isBuildDone,
   shortItems,
   summarize,
   totalOf,
   vatOf,
+  vendorKey,
   type ExpenseStatus,
   type GroupMode,
   type PaymentGroup,
+  type LedgerPatch,
   type PurchasePayment,
-} from './purchaseMock';
+  type VendorAccount,
+} from '@/domain/purchasePayment/ledger';
 
 const won = (n: number) => n.toLocaleString('ko-KR');
 
@@ -50,7 +52,13 @@ interface Props {
   onFilters: (next: ColumnFilters) => void;
   groupMode: GroupMode;
   showAccount: boolean;
-  onPatch: (id: string, change: Partial<PurchasePayment>) => void;
+  /** 발주처 이름(vendorKey) → 계좌·사업자 정보 */
+  accounts: Record<string, VendorAccount>;
+  /** 고칠 수 없음(보기 권한만) — 날짜·O/X 가 글자로만 보인다 */
+  readOnly?: boolean;
+  onPatch: (id: string, change: LedgerPatch) => void;
+  /** 지출결의서 기안 시작 — 없으면 [기안 작성] 단추 대신 '미작성'만 보인다 */
+  onDraftExpense?: (row: PurchasePayment) => void;
   onPeek: (row: PurchasePayment) => void;
 }
 
@@ -59,7 +67,7 @@ interface Props {
  * 짝이 되는 값은 한 칸에 두 줄로 묶어(도입기업·사업구분, 예정 발행일·결제일 등) 옆으로 밀지 않고 한 화면에 들어오게 한다.
  * 묶어 보기를 켜면 묶음 머리 줄에 도입기업·사업구분(·발주처)이 나오므로 그 칸은 표에서 뺀다.
  */
-export function PurchaseTable({ rows, optionRows, filters, onFilters, groupMode, showAccount, onPatch, onPeek }: Props) {
+export function PurchaseTable({ rows, optionRows, filters, onFilters, groupMode, showAccount, accounts, readOnly = false, onPatch, onDraftExpense, onPeek }: Props) {
   /** 값 필터 단추(열 제목 옆 깔때기) */
   const setFilter = (key: SetFilterKey) => (
     <ColumnFilterButton label={SET_FILTERS[key].label} active={isFilterOn(filters, key)}>
@@ -99,7 +107,7 @@ export function PurchaseTable({ rows, optionRows, filters, onFilters, groupMode,
   ];
 
   const renderRow = (r: PurchasePayment) => {
-    const account = MOCK_VENDOR_ACCOUNTS[r.vendor];
+    const account = accounts[vendorKey(r.vendor)];
     const items = (
       <button onClick={() => onPeek(r)} title={r.items.join(', ')} className="flex items-center gap-1 text-[11px] font-semibold text-ink2 hover:text-teal">
         <FileText size={11} className="shrink-0 text-ink3" />
@@ -129,8 +137,9 @@ export function PurchaseTable({ rows, optionRows, filters, onFilters, groupMode,
         </td>
         <td className={`${bizTd} text-center ${done(r.salesVatCollected)}`}>
           <button
+            disabled={readOnly}
             onClick={() => onPatch(r.id, { salesVatCollected: !r.salesVatCollected })}
-            title="누르면 바뀝니다"
+            title={readOnly ? undefined : '누르면 바뀝니다'}
             className={`h-6 w-8 rounded-md text-[11px] font-extrabold ${r.salesVatCollected ? 'text-ok' : 'bg-danger/10 text-danger'}`}
           >
             {r.salesVatCollected ? 'O' : 'X'}
@@ -138,24 +147,25 @@ export function PurchaseTable({ rows, optionRows, filters, onFilters, groupMode,
         </td>
         <td className={`${bizTd} ${done(isBuildDone(r))}`}>
           <Two
-            top={<DateEdit label="시작" value={r.buildFrom} onChange={(v) => onPatch(r.id, { buildFrom: v })} />}
-            bottom={<DateEdit label="종료" value={r.buildTo} min={r.buildFrom} onChange={(v) => onPatch(r.id, { buildTo: v })} />}
+            top={<DateEdit label="시작" value={r.buildFrom} readOnly={readOnly} onChange={(v) => onPatch(r.id, { buildFrom: v })} />}
+            bottom={<DateEdit label="종료" value={r.buildTo} min={r.buildFrom} readOnly={readOnly} onChange={(v) => onPatch(r.id, { buildTo: v })} />}
           />
         </td>
         <td className={`${bizTd} text-center ${done(r.expense === 'approved')}`}>
-          {r.expense === 'none' ? (
-            <Button size="sm" onClick={() => onPatch(r.id, { expense: 'drafting' })}><PenLine size={11} /> 기안 작성</Button>
+          {r.expense === 'none' && onDraftExpense && !readOnly ? (
+            <Button size="sm" onClick={() => onDraftExpense(r)}><PenLine size={11} /> 기안 작성</Button>
           ) : (
             <Pill tone={EXPENSE_TONE[r.expense]}>{EXPENSE_LABEL[r.expense]}</Pill>
           )}
         </td>
         <td className={`${bizTd} ${done(!!r.taxDate)}`}>
           <span className="flex items-center gap-1.5">
-            <DateEdit value={r.taxDate} onChange={(v) => onPatch(r.id, { taxDate: v })} />
-            {!r.taxDate && (
+            <DateEdit value={r.taxDate} readOnly={readOnly} onChange={(v) => onPatch(r.id, { taxDate: v })} />
+            {!r.taxDate && (!readOnly || r.taxRequested) && (
               <button
+                disabled={readOnly}
                 onClick={() => onPatch(r.id, { taxRequested: !r.taxRequested })}
-                title="누르면 바뀝니다"
+                title={readOnly ? undefined : '누르면 바뀝니다'}
                 className={`rounded-full px-2 py-0.5 text-[10px] font-bold whitespace-nowrap ${r.taxRequested ? 'bg-amber/10 text-amber' : 'bg-ink3/10 text-ink3'}`}
               >
                 {r.taxRequested ? '발행 요청함' : '발행 요청'}
@@ -164,7 +174,7 @@ export function PurchaseTable({ rows, optionRows, filters, onFilters, groupMode,
           </span>
         </td>
         <td className={`${bizTd} ${done(!!r.payDate)}`}>
-          <DateEdit value={r.payDate} onChange={(v) => onPatch(r.id, { payDate: v })} />
+          <DateEdit value={r.payDate} readOnly={readOnly} onChange={(v) => onPatch(r.id, { payDate: v })} />
         </td>
         {showAccount && (
           <>
@@ -301,8 +311,16 @@ function DateLine({ label, value }: { label: string; value: string }) {
  * 고칠 수 있는 날짜 — 날짜 글자와 달력 아이콘이 늘 보이고, 누르면 바로 달력이 뜬다.
  * 날짜 입력 상자를 칸마다 띄워 두면 표가 넓어져서, 보이지 않는 입력 상자를 두고 달력만 불러낸다.
  */
-function DateEdit({ label, value, min, onChange }: { label?: string; value: string; min?: string; onChange: (v: string) => void }) {
+function DateEdit({ label, value, min, readOnly = false, onChange }: { label?: string; value: string; min?: string; readOnly?: boolean; onChange: (v: string) => void }) {
   const input = useRef<HTMLInputElement>(null);
+  if (readOnly) {
+    return (
+      <span className="flex items-center gap-1.5">
+        {label && <span className={dateLabel}>{label}</span>}
+        <span className={`tabular-nums ${value ? 'text-ink' : 'text-ink3'}`}>{value || '-'}</span>
+      </span>
+    );
+  }
   const open = () => {
     const el = input.current;
     if (!el) return;

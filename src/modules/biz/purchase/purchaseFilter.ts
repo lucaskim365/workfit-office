@@ -2,7 +2,7 @@
  * 매입 결제 목록의 열 필터 — 엑셀 열 필터처럼 열마다 건다.
  * 값 필터(고른 값 중 하나와 같은 줄만)와 날짜 필터(기간, 또는 비어 있음·입력됨) 두 가지.
  */
-import { EXPENSE_LABEL, EXPENSE_STATUSES, PAY_TERMS, type ExpenseStatus, type PurchasePayment } from './purchaseMock';
+import { EXPENSE_LABEL, EXPENSE_STATUSES, PAY_TERMS, type ExpenseStatus, type PurchasePayment } from '@/domain/purchasePayment/ledger';
 
 export type SetFilterKey = 'client' | 'bizType' | 'vendor' | 'term' | 'salesVat' | 'expense';
 export type DateFilterKey = 'planTax' | 'planPay' | 'build' | 'tax' | 'pay';
