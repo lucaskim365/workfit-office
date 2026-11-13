@@ -17,12 +17,12 @@ export const MENU_TREE: MenuNode[] = [
   },
 
 
-  /* ── 사업관리 — 도입기업과 도입기업별 사업(프로젝트)을 관리 ── */
+  /* ── 사업관리 — 기업 정보(도입·매입)와 사업(프로젝트)을 관리 ── */
   {
     id: 'M_BIZ', name: '사업관리', icon: '▣', order: 25, use: true, children: [
       {
-        id: 'G_BIZ_PARTNER', name: '도입기업', icon: '▤', order: 10, use: true, children: [
-          { id: 'S_BIZ_VENDOR', name: '도입기업 정보', url: '/biz/vendor', icon: '▤', order: 10, use: true },
+        id: 'G_BIZ_PARTNER', name: '기업', icon: '▤', order: 10, use: true, children: [
+          { id: 'S_BIZ_VENDOR', name: '기업 정보', url: '/biz/vendor', icon: '▤', order: 10, use: true },
         ]
       },
       {

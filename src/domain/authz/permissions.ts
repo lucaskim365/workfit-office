@@ -80,7 +80,7 @@ export const PERMISSIONS: PermissionDef[] = [
   P({ key: 'seat.manage', name: '좌석 배치 편집', desc: '사무실 좌석 배치도를 고친다', area: 'org', implies: ['org.view'] }),
 
   // 사업관리
-  ...pair('biz.vendor', '도입기업', 'biz', '도입기업 정보를 본다', '도입기업을 등록·수정·삭제한다'),
+  ...pair('biz.vendor', '기업 정보', 'biz', '기업 정보를 본다', '기업을 등록·수정한다'),
   ...pair('biz.project', '사업 현황', 'biz', '사업 목록과 진행 상황을 본다', '사업 정보를 고친다'),
   ...pair('biz.po', '발주 현황', 'biz', '결재 끝난 발주서를 본다', '발주 회신 문서를 관리한다'),
 

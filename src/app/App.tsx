@@ -103,7 +103,7 @@ const SCREEN_COMPONENTS: Record<string, ComponentType> = {
   '/base/approval-form': lazy(() => import('@/modules/base/approvalForm/ApprovalFormScreen')),
   '/base/approval-monitor': lazy(() => import('@/modules/base/approvalMonitor/ApprovalMonitorScreen')),
   // 사업관리
-  '/biz/vendor': lazy(() => import('@/modules/biz/vendor/BizVendorScreen')),
+  '/biz/vendor': lazy(() => import('@/modules/biz/company/CompanyScreen')),
   '/biz/project': lazy(() => import('@/modules/biz/project/BizProjectScreen')),
   '/biz/po': lazy(() => import('@/modules/biz/po/BizPoScreen')),
   '/base/code': lazy(() => import('@/modules/base/code/CodeScreen')),
