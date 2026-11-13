@@ -139,3 +139,37 @@ export function summarize(rows: PurchasePayment[]): PurchaseSummary {
     progress: total ? issuedTotal / total : 0,
   };
 }
+
+/** 구축일을 다 넣었는가(시작·종료 모두) */
+export const isBuildDone = (r: Pick<PurchasePayment, 'buildFrom' | 'buildTo'>) => !!(r.buildFrom && r.buildTo);
+
+/** 묶어 보기 — none: 묶지 않음, client: 도입기업·사업구분이 같은 줄끼리, clientVendor: 발주처까지 같은 줄끼리 */
+export const GROUP_MODES = ['none', 'client', 'clientVendor'] as const;
+export type GroupMode = (typeof GROUP_MODES)[number];
+export const GROUP_MODE_LABEL: Record<GroupMode, string> = {
+  none: '묶지 않음',
+  client: '도입기업·사업구분',
+  clientVendor: '도입기업·사업구분·발주처',
+};
+
+export interface PaymentGroup {
+  key: string;
+  client: string;
+  bizType: string;
+  /** 발주처까지 묶었을 때만 */
+  vendor?: string;
+  rows: PurchasePayment[];
+}
+
+/** 줄을 묶음으로 — 묶음 순서는 처음 나온 순서, 묶음 안 줄 순서는 그대로 */
+export function groupPayments(rows: PurchasePayment[], mode: Exclude<GroupMode, 'none'>): PaymentGroup[] {
+  const map = new Map<string, PaymentGroup>();
+  for (const r of rows) {
+    const vendor = mode === 'clientVendor' ? r.vendor : undefined;
+    const key = [r.client, r.bizType, vendor ?? ''].join('\u0000');
+    const g = map.get(key);
+    if (g) g.rows.push(r);
+    else map.set(key, { key, client: r.client, bizType: r.bizType, vendor, rows: [r] });
+  }
+  return [...map.values()];
+}
