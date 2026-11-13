@@ -4,7 +4,7 @@ import type { Sheet } from '@/lib/sheet';
 import { approvalFormSchema, formFieldSchema, type ApprovalForm } from '@/domain/approvalForm/schema';
 import { APPROVAL_NS, approvalCellProps, clearStaleDependent, conditionHiddenRows, draftOptions, requiredMissing, rowConditionOf, sheetDocFields, type CellInput } from '@/domain/approvalForm/sheet/approvalSheet';
 import { colLetter, setCellValue } from '@/lib/sheet';
-import { legacyFormToSheet, legacyRepeatRows, spreadColumns, translateLegacyFormula } from './fromLegacyForm';
+import { legacyFormToSheet, legacyRepeatRows, legacyTablePairs, spreadColumns, translateLegacyFormula } from './fromLegacyForm';
 import { repeatSections } from '@/domain/approvalForm/sheet/repeatRows';
 import { isFullHeaderSheet } from '@/domain/approvalForm/sheet/sheetHeader';
 
@@ -412,4 +412,43 @@ test('열이 적은 표는 시트 폭에 고르게 놓인다 — 마지막 열�
   assert.equal(mergeAt(head.r + 1, 2)?.colSpan, 4);
   // 수식의 열 이름은 그 열이 놓인 시트 열로
   assert.equal(s.formulas[`${head.r + 1}:${s.cols[6]}`], `=E${head.r + 2}`);
+});
+
+test('반쪽 너비 표 둘은 좌우로 나란히 — 같은 행에서 시작, 왼쪽·오른쪽 절반(계약보고서 매출구분 | 매입구분)', () => {
+  const tbl = (cols: string[], rows: Record<string, string>[], cellFormulas: Record<string, unknown> = {}) =>
+    JSON.stringify({ version: 2, cols, rows, legacyHeaderRow: true, colWidths: {}, tableWidth: '100%', merges: [], cellFormulas, cellStyles: {}, secretCols: [], secretCells: [], secretRows: [] });
+  const cols = ['구분', '비중', '금액'];
+  const head = { 구분: '구분', 비중: '비중', 금액: '금액' };
+  const form = legacyForm('계약', [
+    { key: 'a', label: '매출구분', type: '표', width: 'half', placeholder: tbl(cols, [head, { 구분: 'SW', 비중: '', 금액: '' }, { 구분: '소계', 비중: '', 금액: '' }], { '2:금액': { expression: '=SUM(ABOVE)', format: 'currency' } }) },
+    { key: 'b', label: '매입구분', type: '표', width: 'half', placeholder: tbl(cols, [head, { 구분: '매입SW', 비중: '', 금액: '' }], { '1:비중': { expression: '=[금액] / [매출구분]![소계:금액]' } }) },
+    { key: 'c', label: '매입처', type: '표', placeholder: tbl(['x', 'y', 'z', 'w', 'v'], [{ x: '가', y: '나', z: '다', w: '라', v: '마' }]) },
+  ]);
+  const { sheet: s, warnings } = legacyFormToSheet(form);
+  assert.equal(s.cols.length, 6, '절반에 3열 표가 들어가게 6열');
+  const left = findText(s, '매출구분')!;
+  const right = findText(s, '매입구분')!;
+  assert.equal(left.r, right.r, '제목이 같은 행');
+  assert.deepEqual([left.c, right.c], [0, 3]);
+  // 표 칸도 같은 행에서 — 왼쪽 0~2열, 오른쪽 3~5열
+  const sw = findText(s, 'SW')!;
+  const buy = findText(s, '매입SW')!;
+  assert.deepEqual([sw.r, sw.c, buy.r, buy.c], [left.r + 2, 0, left.r + 2, 3]);
+  // 수식은 각자 절반의 열로 — 왼쪽 소계는 C열 합, 오른쪽 비중은 F열 ÷ 왼쪽 표 소계(C)
+  const total = findText(s, '소계')!;
+  assert.equal(s.formulas[`${total.r}:${s.cols[2]}`], `=SUM(C${left.r + 2}:C${total.r})`);
+  assert.equal(s.formulas[`${buy.r}:${s.cols[4]}`], `=IFERROR(F${buy.r + 1} / C${total.r + 1},0)`);
+  // 그 아래 표는 두 표 가운데 긴 쪽 다음 줄부터, 전체 폭
+  assert.equal(findText(s, '매입처')!.r, total.r + 1);
+  assert.ok(!warnings.some((w) => w.includes('수식')));
+});
+
+test('나란히 놓을 표 짝 — 같은 구역에서 잇단 반쪽 표 둘, 행 단위 설정이 같을 때만', () => {
+  const t = (key: string, extra: Record<string, unknown> = {}) => field({ key, label: key, type: '표', width: 'half', ...extra });
+  const [a, b, c, d] = [t('a'), t('b'), t('c'), t('d', { section: '다른 구역' })];
+  const pairs = legacyTablePairs([a, b, c, d]);
+  assert.equal(pairs.get(a), b);
+  assert.equal(pairs.size, 1, '셋째는 짝이 없고, 다른 구역 표와는 짝짓지 않음');
+  assert.equal(legacyTablePairs([t('a'), t('b', { hideOnExternal: true })]).size, 0, '대외 숨김이 다르면 따로');
+  assert.equal(legacyTablePairs([t('a'), field({ key: 'x', label: 'x', type: '표', width: 'full' })]).size, 0, '전체 폭 표는 그대로');
 });

@@ -241,6 +241,27 @@ export function legacyRepeatRows(
   return null;
 }
 
+/**
+ * 좌우로 나란히 놓을 표 짝 — 같은 구역에서 잇달아 나오는 반쪽 너비(half) 표 둘. 기존 양식이 한 줄에 둘씩 보이던 표다.
+ * 행을 함께 쓰므로 행 단위 설정(보이기 조건·대외 숨김)이 같은 표끼리만 짝짓는다. 짝 없는 반쪽 표는 전체 폭으로 놓인다
+ */
+export function legacyTablePairs(fields: FormField[]): Map<FormField, FormField> {
+  const halfTable = (f: FormField) => f.type === '표' && f.width === 'half';
+  const sameRowRules = (a: FormField, b: FormField) => (a.visibleIf ?? '') === (b.visibleIf ?? '') && !!a.hideOnExternal === !!b.hideOnExternal;
+  const bySection = new Map<string, FormField[]>();
+  fields.forEach((f) => bySection.set(f.section ?? '', [...(bySection.get(f.section ?? '') ?? []), f]));
+  const pairs = new Map<FormField, FormField>();
+  for (const list of bySection.values()) {
+    for (let i = 0; i + 1 < list.length; i++) {
+      if (halfTable(list[i]) && halfTable(list[i + 1]) && sameRowRules(list[i], list[i + 1])) {
+        pairs.set(list[i], list[i + 1]);
+        i++;
+      }
+    }
+  }
+  return pairs;
+}
+
 export function legacyFormToSheet(form: ApprovalForm): LegacyConversion {
   const warnings: string[] = [];
   const fields = form.fields ?? [];
@@ -254,9 +275,14 @@ export function legacyFormToSheet(form: ApprovalForm): LegacyConversion {
   const INFO_ITEMS = ['docNo', 'drafterDept', 'drafter', 'draftDate', 'preservation', 'visibility'];
   const withInfo = !INFO_ITEMS.every((i) => hiddenHead.has(i));
 
-  // 열 수 — 표가 넓으면 표에 맞춘다(최소 4: 라벨·값·라벨·값)
-  const tableCols = fields.filter((f) => f.type === '표').map((f) => normalizeTablePayload(f.placeholder).cols.length);
-  const n = Math.max(4, ...tableCols);
+  // 열 수 — 표가 넓으면 표에 맞춘다(최소 4: 라벨·값·라벨·값). 나란히 놓는 표는 절반 폭에 들어가야 하므로 그 열 수의 두 배
+  const colsOf = (f: FormField) => normalizeTablePayload(f.placeholder).cols.length;
+  const tableCols = fields.filter((f) => f.type === '표').map(colsOf);
+  const pairs = legacyTablePairs(fields);
+  const pairCols = [...pairs].map(([a, b]) => 2 * Math.max(colsOf(a), colsOf(b)));
+  const widest = Math.max(4, ...tableCols, ...pairCols);
+  // 나란히 놓는 표가 있으면 짝수 열로(좌우 절반이 같은 칸 수)
+  const n = pairs.size && widest % 2 ? widest + 1 : widest;
   const mid = Math.floor(n / 2);
   let s = createSheet(1, n);
   s = { ...s, colWidths: Object.fromEntries(s.cols.map((c) => [c, Math.floor(PAGE / n)])) };
@@ -437,7 +463,7 @@ export function legacyFormToSheet(form: ApprovalForm): LegacyConversion {
     }
     if (f.type === '표') {
       flushHalf();
-      s = placeTable(f);
+      placeTable(f);
       return;
     }
     // 라벨·값 항목 — 반쪽은 한 줄에 둘
@@ -480,9 +506,17 @@ export function legacyFormToSheet(form: ApprovalForm): LegacyConversion {
       const only = conds.size === 1 ? [...conds][0] : '';
       if (only) condRows.push({ r, visibleIf: only });
     }
+    const placedAsPartner = new Set<FormField>();
     for (const f of fields.filter((x) => (x.section ?? '') === section)) {
+      if (placedAsPartner.has(f)) continue;
       const before = row;
-      placeField(f);
+      const partner = pairs.get(f);
+      if (partner) {
+        // 반쪽 너비 표 둘 — 기존 양식처럼 좌우로 나란히
+        flushHalf();
+        placeTablePair(f, partner);
+        placedAsPartner.add(partner);
+      } else placeField(f);
       // 조건부 항목(visibleIf '키:값') — 이 항목이 만든 행에 행 보이기 조건
       // 종속 선택으로 합친 항목은 조건 대신 갈래로(그 칸은 늘 보이고 항목만 바뀜)
       if (f.visibleIf && !groupOf.has(f.key)) for (let r = before; r < row; r++) condRows.push({ r, visibleIf: f.visibleIf });
@@ -490,21 +524,50 @@ export function legacyFormToSheet(form: ApprovalForm): LegacyConversion {
   }
   flushHalf();
 
-  /** '표' — 제목 줄 + 표 칸(병합·굵게·정렬·회색 바탕), 빈 칸은 입력 칸, 마지막 줄은 반복 구간 */
-  function placeTable(f: FormField): Sheet {
+  /**
+   * 반쪽 너비 표 둘을 좌우로 나란히 — 같은 행에서 시작해 왼쪽 절반·오른쪽 절반에 놓는다(계약보고서 매출구분 | 매입구분).
+   * 시트는 행을 함께 쓰므로 줄 추가(반복 구간)는 두 표의 품목 줄 범위가 같을 때만 둔다 — 한쪽만 늘릴 수는 없다
+   */
+  function placeTablePair(a: FormField, b: FormField): void {
+    const start = row;
+    const titleRow = !!(a.label || b.label);
+    const left = placeTable(a, { c1: 0, w: mid, paired: true, titleRow });
+    const leftEnd = row;
+    row = start;
+    const right = placeTable(b, { c1: mid, w: n - mid, paired: true, titleRow });
+    row = Math.max(leftEnd, row);
+    const names = [a.label, b.label].filter(Boolean).join('·') || '반복 구간';
+    if (left.repeat && right.repeat && left.repeat.first === right.repeat.first && left.repeat.last === right.repeat.last) {
+      s = setRepeatSection(s, left.repeat.first, left.repeat.last, names);
+    } else if (left.repeat || right.repeat) {
+      warnings.push(`나란히 놓은 표 '${names}'는 줄을 더하던 곳이 서로 달라 [행 추가] 구간을 두지 않았습니다(행을 함께 쓰므로 한쪽만 늘릴 수 없음) — 필요하면 두 표를 위아래로 옮긴 뒤 반복 구간으로 지정하세요.`);
+    }
+  }
+
+  /**
+   * '표' — 제목 줄 + 표 칸(병합·굵게·정렬·회색 바탕), 빈 칸은 입력 칸, 마지막 줄은 반복 구간.
+   * at: 놓을 시트 열 범위(c1 부터 w 칸 — 기본은 시트 전체 폭). paired 면 반복 구간은 두지 않고 찾은 줄 범위(시트 행)만 돌려준다.
+   * titleRow: 제목이 없어도 제목 줄 자리를 비운다(나란한 표와 첫 줄을 맞추려고)
+   */
+  function placeTable(
+    f: FormField,
+    at: { c1: number; w: number; paired?: boolean; titleRow?: boolean } = { c1: 0, w: n }
+  ): { repeat: { first: number; last: number } | null } {
     const t = normalizeTablePayload(f.placeholder);
+    const c1 = at.c1;
+    const c2 = at.c1 + at.w - 1;
     if (f.label) {
       const r = nextRow();
-      merge(r, 0, n - 1);
-      s = setCellValue(s, r, 0, f.label, { allowFormula: false });
-      s = applyStyle(s, span(r, 0, 0), { bold: true });
+      merge(r, c1, c2);
+      s = setCellValue(s, r, c1, f.label, { allowFormula: false });
+      s = applyStyle(s, span(r, c1, c1), { bold: true });
       // 표째 대외 숨김이면 제목 줄도(제목만 덩그러니 남지 않게)
       extHide(r, f);
-    }
+    } else if (at.titleRow) nextRow();
     const top = row;
-    // 표 열이 시트보다 적으면 기존 양식의 열 너비 비율대로 시트 열에 나눠 놓는다(spreadColumns)
-    const spans = spreadColumns(t.cols.map((c) => legacyColWeight(t, c)), n);
-    const colAt = spans.map((_, j) => spans.slice(0, j).reduce((a, x) => a + x, 0));
+    // 표 열이 놓을 폭보다 적으면 기존 양식의 열 너비 비율대로 시트 열에 나눠 놓는다(spreadColumns)
+    const spans = spreadColumns(t.cols.map((c) => legacyColWeight(t, c)), at.w);
+    const colAt = spans.map((_, j) => c1 + spans.slice(0, j).reduce((a, x) => a + x, 0));
     const colEnd = (j: number) => colAt[j] + spans[j] - 1;
     if (f.label) tables.set(f.label.trim(), { top, cols: t.cols, rows: t.rows, colAt });
     const headerRows = t.legacyHeaderRow || t.cols.some((c) => t.cellStyles[`0:${c}`]?.bold) ? 1 : 0;
@@ -566,14 +629,16 @@ export function legacyFormToSheet(form: ApprovalForm): LegacyConversion {
       s = mergeRange(s, { r1: top + m.startRow, r2: top + m.startRow + m.rowSpan - 1, c1: colAt[m.startCol], c2: colEnd(m.startCol + m.colSpan - 1) });
     });
     const bottom = row - 1;
+    const repeatAt = repeat && bottom >= top ? { first: top + repeat.first, last: top + repeat.last } : null;
     if (bottom >= top) {
-      s = applyBorder(s, { r1: top, r2: bottom, c1: 0, c2: n - 1 }, 'all');
-      // 기안자가 줄을 더하던 곳 — 품목처럼 같은 모양 줄이 이어지는 마지막 줄(legacyRepeatRow). 없으면 두지 않음
-      if (repeat) s = setRepeatSection(s, top + repeat.first, top + repeat.last, f.label || '반복 구간');
-      else if (t.rows.length > headerRows) noRepeat.push(`'${f.label || '표'}'`);
+      s = applyBorder(s, { r1: top, r2: bottom, c1, c2 }, 'all');
+      // 기안자가 줄을 더하던 곳 — 품목처럼 같은 모양 줄이 이어지는 마지막 줄(legacyRepeatRow). 없으면 두지 않음.
+      // 나란히 놓은 표는 두 표를 다 놓은 뒤 정한다(placeTablePair)
+      if (repeatAt && !at.paired) s = setRepeatSection(s, repeatAt.first, repeatAt.last, f.label || '반복 구간');
+      else if (!repeatAt && t.rows.length > headerRows) noRepeat.push(`'${f.label || '표'}'`);
     }
     if (untranslated.length) warnings.push(`'${f.label || '표'}'의 수식 중 ${untranslated.join(', ')}은(는) 옮기지 못해 값만 넣었습니다(다른 표를 가리키는 식 등) — 시트 수식으로 다시 넣어 주세요.`);
-    return s;
+    return { repeat: repeatAt };
   }
 
   // 다른 표를 가리키던 수식 — 이제 모든 표 자리를 안다
