@@ -31,7 +31,7 @@ const URL_OF: Record<string, string> = {
   S_GW_ORGCHART: '/gw/orgchart', S_GW_GALLERY: '/gw/gallery', S_EXEC_DASH: '/exec', S_BASE_USER: '/base/user', S_BASE_DEPT: '/base/department',
   S_BASE_POSITION: '/base/position', S_BASE_HOLIDAY: '/base/holiday', S_BASE_CODE: '/base/code', S_BASE_APFORM: '/base/approval-form',
   S_BASE_APPROC: '/base/approval-process', S_BASE_APMON: '/base/approval-monitor', S_SYS_LOG: '/sys/log', S_SYS_COMPANY: '/sys/company',
-  S_SYS_IF: '/sys/interface', S_BIZ_VENDOR: '/biz/vendor', S_BIZ_PROJECT: '/biz/project', S_BIZ_PO: '/biz/po',
+  S_SYS_IF: '/sys/interface', S_BIZ_VENDOR: '/biz/vendor', S_BIZ_PROJECT: '/biz/project', S_BIZ_PO: '/biz/po', S_BIZ_PURCHASE: '/biz/purchase',
 };
 
 const ROWS = new Map<string, Row>();

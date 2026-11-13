@@ -83,6 +83,7 @@ export const PERMISSIONS: PermissionDef[] = [
   ...pair('biz.vendor', '기업 정보', 'biz', '기업 정보를 본다', '기업을 등록·수정한다'),
   ...pair('biz.project', '사업 현황', 'biz', '사업 목록과 진행 상황을 본다', '사업 정보를 고친다'),
   ...pair('biz.po', '발주 현황', 'biz', '결재 끝난 발주서를 본다', '발주 회신 문서를 관리한다'),
+  ...pair('biz.purchase', '매입 결제 관리', 'biz', '매입 결제 목록을 본다', '구축일·확정일 등 매입 결제 정보를 고친다'),
 
   // 관리자 콘솔 — 들어가기. 콘솔 안에서 보이는 메뉴는 아래 관리자 권한마다 따로 준다
   P({ key: 'admin.console', name: '관리자 콘솔 접속', desc: '관리자 콘솔에 들어간다(안에서는 받은 관리자 권한의 메뉴만 보인다)', area: 'adminConsole', adminConsole: true }),
