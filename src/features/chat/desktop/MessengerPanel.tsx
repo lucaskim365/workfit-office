@@ -32,7 +32,7 @@ import { AutoLinkText } from '@/shared/ui/AutoLinkText';
 import { registerViewedChatRoom } from '@/shared/lib/viewedChatRoom';
 import { useWindowActive } from '@/shared/lib/useWindowActive';
 import { ProfileCardHost, useOpenProfileCard } from './ProfileCard';
-import { roomFilesOf, type RoomFile } from '@/domain/chatMessage/roomFiles';
+import { groupRoomFilesByDay, roomFilesOf, type RoomFile } from '@/domain/chatMessage/roomFiles';
 import { RoomPhotoGrid } from '@/features/chat/RoomPhotoGrid';
 import { FileKindIcon } from '@/features/chat/FileKindIcon';
 
@@ -2453,7 +2453,7 @@ function renderHighlightedText(text: string, query: string, isActive: boolean) {
   );
 }
 
-/** 파일함 모아보기(PC) — [사진]은 날짜별 바둑판(누르면 크게 보기), [파일]은 목록(이름을 누르면 내려받기) */
+/** 파일함 모아보기(PC) — [사진]은 날짜별 바둑판(누르면 크게 보기), [파일]은 날짜별 목록(이름을 누르면 내려받기) */
 function DesktopFileBoxPanel({
   files,
   onClose,
@@ -2465,6 +2465,7 @@ function DesktopFileBoxPanel({
 }) {
   const photos = useMemo(() => files.filter((f) => f.type === 'image'), [files]);
   const docs = useMemo(() => files.filter((f) => f.type !== 'image'), [files]);
+  const docDays = useMemo(() => groupRoomFilesByDay(docs), [docs]);
   const [tab, setTab] = useState<'photo' | 'file'>(() => (photos.length === 0 && docs.length > 0 ? 'file' : 'photo'));
 
   const handleGoToMessage = (messageId: string) => {
@@ -2514,43 +2515,50 @@ function DesktopFileBoxPanel({
         ) : docs.length === 0 ? (
           <div className="py-24 text-center text-[11px] text-ink3">공유된 파일이 없습니다.</div>
         ) : (
-          <div className="p-3.5 space-y-2">
-            {docs.map((f) => (
-              <div key={f.key} className="flex items-center gap-3 rounded-lg border border-border bg-panel p-2.5 shadow-3xs hover:border-amber/40 transition-colors">
-                <FileKindIcon name={f.attachment.name} size={40} />
-                <div className="min-w-0 flex-1">
-                  <button
-                    onClick={() => downloadAttachment(f.attachment)}
-                    className="block text-left text-[11.5px] font-bold text-ink hover:underline truncate w-full cursor-pointer"
-                    title={`${f.attachment.name} 내려받기`}
-                  >
-                    {f.attachment.name}
-                  </button>
-                  <div className="flex items-center gap-1 text-[9.5px] text-ink3 mt-0.5">
-                    <span className="truncate max-w-[60px]">{f.senderName}</span>
-                    <span>·</span>
-                    <span>{fmtSize(f.attachment.size)}</span>
-                    <span>·</span>
-                    <span className="tabular-nums">{new Date(f.at).toLocaleDateString()}</span>
+          <div className="pb-3">
+            {docDays.map((d) => (
+              <section key={d.day}>
+                <h3 className="sticky top-0 z-[1] bg-white/95 px-3.5 pb-1.5 pt-3 text-[11px] font-bold text-ink2">{d.label}</h3>
+                <div className="space-y-2 px-3.5">
+                {d.files.map((f) => (
+                  <div key={f.key} className="flex items-center gap-3 rounded-lg border border-border bg-panel p-2.5 shadow-3xs hover:border-amber/40 transition-colors">
+                    <FileKindIcon name={f.attachment.name} size={40} />
+                    <div className="min-w-0 flex-1">
+                      <button
+                        onClick={() => downloadAttachment(f.attachment)}
+                        className="block text-left text-[11.5px] font-bold text-ink hover:underline truncate w-full cursor-pointer"
+                        title={`${f.attachment.name} 내려받기`}
+                      >
+                        {f.attachment.name}
+                      </button>
+                      <div className="flex items-center gap-1 text-[9.5px] text-ink3 mt-0.5">
+                        <span className="truncate max-w-[60px]">{f.senderName}</span>
+                        <span>·</span>
+                        <span>{fmtSize(f.attachment.size)}</span>
+                        <span>·</span>
+                        <span className="tabular-nums">{f.at.slice(11, 16)}</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        onClick={() => handleGoToMessage(f.messageId)}
+                        className="shrink-0 text-[13px] p-1.5 hover:bg-panel-alt rounded-md active:scale-95 transition-all cursor-pointer text-ink3 hover:text-ink"
+                        title="대화 위치로 이동"
+                      >
+                        💬
+                      </button>
+                      <button
+                        onClick={() => downloadAttachment(f.attachment)}
+                        className="shrink-0 p-1.5 hover:bg-panel-alt rounded-md active:scale-95 transition-all cursor-pointer text-ink3 hover:text-ink"
+                        title="다운로드"
+                      >
+                        <Download size={14} />
+                      </button>
+                    </div>
                   </div>
+                ))}
                 </div>
-                <div className="flex items-center gap-1 shrink-0">
-                  <button
-                    onClick={() => handleGoToMessage(f.messageId)}
-                    className="shrink-0 text-[13px] p-1.5 hover:bg-panel-alt rounded-md active:scale-95 transition-all cursor-pointer text-ink3 hover:text-ink"
-                    title="대화 위치로 이동"
-                  >
-                    💬
-                  </button>
-                  <button
-                    onClick={() => downloadAttachment(f.attachment)}
-                    className="shrink-0 p-1.5 hover:bg-panel-alt rounded-md active:scale-95 transition-all cursor-pointer text-ink3 hover:text-ink"
-                    title="다운로드"
-                  >
-                    <Download size={14} />
-                  </button>
-                </div>
-              </div>
+              </section>
             ))}
           </div>
         )}
