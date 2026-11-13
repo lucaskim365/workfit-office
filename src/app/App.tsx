@@ -106,6 +106,7 @@ const SCREEN_COMPONENTS: Record<string, ComponentType> = {
   '/biz/vendor': lazy(() => import('@/modules/biz/company/CompanyScreen')),
   '/biz/project': lazy(() => import('@/modules/biz/project/BizProjectScreen')),
   '/biz/po': lazy(() => import('@/modules/biz/po/BizPoScreen')),
+  '/biz/purchase': lazy(() => import('@/modules/biz/purchase/BizPurchaseScreen')),
   '/base/code': lazy(() => import('@/modules/base/code/CodeScreen')),
   '/base/company-class': lazy(() => import('@/modules/base/companyClass/CompanyClassScreen')),
   '/biz/category': lazy(() => import('@/modules/biz/company/BizCategoryScreen')),
