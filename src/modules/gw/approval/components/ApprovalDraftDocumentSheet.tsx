@@ -1,5 +1,7 @@
-import { formatMinutes } from '@/domain/leave/substituteLedger';
-import React, { useEffect, useMemo, useRef, useState, Fragment } from 'react';
+import React, { createContext, useContext, useEffect, useMemo, useRef, useState, Fragment } from 'react';
+import { useCommutePolicy } from '@/features/commute/useCommutePolicy';
+import { pickOfDocValues, type WorkDay } from '@/domain/leave/leavePicker';
+import { LeavePeriodPicker, rangeLabel } from './leave/LeavePeriodPicker';
 import { stepTitleOf } from '@/domain/approvalDoc/stampTitle';
 import type { User } from '@/domain/user/schema';
 import type { ApprovalStep, ApprovalRecipient, RelatedDoc } from '@/domain/approvalDoc/schema';
@@ -13,9 +15,7 @@ import { cascadeRecalculateAllTables, normalizeTablePayload } from '../formField
 import { SelectorDialog } from './DraftRecipientSection';
 import {
   calculateLeaveDays,
-  isAnnualLeaveDeduction,
   isPartDayLeave,
-  getExcludedHolidaysInRange,
 } from '@/domain/leave/policy';
 import { useOrgTree } from '@/features/gw/useOrgTree';
 import { useUsers } from '@/features/user/useUsers';
@@ -30,7 +30,7 @@ import {
   X,
   AlertTriangle,
   Building2,
-  Calendar,
+  CalendarDays,
 } from 'lucide-react';
 import { won } from '../utils/approvalUtils';
 import { DateInput } from '@/shared/ui/form/DateInput';
@@ -42,6 +42,16 @@ import { headerShown, titleFieldOf } from '@/domain/approvalForm/headerItems';
 import { CompanyLetterhead } from './CompanyLetterhead';
 import { splitUserIds } from '@/domain/approvalDoc/scheduleEngine';
 import { pickedUserIds } from '../formFields';
+
+/** 휴가원 사용기간 선택 창 — 휴가원일 때만 시트가 넣어 준다(사용기간·휴가종류 칸이 읽음) */
+interface LeavePickerCtx {
+  open: () => void;
+  /** 사용기간 칸 표시(고르기 전엔 빈 값) */
+  label: string;
+  /** 휴가종류 칸 표시(고르기 전엔 빈 값) */
+  kind: string;
+}
+const LeavePickerContext = createContext<LeavePickerCtx | null>(null);
 
 let cachedLogoDataUrl: string | null = null;
 
@@ -371,18 +381,24 @@ export function ApprovalDraftDocumentSheet({
   // 사용자 선택 모달 상태 (인라인 사용자 필드용)
   const [activeUserField, setActiveUserField] = useState<FormField | null>(null);
 
-  // 휴가 구분 관련
-  const selectedLeaveType = String(values['leaveType'] || '연차');
-  const periodStart = String(values['period'] || '');
-  const periodEnd = String(values['period__end'] || periodStart);
-
-  // 선택된 기간 내 평일 공휴일 자동 제외 목록 (UI 안내용)
-  const excludedHolidays = useMemo(() => {
-    if (docCode !== '휴가' || !periodStart || !holidays) return [];
-    const isPart = isPartDayLeave(selectedLeaveType);
-    const end = isPart ? periodStart : periodEnd;
-    return getExcludedHolidaysInRange(periodStart, end, holidays);
-  }, [docCode, periodStart, periodEnd, holidays, selectedLeaveType]);
+  // 휴가원 — 사용기간 칸은 '사용기간 및 휴가 정보 선택' 창으로 고르고 휴가종류는 자동 연동(화면설계서 V5.8)
+  const { policy: commutePolicy } = useCommutePolicy();
+  const [leavePickerOpen, setLeavePickerOpen] = useState(false);
+  const leaveDay: WorkDay = {
+    workStartTime: commutePolicy?.workStartTime ?? '08:30',
+    workEndTime: commutePolicy?.workEndTime ?? '17:30',
+    breakStartTime: commutePolicy?.breakStartTime ?? '11:30',
+    breakEndTime: commutePolicy?.breakEndTime ?? '12:30',
+  };
+  const leavePickerCtx: LeavePickerCtx | null = docCode === '휴가'
+    ? {
+      open: () => setLeavePickerOpen(true),
+      label: values['period']
+        ? `${rangeLabel(String(values['period']), String(values['period__end'] || values['period']))} · ${String(values['startTime'] ?? '')}~${String(values['endTime'] ?? '')}`
+        : '',
+      kind: values['period'] ? String(values['leaveType'] ?? '') : '',
+    }
+    : null;
 
   let lastRenderedSection = '';
 
@@ -403,6 +419,7 @@ export function ApprovalDraftDocumentSheet({
   const showDocTitle = headerShown(form, 'docTitle');
 
   return (
+    <LeavePickerContext.Provider value={leavePickerCtx}>
     <SealMarkProvider markId={sealMarkIdOf(form?.fields)}>
     <div className="mx-auto bg-white px-5 sm:px-8 py-7 text-[#1a1a1a] w-full max-w-[800px] min-w-0 shadow-2xl border border-black/15 rounded-xs box-border transition-all ring-1 ring-black/5">
       {/* 1. 상단 워크핏 로고 및 문서번호 바 */}
@@ -699,202 +716,6 @@ export function ApprovalDraftDocumentSheet({
           )}
         </tbody>
       </table>
-
-      {/* 6. 휴가원 전용: 연차 잔여 현황 배너 & 빠른 휴가 구분 버튼 (연차/반차/반반차 전용) */}
-      {docCode === '휴가' && isAnnualLeaveDeduction(selectedLeaveType) && (
-        <div className="mt-3 rounded-lg border border-teal/30 bg-[#f4f9f9] p-3 text-[11.5px]">
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-teal/15 pb-2">
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <Calendar size={13} className="text-teal" />
-              <span className="font-bold text-[#222]">{me.name} 님의 연차 현황:</span>
-              <span className="text-[#666]">총 발생 <strong>{leaveBalance?.grant ?? 15}일</strong></span>
-              <span className="text-[#888]">·</span>
-              <span className="text-[#666]">사용 <strong>{leaveBalance?.used ?? 0}일</strong></span>
-              {leaveBalance?.pending > 0 && (
-                <>
-                  <span className="text-[#888]">·</span>
-                  <span className="text-amber-700 font-medium">진행중 {leaveBalance.pending}일</span>
-                </>
-              )}
-              <span className="text-[#888]">·</span>
-              <span className="font-extrabold text-teal">
-                잔여 {leaveBalance?.remaining ?? 15}일
-              </span>
-            </div>
-            {/* 선사용 안내 또는 잔여 소진 시 알림 */}
-            {leaveBalance?.advanceOffset?.isAdvanceUsed ? (
-              <span className="text-[10.5px] text-amber-800 font-semibold">
-                (선사용 상계 잔여: {leaveBalance.advanceOffset.offsetRemainingDays}일)
-              </span>
-            ) : (leaveBalance?.remaining ?? 0) <= 0 ? (
-              <span className="text-[10.5px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 font-semibold border border-amber-200">
-                연차 선사용 가능
-              </span>
-            ) : null}
-          </div>
-
-          {/* 휴가 구분 인라인 칩 버튼 */}
-          <div className="mt-2 flex items-center gap-1.5 flex-wrap">
-            <span className="text-[11px] font-bold text-[#555] mr-1">휴가 구분:</span>
-            {[
-              { type: '연차', label: '종일 연차 (1.0일)' },
-              { type: '오전반차', label: '오전 반차 (0.5일)' },
-              { type: '오후반차', label: '오후 반차 (0.5일)' },
-              { type: '반반차', label: '반반차 (0.25일)' },
-            ].map((item) => {
-              const isSel = selectedLeaveType === item.type;
-              return (
-                <button
-                  key={item.type}
-                  type="button"
-                  onClick={() => {
-                    const isPart = isPartDayLeave(item.type);
-                    const curStart = (values['period'] as string) || '';
-                    const curEnd = isPart ? curStart : (values['period__end'] as string);
-                    const nextDays = calculateLeaveDays({
-                      leaveType: item.type,
-                      startDate: curStart,
-                      endDate: curEnd,
-                      holidays,
-                    });
-                    setVals({
-                      leaveType: item.type,
-                      ...(isPart && curStart ? { period__end: curStart } : {}),
-                      period__days: nextDays,
-                    });
-                  }}
-                  className={`px-2.5 py-1 rounded text-[11px] font-bold transition-all cursor-pointer ${isSel
-                    ? 'bg-teal text-white shadow-2xs'
-                    : 'bg-white text-[#555] border border-[#ddd] hover:bg-[#f0f0f0]'
-                    }`}
-                >
-                  {item.label}
-                </button>
-              );
-            })}
-          </div>
-
-          {/* 공휴일 자동 제외 안내 배너 */}
-          {excludedHolidays.length > 0 && (
-            <div className="mt-2.5 rounded-md bg-teal/10 border border-teal/30 px-3 py-2 text-[11px] text-[#222]">
-              <div className="flex items-center gap-1.5 font-bold text-teal">
-                <Calendar size={13} className="shrink-0" />
-                <span>공휴일 자동 제외 안내 (신청 일수에서 차감 제외):</span>
-              </div>
-              <div className="mt-1 flex flex-wrap gap-2 text-[10.5px] text-[#444]">
-                {excludedHolidays.map((h) => (
-                  <span key={h.date} className="inline-flex items-center gap-1 rounded bg-white px-1.5 py-0.5 border border-teal/20 font-medium">
-                    <span className="font-semibold text-teal">{h.date.slice(5)} ({h.dayOfWeek})</span>
-                    <span>{h.name}</span>
-                  </span>
-                ))}
-              </div>
-              <div className="mt-1 text-[10px] text-[#666]">
-                ※ 법정 공휴일은 유급휴일이므로 연차 일수에서 자동으로 제외되어 차감되지 않습니다.
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* 6-1. 휴가원 전용: 대체휴무 현황 배너 & 대휴 구분 버튼 */}
-      {docCode === '휴가' && (selectedLeaveType === '대체휴무' || selectedLeaveType === 'SUBSTITUTE') && (() => {
-        const subRemaining = Number(leaveBalance?.substituteHoliday?.remainingMin ?? 0);
-        const isNoSubRemaining = subRemaining <= 0;
-
-        return (
-          <div className={`mt-3 rounded-lg border p-3 text-[11.5px] transition-colors ${isNoSubRemaining
-            ? 'border-rose-300 bg-rose-50/40'
-            : 'border-sky-300 bg-[#f0f7fc]'
-            }`}>
-            <div className={`flex flex-wrap items-center justify-between gap-2 border-b pb-2 ${isNoSubRemaining ? 'border-rose-200/70' : 'border-sky-200/60'
-              }`}>
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <Calendar size={13} className={isNoSubRemaining ? 'text-rose-600' : 'text-sky-600'} />
-                <span className="font-bold text-[#222]">{me.name} 님의 대체휴무 현황:</span>
-                <span className="text-[#666]">
-                  총 지급 <strong>{formatMinutes(leaveBalance?.substituteHoliday?.totalMin ?? 0)}</strong>
-                </span>
-                <span className="text-[#888]">·</span>
-                <span className="text-[#666]">
-                  사용 <strong>{formatMinutes(leaveBalance?.substituteHoliday?.usedMin ?? 0)}</strong>
-                </span>
-                {(leaveBalance?.substituteHoliday?.pendingMin ?? 0) > 0 && (
-                  <>
-                    <span className="text-[#888]">·</span>
-                    <span className="text-amber-700 font-medium">
-                      진행중 {formatMinutes(leaveBalance.substituteHoliday.pendingMin)}
-                    </span>
-                  </>
-                )}
-                <span className="text-[#888]">·</span>
-                <span className={`font-extrabold ${subRemaining > 0 ? 'text-sky-700' : 'text-rose-600'}`}>
-                  잔여 {formatMinutes(subRemaining)}
-                </span>
-              </div>
-              {/* 만료 임박 또는 잔여 0일 알림 */}
-              {(leaveBalance?.substituteHoliday?.expiringSoonCount ?? 0) > 0 ? (
-                <span className="text-[10.5px] px-1.5 py-0.5 rounded bg-rose-50 text-rose-700 font-semibold border border-rose-200">
-                  30일 이내 만료 예정: {leaveBalance.substituteHoliday.expiringSoonCount}건
-                </span>
-              ) : isNoSubRemaining ? (
-                <span className="text-[10.5px] px-2 py-0.5 rounded bg-rose-100 text-rose-700 font-bold border border-rose-300 animate-pulse">
-                  잔여 대체휴무 없음 (신청 불가)
-                </span>
-              ) : null}
-            </div>
-
-            {/* 잔여 대체휴무 0일 시 신청 불가 강력 안내 */}
-            {isNoSubRemaining && (
-              <div className="mt-2 rounded bg-rose-100/70 border border-rose-200 px-2.5 py-1.5 text-[11px] text-rose-800 font-medium flex items-center gap-1.5">
-                <AlertTriangle size={13} className="text-rose-600 shrink-0" />
-                <span>
-                  <strong>잔여 대체휴무가 없습니다.</strong> 대체휴무는 법률상 선사용이 불가하며, 휴일근무(특근) 발생 내역이 사전에 적립되어 있어야만 기안이 가능합니다.
-                </span>
-              </div>
-            )}
-
-            {/* 대체휴무 구분 인라인 칩 버튼 & 안내 문구 */}
-            <div className="mt-2 flex items-center justify-between gap-2 flex-wrap">
-              <div className="flex items-center gap-1.5">
-                <span className="text-[11px] font-bold text-[#555] mr-1">대휴 구분:</span>
-                {[
-                  { days: 1.0, label: '종일 대휴 (1.0일)' },
-                  { days: 0.5, label: '반일 대휴 (0.5일)' },
-                ].map((item) => {
-                  const currentDays = Number(values['period__days'] ?? 1.0);
-                  const isSel = currentDays === item.days;
-                  return (
-                    <button
-                      key={item.label}
-                      type="button"
-                      disabled={isNoSubRemaining}
-                      onClick={() => {
-                        if (isNoSubRemaining) return;
-                        const isPart = item.days < 1.0;
-                        const curStart = (values['period'] as string) || '';
-                        setVals({
-                          leaveType: '대체휴무',
-                          ...(isPart && curStart ? { period__end: curStart } : {}),
-                          period__days: item.days,
-                        });
-                      }}
-                      className={`px-2.5 py-1 rounded text-[11px] font-bold transition-all ${isNoSubRemaining
-                        ? 'bg-gray-100 text-gray-400 border border-gray-200 cursor-not-allowed'
-                        : isSel
-                          ? 'bg-sky-600 text-white shadow-2xs cursor-pointer'
-                          : 'bg-white text-[#555] border border-[#ddd] hover:bg-[#f0f0f0] cursor-pointer'
-                        }`}
-                    >
-                      {item.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-        );
-      })()}
 
       {/* 7. 서식 동적 상세 블록 렌더링 (ApprovalDocumentView 규격과 100% 일치 + 인라인 편집) */}
       {blocks.length > 0 && (
@@ -1448,8 +1269,43 @@ export function ApprovalDraftDocumentSheet({
           onClose={() => setActiveUserField(null)}
         />
       )}
+
+      {leavePickerOpen && (
+        <LeavePeriodPicker
+          initial={{
+            from: String(values['period'] ?? ''),
+            to: String(values['period__end'] ?? values['period'] ?? ''),
+            pick: values['period'] ? pickOfDocValues(values, leaveDay) : null,
+          }}
+          day={leaveDay}
+          holidays={holidays}
+          balance={{
+            annualDays: Number(leaveBalance?.available ?? leaveBalance?.remaining ?? 0),
+            annualGranted: Number(leaveBalance?.grant ?? 0),
+            annualUsed: Number(leaveBalance?.used ?? 0),
+            substituteMin: Number(leaveBalance?.substituteHoliday?.remainingMin ?? 0),
+            substituteTotalMin: Number(leaveBalance?.substituteHoliday?.totalMin ?? 0),
+            substituteUsedMin: Number(leaveBalance?.substituteHoliday?.usedMin ?? 0),
+          }}
+          onClose={() => setLeavePickerOpen(false)}
+          onApply={(v) => {
+            setVals({
+              leaveType: v.leaveType,
+              period: v.period,
+              period__end: v.period__end,
+              period__days: v.days,
+              startTime: v.startTime,
+              endTime: v.endTime,
+              leaveUnit: v.leaveUnit,
+              quarterStart: v.quarterStart,
+            });
+            setLeavePickerOpen(false);
+          }}
+        />
+      )}
     </div>
     </SealMarkProvider>
+    </LeavePickerContext.Provider>
   );
 }
 
@@ -1471,6 +1327,29 @@ function InlineFieldEditor({
 }) {
   const v = values[field.key];
   const sv = typeof v === 'string' ? v : v == null ? '' : String(v);
+  const leavePicker = useContext(LeavePickerContext);
+
+  // 휴가원 — 사용기간은 선택 창으로, 휴가종류는 선택 창 값이 자동으로 들어간다
+  if (leavePicker && field.key === 'period') {
+    return (
+      <button
+        type="button"
+        onClick={leavePicker.open}
+        className={`flex w-full items-center justify-between gap-2 rounded-lg border px-3 py-2 text-left text-[12px] transition-colors ${leavePicker.label ? 'border-[#bcd2f6] bg-[#f3f7fe] text-[#1f4fb0]' : 'border-[#d9dee8] bg-white text-[#8a93a5] hover:border-[#9db8ea]'}`}
+      >
+        <span>{leavePicker.label || '시작일 ~ 종료일을 선택하세요'}</span>
+        <CalendarDays size={15} className="shrink-0 text-[#2f6fe4]" />
+      </button>
+    );
+  }
+  if (leavePicker && field.key === 'leaveType') {
+    return (
+      <span className="flex items-center gap-2 px-1 py-0.5 text-[12px]" title="사용기간 선택 창에서만 바꿀 수 있습니다">
+        <span className={leavePicker.kind ? 'text-[#222]' : 'text-[#999]'}>{leavePicker.kind || '선택'}</span>
+        <small className="rounded bg-[#eaf2ff] px-1.5 py-0.5 text-[10.5px] font-semibold text-[#2f6fe4]">자동 연동</small>
+      </span>
+    );
+  }
 
   // 휴일근로 신청서 — 출근·퇴근 시각·근무 시간은 근태 기록에서만(고칠 수 없음, 사후 신청)
   if (isHolidayWorkLocked(field.key)) {
