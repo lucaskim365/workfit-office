@@ -26,7 +26,7 @@ import type { MentionCandidate } from '@/features/chat/rich/ChatRichEditor';
 import { ChatComposer } from '@/features/chat/ChatComposer';
 import { getRoomDisplayName, fmtBubbleTime, fmtSize, msgPreview, downloadAttachment, openAttachment } from './chatUtils';
 import { ChatFileStatusText } from './ChatFileStatusText';
-import { roomFilesOf, type RoomFile } from '@/domain/chatMessage/roomFiles';
+import { groupRoomFilesByDay, roomFilesOf, type RoomFile } from '@/domain/chatMessage/roomFiles';
 import { FileKindIcon } from '@/features/chat/FileKindIcon';
 import { RoomPhotoGrid } from '@/features/chat/RoomPhotoGrid';
 import { MobileActionSheet, type SheetAction } from './MobileActionSheet';
@@ -1869,7 +1869,7 @@ function renderHighlightedText(text: string, query: string, isActive: boolean) {
 /**
  * 파일함 모아보기 — [사진]은 바둑판으로, [파일]은 목록으로 나눠 보인다.
  * - 사진: 날짜별 바둑판, 누르면 크게 보기(좌우로 넘기면 이 방의 다른 사진)
- * - 파일: 줄을 누르면 말풍선과 똑같이 연다(PDF·엑셀·워드는 앱 안 보기 화면, 그 밖은 휴대폰 공유 창·저장)
+ * - 파일: 날짜별 목록, 줄을 누르면 말풍선과 똑같이 연다(PDF·엑셀·워드는 앱 안 보기 화면, 그 밖은 휴대폰 공유 창·저장)
  */
 function MobileFileBoxModal({
   files,
@@ -1882,6 +1882,7 @@ function MobileFileBoxModal({
 }) {
   const photos = useMemo(() => files.filter((f) => f.type === 'image'), [files]);
   const docs = useMemo(() => files.filter((f) => f.type !== 'image'), [files]);
+  const docDays = useMemo(() => groupRoomFilesByDay(docs), [docs]);
   const [tab, setTab] = useState<'photo' | 'file'>(() => (photos.length === 0 && docs.length > 0 ? 'file' : 'photo'));
 
   const handleGoToMessage = (messageId: string) => {
@@ -1925,35 +1926,42 @@ function MobileFileBoxModal({
         ) : docs.length === 0 ? (
           <div className="py-20 text-center text-[12px] text-ink3">공유된 파일이 없습니다.</div>
         ) : (
-          <div className="p-3 space-y-2">
-            {docs.map((f) => (
-              <div key={f.key} className="flex items-center gap-1 rounded-xl border border-black/5 bg-black/[0.01] shadow-3xs">
-                <button
-                  type="button"
-                  onClick={() => void openAttachment(f.attachment)}
-                  className="flex min-w-0 flex-1 items-center gap-3 p-3 text-left cursor-pointer active:bg-black/5 rounded-xl"
-                >
-                  <FileKindIcon name={f.attachment.name} size={40} />
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-[12.5px] font-bold text-ink">{f.attachment.name}</div>
-                    <div className="flex items-center gap-1.5 text-[10px] text-ink3 mt-0.5">
-                      <span>{f.senderName || '알 수 없음'}</span>
-                      <span>·</span>
-                      <span>{fmtSize(f.attachment.size)}</span>
-                      <span>·</span>
-                      <span className="tabular-nums">{new Date(f.at).toLocaleDateString()}</span>
-                    </div>
+          <div className="pb-3">
+            {docDays.map((d) => (
+              <section key={d.day}>
+                <h3 className="sticky top-0 z-[1] bg-white/95 px-3 pb-1.5 pt-3 text-[11.5px] font-bold text-ink2">{d.label}</h3>
+                <div className="space-y-2 px-3">
+                {d.files.map((f) => (
+                  <div key={f.key} className="flex items-center gap-1 rounded-xl border border-black/5 bg-black/[0.01] shadow-3xs">
+                    <button
+                      type="button"
+                      onClick={() => void openAttachment(f.attachment)}
+                      className="flex min-w-0 flex-1 items-center gap-3 p-3 text-left cursor-pointer active:bg-black/5 rounded-xl"
+                    >
+                      <FileKindIcon name={f.attachment.name} size={40} />
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-[12.5px] font-bold text-ink">{f.attachment.name}</div>
+                        <div className="flex items-center gap-1.5 text-[10px] text-ink3 mt-0.5">
+                          <span>{f.senderName || '알 수 없음'}</span>
+                          <span>·</span>
+                          <span>{fmtSize(f.attachment.size)}</span>
+                          <span>·</span>
+                          <span className="tabular-nums">{f.at.slice(11, 16)}</span>
+                        </div>
+                      </div>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleGoToMessage(f.messageId)}
+                      className="mr-2 shrink-0 text-[15px] p-2 hover:bg-black/5 rounded-full active:scale-95 transition-transform cursor-pointer"
+                      title="대화 위치로 이동"
+                    >
+                      💬
+                    </button>
                   </div>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleGoToMessage(f.messageId)}
-                  className="mr-2 shrink-0 text-[15px] p-2 hover:bg-black/5 rounded-full active:scale-95 transition-transform cursor-pointer"
-                  title="대화 위치로 이동"
-                >
-                  💬
-                </button>
-              </div>
+                ))}
+                </div>
+              </section>
             ))}
           </div>
         )}

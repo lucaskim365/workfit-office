@@ -5,6 +5,7 @@ import test from 'node:test';
 function fakeCaches() {
   const stores = new Map<string, Map<string, Response>>();
   return {
+    delete: async (name: string) => stores.delete(name),
     open: async (name: string) => {
       const m = stores.get(name) ?? new Map<string, Response>();
       stores.set(name, m);
@@ -41,4 +42,20 @@ test('공유 창으로 넘길 수 있는 파일 — PDF·사진·글자는 되�
   const { canShareFileType } = await import('./chatFileStore');
   for (const n of ['보고서.pdf', '사진.JPG', '메모.txt', '목록.csv']) assert.equal(canShareFileType(n), true, n);
   for (const n of ['계획서.hwp', '정산.xlsx', '견적.docx', '자료.zip', '이름없음']) assert.equal(canShareFileType(n), false, n);
+});
+
+test('로그아웃 때 보관함 비우기 — 받아 둔 파일이 사라지고 다음엔 다시 받는다', async () => {
+  (globalThis as any).caches = fakeCaches();
+  let fetched = 0;
+  (globalThis as any).fetch = async () => {
+    fetched++;
+    return new Response(new Blob(['%PDF-1.4 x']), { headers: { 'content-type': 'application/pdf' } });
+  };
+  const store = await import('./chatFileStore');
+  await store.loadChatFile('https://files/b.pdf', 'application/pdf');
+  assert.ok(await store.getChatFile('https://files/b.pdf'));
+  await store.clearChatFiles();
+  assert.equal(await store.getChatFile('https://files/b.pdf'), null);
+  await store.loadChatFile('https://files/b.pdf', 'application/pdf');
+  assert.equal(fetched, 2);
 });
