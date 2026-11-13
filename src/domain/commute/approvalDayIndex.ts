@@ -27,6 +27,12 @@ function eachDate(start: string, end: string, fn: (date: string) => void) {
   }
 }
 
+/** 반반차 시작 시각(휴가원 V5.8 부터 문서 값 quarterStart) — 없으면 undefined */
+function quarterStartOf(doc: ApprovalDoc): string | undefined {
+  const v = doc.fieldValues?.quarterStart;
+  return typeof v === 'string' && /^\d{2}:\d{2}$/.test(v) ? v : undefined;
+}
+
 /** 대체휴무 사용 단위(종일·오전반차·오후반차·반반차) — 없으면 undefined */
 function leaveUnitOf(doc: ApprovalDoc): string | undefined {
   const v = (doc.form as { leaveUnit?: unknown } | undefined)?.leaveUnit ?? doc.fieldValues?.leaveUnit;
@@ -54,6 +60,7 @@ function toInfo(doc: ApprovalDoc, s: StandardScheduleInfo): ApprovedLeaveInfo {
     docId: s.docId,
     quarterSlot: quarterSlotOf(doc, s),
     leaveUnit: s.category === 'LEAVE' ? leaveUnitOf(doc) : undefined,
+    quarterStart: s.category === 'LEAVE' ? quarterStartOf(doc) : undefined,
   };
 }
 

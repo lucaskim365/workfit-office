@@ -210,3 +210,16 @@ test('휴일근무: 주말에 한쪽 태그만 있어도 미기록으로 보지 
 test('휴일근무: 평일의 연장근로 승인은 근태 상태를 바꾸지 않는다', () => {
   assert.equal(evalDay('08:20', '20:00', [HOLIDAY_WORK]).status, 'normal');
 });
+
+// ── 반반차 시작 시각(30분 단위, 화면설계서 V5.8) ──
+
+test('반반차 09:00 시작이면 09:00~11:00 부재 — 08:30 출근·11:00 복귀, 8시간 인정', () => {
+  assert.deepEqual(approvedLeaveSpans(policy, [leave('반반차', { quarterStart: '09:00' })]).windows, [[540, 660]]);
+  const r = evalDay('08:30', '17:30', [leave('반반차', { quarterStart: '09:00' })]);
+  assert.equal(r.status, 'normal');
+  assert.equal(r.totalMin, 480);
+});
+
+test('반반차 13:00 시작이면 그 사이 2시간만 부재', () => {
+  assert.deepEqual(approvedLeaveSpans(policy, [leave('반반차', { quarterStart: '13:00' })]).windows, [[780, 900]]);
+});

@@ -63,6 +63,8 @@ export interface ApprovedLeaveInfo {
   quarterSlot?: QuarterLeaveSlot['key'];
   /** 대체휴무 사용 단위 — 종일·오전반차·오후반차·반반차(없으면 종일). 다른 휴가는 종류로 판정 */
   leaveUnit?: string;
+  /** 반반차 시작 시각(HH:mm, 30분 단위) — 있으면 quarterSlot 보다 우선 */
+  quarterStart?: string;
 }
 
 
@@ -139,7 +141,20 @@ function isAmHalf(info: ApprovedLeaveInfo): boolean {
 
 /** 휴가 결재 1건이 차지하는 부재 구간 */
 function absenceWindowsOf(info: ApprovedLeaveInfo, policy: CommutePolicy): Window[] {
-  if (isQuarter(info)) return quarterWindows(policy, info.quarterSlot ?? 'PM2');
+  if (isQuarter(info)) {
+    const start = timeToMinutes(info.quarterStart ?? '');
+    if (start !== null) {
+      // 실근무 타임라인에서 시작 시각의 위치를 찾아 그때부터 120분
+      const segments = workSegments(policy);
+      let offset = 0;
+      for (const [s, e] of segments) {
+        if (start < e) { offset += Math.max(0, start - s); break; }
+        offset += e - s;
+      }
+      return netWindows(segments, offset, offset + 120);
+    }
+    return quarterWindows(policy, info.quarterSlot ?? 'PM2');
+  }
   if (isHalf(info)) {
     const half = halfDayWindows(policy);
     return isAmHalf(info) ? half.AM : half.PM;
