@@ -3,6 +3,18 @@ import { CalendarDays, ChevronDown, ChevronRight, FileText, PenLine } from 'luci
 import { Button } from '@/shared/ui/Button';
 import { Pill, type Tone } from '@/shared/ui/Pill';
 import { BizEmptyRow, bizTd, bizTh } from '../_biz';
+import { ColumnFilterButton, DateFilterPanel, SetFilterPanel } from './ColumnFilter';
+import {
+  DATE_FILTERS,
+  SET_FILTERS,
+  isFilterOn,
+  setFilterOptions,
+  withDateFilter,
+  withSetFilter,
+  type ColumnFilters,
+  type DateFilterKey,
+  type SetFilterKey,
+} from './purchaseFilter';
 import {
   EXPENSE_LABEL,
   MOCK_VENDOR_ACCOUNTS,
@@ -30,7 +42,12 @@ export const DONE_BG = 'bg-ok/10';
 const done = (yes: boolean) => (yes ? DONE_BG : '');
 
 interface Props {
+  /** 보일 줄(필터를 거친 것) */
   rows: PurchasePayment[];
+  /** 필터 창에서 고를 값을 뽑을 줄(열 필터를 걸기 전) */
+  optionRows: PurchasePayment[];
+  filters: ColumnFilters;
+  onFilters: (next: ColumnFilters) => void;
   groupMode: GroupMode;
   showAccount: boolean;
   onPatch: (id: string, change: Partial<PurchasePayment>) => void;
@@ -42,7 +59,20 @@ interface Props {
  * 짝이 되는 값은 한 칸에 두 줄로 묶어(도입기업·사업구분, 예정 발행일·결제일 등) 옆으로 밀지 않고 한 화면에 들어오게 한다.
  * 묶어 보기를 켜면 묶음 머리 줄에 도입기업·사업구분(·발주처)이 나오므로 그 칸은 표에서 뺀다.
  */
-export function PurchaseTable({ rows, groupMode, showAccount, onPatch, onPeek }: Props) {
+export function PurchaseTable({ rows, optionRows, filters, onFilters, groupMode, showAccount, onPatch, onPeek }: Props) {
+  /** 값 필터 단추(열 제목 옆 깔때기) */
+  const setFilter = (key: SetFilterKey) => (
+    <ColumnFilterButton label={SET_FILTERS[key].label} active={isFilterOn(filters, key)}>
+      <SetFilterPanel options={setFilterOptions(optionRows, key)} value={filters.sets[key]} onChange={(v) => onFilters(withSetFilter(filters, key, v))} />
+    </ColumnFilterButton>
+  );
+  /** 날짜 필터 단추 */
+  const dateFilter = (key: DateFilterKey) => (
+    <ColumnFilterButton label={DATE_FILTERS[key].label} active={isFilterOn(filters, key)}>
+      <DateFilterPanel value={filters.dates[key]} canBeEmpty={DATE_FILTERS[key].canBeEmpty} onChange={(v) => onFilters(withDateFilter(filters, key, v))} />
+    </ColumnFilterButton>
+  );
+
   const [closed, setClosed] = useState<ReadonlySet<string>>(new Set());
   const toggle = (key: string) =>
     setClosed((prev) => {
@@ -163,16 +193,16 @@ export function PurchaseTable({ rows, groupMode, showAccount, onPatch, onPeek }:
         </tr>
         <tr>
           <th className={`${bizTh} text-center`}>번호</th>
-          {!grouped && <Th2 top="도입기업" bottom="사업구분" />}
-          {vendorInHead ? <th className={bizTh}>발주 내역</th> : <Th2 top="발주처" bottom="발주 내역" />}
-          <th className={bizTh}>지급 조건</th>
-          <Th2 top="(예정) 계산서 발행일" bottom="(예정) 결제일" />
+          {!grouped && <Th2 top="도입기업" bottom="사업구분" topExtra={setFilter('client')} bottomExtra={setFilter('bizType')} />}
+          {vendorInHead ? <th className={bizTh}>발주 내역</th> : <Th2 top="발주처" bottom="발주 내역" topExtra={setFilter('vendor')} />}
+          <th className={bizTh}>지급 조건{setFilter('term')}</th>
+          <Th2 top="(예정) 계산서 발행일" bottom="(예정) 결제일" topExtra={dateFilter('planTax')} bottomExtra={dateFilter('planPay')} />
           <Th2 top="매입 합계" bottom="공급가액 + 부가세" right />
-          <th className={`${bizTh} text-center`}>매출 부가세 수금</th>
-          <th className={bizTh}>구축일</th>
-          <th className={`${bizTh} text-center`}>진행</th>
-          <th className={bizTh}>(확정) 계산서 발행일</th>
-          <th className={bizTh}>(확정) 결제일</th>
+          <th className={`${bizTh} text-center`}>매출 부가세 수금{setFilter('salesVat')}</th>
+          <th className={bizTh}>구축일{dateFilter('build')}</th>
+          <th className={`${bizTh} text-center`}>진행{setFilter('expense')}</th>
+          <th className={bizTh}>(확정) 계산서 발행일{dateFilter('tax')}</th>
+          <th className={bizTh}>(확정) 결제일{dateFilter('pay')}</th>
           {showAccount && (
             <>
               <Th2 top="은행" bottom="계좌번호" />
@@ -241,12 +271,16 @@ function Two({ top, bottom }: { top: ReactNode; bottom: ReactNode }) {
   );
 }
 
-/** 두 줄 칸의 머리 — 윗줄 이름, 아랫줄 이름(흐리게) */
-function Th2({ top, bottom, right = false }: { top: string; bottom: string; right?: boolean }) {
+/** 두 줄 칸의 머리 — 윗줄 이름, 아랫줄 이름(흐리게). extra: 이름 옆에 붙일 것(열 필터 단추) */
+function Th2({ top, bottom, right = false, topExtra, bottomExtra }: { top: string; bottom: string; right?: boolean; topExtra?: ReactNode; bottomExtra?: ReactNode }) {
   return (
     <th className={`${bizTh} leading-tight ${right ? 'text-right' : ''}`}>
       {top}
-      <span className="block font-semibold text-ink3">{bottom}</span>
+      {topExtra}
+      <span className="block font-semibold text-ink3">
+        {bottom}
+        {bottomExtra}
+      </span>
     </th>
   );
 }

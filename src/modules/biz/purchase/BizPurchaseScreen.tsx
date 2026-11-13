@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { FlaskConical, RotateCcw, Search } from 'lucide-react';
+import { FlaskConical, RotateCcw, Search, X } from 'lucide-react';
 import { Button } from '@/shared/ui/Button';
 import { Field } from '@/shared/ui/form/Field';
 import { SelectField } from '@/shared/ui/form/SelectField';
@@ -7,9 +7,8 @@ import { TextField } from '@/shared/ui/form/TextField';
 import { BizHead, BizListCard } from '../_biz';
 import { PurchaseOrderPeek } from './PurchaseOrderPeek';
 import { DONE_BG, PurchaseTable } from './PurchaseTable';
+import { NO_FILTERS, activeFilters, clearFilter, matchFilters, type ColumnFilters } from './purchaseFilter';
 import {
-  EXPENSE_LABEL,
-  EXPENSE_STATUSES,
   GROUP_MODES,
   GROUP_MODE_LABEL,
   MOCK_PURCHASE_PAYMENTS,
@@ -21,37 +20,37 @@ import {
 
 const won = (n: number) => n.toLocaleString('ko-KR');
 const ALL = 'all';
-const EMPTY = { month: ALL, bizType: ALL, expense: ALL, q: '' };
+const EMPTY = { month: ALL, q: '' };
 
 /** 사업관리 › 매입 결제 관리 — 보여주기용(목업 데이터, 저장되지 않음). 한 줄 = 발주서 지급 조건의 한 번 */
 export default function BizPurchaseScreen() {
   const [rows, setRows] = useState<PurchasePayment[]>(MOCK_PURCHASE_PAYMENTS);
   const [draft, setDraft] = useState(EMPTY);
   const [applied, setApplied] = useState(EMPTY);
+  const [filters, setFilters] = useState<ColumnFilters>(NO_FILTERS);
   const [groupMode, setGroupMode] = useState<GroupMode>('none');
   const [showAccount, setShowAccount] = useState(false);
   const [peek, setPeek] = useState<PurchasePayment | null>(null);
 
   const months = useMemo(() => [...new Set(rows.map(payMonthOf))].sort(), [rows]);
-  const bizTypes = useMemo(() => [...new Set(rows.map((r) => r.bizType))].sort(), [rows]);
 
-  const shown = useMemo(() => {
+  /** 위쪽 검색 줄(결제 예정월·검색어)을 거친 줄 — 열 필터 창의 고를 값도 여기서 뽑는다 */
+  const searched = useMemo(() => {
     const q = applied.q.trim().toLowerCase();
     return rows.filter(
-      (r) =>
-        (applied.month === ALL || payMonthOf(r) === applied.month) &&
-        (applied.bizType === ALL || r.bizType === applied.bizType) &&
-        (applied.expense === ALL || r.expense === applied.expense) &&
-        (!q || [r.client, r.vendor, r.poDocNo, ...r.items].some((t) => t.toLowerCase().includes(q)))
+      (r) => (applied.month === ALL || payMonthOf(r) === applied.month) && (!q || [r.client, r.vendor, r.poDocNo, ...r.items].some((t) => t.toLowerCase().includes(q)))
     );
   }, [rows, applied]);
+  const shown = useMemo(() => searched.filter((r) => matchFilters(r, filters)), [searched, filters]);
   const summary = useMemo(() => summarize(shown), [shown]);
+  const chips = activeFilters(filters);
 
   const patch = (id: string, change: Partial<PurchasePayment>) => setRows((list) => list.map((r) => (r.id === id ? { ...r, ...change } : r)));
   const search = () => setApplied(draft);
   const reset = () => {
     setDraft(EMPTY);
     setApplied(EMPTY);
+    setFilters(NO_FILTERS);
   };
 
   return (
@@ -77,24 +76,6 @@ export default function BizPurchaseScreen() {
               value={draft.month}
               onChange={(e) => setDraft({ ...draft, month: e.target.value })}
               options={[{ value: ALL, label: '전체' }, ...months.map((m) => ({ value: m, label: `${m.slice(0, 4)}년 ${Number(m.slice(5))}월` }))]}
-            />
-          </Field>
-        </div>
-        <div className="w-36">
-          <Field label="사업구분">
-            <SelectField
-              value={draft.bizType}
-              onChange={(e) => setDraft({ ...draft, bizType: e.target.value })}
-              options={[{ value: ALL, label: '전체' }, ...bizTypes.map((b) => ({ value: b, label: b }))]}
-            />
-          </Field>
-        </div>
-        <div className="w-32">
-          <Field label="지출결의서">
-            <SelectField
-              value={draft.expense}
-              onChange={(e) => setDraft({ ...draft, expense: e.target.value })}
-              options={[{ value: ALL, label: '전체' }, ...EXPENSE_STATUSES.map((s) => ({ value: s, label: EXPENSE_LABEL[s] }))]}
             />
           </Field>
         </div>
@@ -143,7 +124,25 @@ export default function BizPurchaseScreen() {
             </span>
           }
         >
-          <PurchaseTable rows={shown} groupMode={groupMode} showAccount={showAccount} onPatch={patch} onPeek={setPeek} />
+          {/* sticky — 표를 옆으로 밀어도 꼬리표는 제자리에 */}
+          {chips.length > 0 && (
+            <div className="sticky left-0 flex flex-wrap items-center gap-1.5 px-4 pb-3">
+              <span className="text-[11px] font-bold text-ink3">열 필터</span>
+              {chips.map((c) => (
+                <button
+                  key={c.key}
+                  onClick={() => setFilters(clearFilter(filters, c.key))}
+                  title="누르면 이 필터를 풉니다"
+                  className="flex items-center gap-1 rounded-full bg-teal/10 py-0.5 pr-1.5 pl-2.5 text-[11px] font-bold text-teal hover:bg-teal/20"
+                >
+                  {c.text}
+                  <X size={11} />
+                </button>
+              ))}
+              <button onClick={() => setFilters(NO_FILTERS)} className="rounded px-1.5 py-0.5 text-[11px] font-bold text-ink3 hover:bg-panel-alt hover:text-ink2">모두 지우기</button>
+            </div>
+          )}
+          <PurchaseTable rows={shown} optionRows={searched} filters={filters} onFilters={setFilters} groupMode={groupMode} showAccount={showAccount} onPatch={patch} onPeek={setPeek} />
         </BizListCard>
       </div>
 
