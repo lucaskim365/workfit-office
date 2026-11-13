@@ -14,6 +14,7 @@
     "appwrite:schema:authz": "tsx scripts/appwrite-schema.ts --only=authRoles,authAssignments --new-only",
     "appwrite:schema:company": "tsx scripts/appwrite-schema.ts --only=companies,companyBankAccounts,companyFiles --new-only",
     "appwrite:schema:bizmaster": "tsx scripts/appwrite-schema.ts --only=companyClasses,bizCategories --new-only",
+    "appwrite:schema:subledger": "tsx scripts/appwrite-schema.ts --only=substituteHolidayLedger --new-only",
     "etl": "tsx scripts/etl-firestore-to-appwrite.ts"
   },
   "dependencies": {

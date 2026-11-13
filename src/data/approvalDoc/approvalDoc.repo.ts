@@ -426,6 +426,13 @@ export interface ApprovalDraftInput {
   company?: ApprovalCompany | null;
 }
 
+/** 휴일근로 결재 완료·취소완료 → 대체휴무 원장 지급·차감(결재 문서는 바꾸지 않음, 실패해도 결재는 그대로) */
+async function recordSubstituteLedger(doc: ApprovalDoc): Promise<void> {
+  if (doc.status !== '완료' && doc.status !== '시행대기' && doc.status !== '취소완료') return;
+  const { recordSubstituteLedgerSafely } = await import('@/data/substituteLedger/substituteLedger.repo');
+  await recordSubstituteLedgerSafely(doc);
+}
+
 /** 취소 기안 문서 최종 승인(완료) 시 대상 원문서를 '취소완료' 상태로 전이 */
 async function handleCancelTargetOnComplete(next: ApprovalDoc): Promise<void> {
   if (next.status !== '완료' || !next.cancelTargetDocId) return;
@@ -436,6 +443,7 @@ async function handleCancelTargetOnComplete(next: ApprovalDoc): Promise<void> {
     target.cancelledAt = next.completedAt ?? now();
     target.cancelDraftId = null;
     await persist(target);
+    await recordSubstituteLedger(target);
 
     // 원문서 기안자에게 취소 완료 알림 전송
     try {
@@ -747,6 +755,7 @@ export const approvalDocRepo = {
 
     await persist(next);
     await handleCancelTargetOnComplete(next);
+    await recordSubstituteLedger(next);
 
     // 알림 생성 연동
     try {
@@ -978,6 +987,7 @@ export const approvalDocRepo = {
 
     await persist(next);
     await handleCancelTargetOnComplete(next);
+    await recordSubstituteLedger(next);
     return next;
   },
 
