@@ -12,6 +12,7 @@
     "appwrite:schema": "tsx scripts/appwrite-schema.ts",
     "appwrite:schema:po": "tsx scripts/appwrite-schema.ts --only=poArchiveReplies --new-only",
     "appwrite:schema:authz": "tsx scripts/appwrite-schema.ts --only=authRoles,authAssignments --new-only",
+    "appwrite:schema:company": "tsx scripts/appwrite-schema.ts --only=companies,companyBankAccounts,companyFiles --new-only",
     "etl": "tsx scripts/etl-firestore-to-appwrite.ts"
   },
   "dependencies": {

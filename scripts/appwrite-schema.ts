@@ -662,6 +662,69 @@ const COLLECTIONS: CollectionDef[] = [
     indexes: [IX('bvpVendor', ['vendorCode']), IX('bvpProject', ['projectId'])],
   },
   {
+    id: 'companies',
+    name: '기업',
+    /*
+      사업관리 › 기업 정보(업무 기준정보). 도입·매입을 가리지 않는 기업 마스터 — 도입/매입은 프로젝트 참여에 붙는다.
+      bizNo 는 숫자 10자리만, 유일 인덱스로 중복을 DB에서 막는다. 지우지 않고 use=false.
+    */
+    attributes: [
+      S('id', 64, true),
+      S('name', 128, true),
+      S('bizNo', 10, true),
+      S('ceoName', 64),
+      S('phone', 32),
+      S('address', 256),
+      S('addressDetail', 128),
+      BOOL('use', true),
+      S('note', 1000),
+      S('createdBy', 64),
+      S('createdAt', 40),
+      S('updatedBy', 64),
+      S('updatedAt', 40),
+    ],
+    indexes: [UQ('cmpBizNo', ['bizNo']), IX('cmpName', ['name'])],
+  },
+  {
+    id: 'companyBankAccounts',
+    name: '기업 계좌',
+    /* 기업당 여러 개. 은행 이름은 저장하지 않는다 — bankCode 로 공통코드(BANK)에서. 기본 계좌는 사용 중 계좌 중 하나(앱 규칙). */
+    attributes: [
+      S('id', 64, true),
+      S('companyId', 64, true),
+      S('bankCode', 16, true),
+      S('accountNo', 32, true),
+      S('holder', 64, true),
+      BOOL('isDefault', false),
+      BOOL('use', true),
+      S('note', 200),
+      S('createdBy', 64),
+      S('createdAt', 40),
+      S('updatedBy', 64),
+      S('updatedAt', 40),
+    ],
+    indexes: [IX('cbaCompany', ['companyId'])],
+  },
+  {
+    id: 'companyFiles',
+    name: '기업 첨부파일',
+    /* 사업자등록증·통장 사본 등. 이번엔 자리만(화면 없음). 파일은 파일서버 chat/company/{companyId}/ 아래, 업로드 URL 그대로 저장. */
+    attributes: [
+      S('id', 64, true),
+      S('companyId', 64, true),
+      EN('kind', ['BIZ_REG', 'BANKBOOK', 'ETC'], true),
+      S('accountId', 64),
+      S('name', 255, true),
+      S('url', 512, true),
+      S('storagePath', 512, true),
+      INT('size', false, 0, 0, 2_000_000_000),
+      S('contentType', 128),
+      S('uploadedBy', 64),
+      S('uploadedAt', 40),
+    ],
+    indexes: [IX('cflCompany', ['companyId'])],
+  },
+  {
     id: 'items',
     name: '품목',
     attributes: [
