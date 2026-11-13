@@ -1002,6 +1002,11 @@ export interface LinkName {
   userId?: boolean;
   /** 시스템이 계산해 넣는 칸(기안자 입력 아님) */
   computed?: boolean;
+  /**
+   * 반복 구간의 열 이름 — 값이 줄마다 하나씩(목록). 문서 맨 위 칸 하나로 담을 수 없어 fieldValues.__named 에만 남는다
+   * (relatedImport.ts). 반복 구간 안에 있어야 하고, 한 연동 기능의 목록 이름은 같은 구간에 둔다(같은 줄끼리 한 묶음)
+   */
+  list?: boolean;
   hint?: string;
 }
 
@@ -1016,6 +1021,34 @@ export interface LinkTypeDef {
 
 const PERIOD_END = (label: string): LinkName => ({ key: 'period__end', label, hint: '기간을 날짜 칸 둘로 나눌 때 끝 날짜' });
 const MEMO: LinkName = { key: 'body', label: '사유', hint: '목록·일정 설명에 쓰는 글' };
+
+/** 발주 연동 코드 — 발주서 서식 코드와 같다 */
+export const PO_LINK = '발주';
+
+/**
+ * 발주 — 결재가 끝난 발주서의 값을 사업관리 › 매입 결제 관리가 이름으로 읽는다(문서의 __named).
+ * 발주서는 기안자가 표 모양을 고칠 수 있어 위치로는 못 찾는다 — 대장이 읽을 칸만 이름을 붙여 둔다.
+ * 지급 조건은 반복 구간(줄마다 지급 한 번: 선금·중도금·잔금) — 대장의 한 줄이 된다.
+ * 키는 옛 발주서 항목 키와 겹치지 않게 po 로 시작한다.
+ */
+const PO_LINK_TYPE: LinkTypeDef = {
+  code: PO_LINK,
+  label: '발주서',
+  feature: '발주 — 매입 결제 관리',
+  names: [
+    { key: 'poClient', label: '도입기업', required: true, hint: '이 발주가 속한 도입기업(프로젝트)' },
+    { key: 'poBizType', label: '사업구분', hint: '부처협업형·정부일반형 등' },
+    { key: 'poVendor', label: '발주처', required: true, hint: '발주를 받는 업체(매입처)' },
+    { key: 'poSummary', label: '발주 내역', hint: '매입 결제 목록에 보일 한 줄 요약(대표 품목 등)' },
+    { key: 'poSupply', label: '매입 공급가액', required: true, hint: '부가세를 뺀 발주 금액 합계(숫자·금액·수식 칸)' },
+    { key: 'poVat', label: '매입 부가세', hint: '없으면 공급가액의 10%로 본다' },
+    { key: 'poTerm', label: '지급 구분', list: true, hint: '지급 조건 반복 구간의 열 — 선금·중도금·잔금' },
+    { key: 'poTermRate', label: '지급 비율', list: true, hint: '지급 조건 반복 구간의 열 — 50% 처럼' },
+    { key: 'poTermSupply', label: '지급 금액', list: true, hint: '지급 조건 반복 구간의 열 — 이번 지급분 공급가액(없으면 비율로 계산)' },
+    { key: 'poTermTaxDate', label: '(예정) 계산서 발행일', list: true, hint: '지급 조건 반복 구간의 열 — 날짜 칸' },
+    { key: 'poTermPayDate', label: '(예정) 결제일', list: true, hint: '지급 조건 반복 구간의 열 — 날짜 칸' },
+  ],
+};
 
 /** 시트 서식이 대신할 수 있는 기존 서식 — 연동이 있는 서식만 */
 export const LINK_TYPES: LinkTypeDef[] = [
@@ -1081,6 +1114,7 @@ export const LINK_TYPES: LinkTypeDef[] = [
       MEMO,
     ],
   },
+  PO_LINK_TYPE,
 ];
 
 export function linkTypeDef(link: string | null | undefined): LinkTypeDef | undefined {
@@ -1115,6 +1149,20 @@ export function linkIssues(s: Sheet, link: string | null | undefined): string[] 
     const wrong = (input?.options ?? []).filter((o) => !known.has(o));
     if (wrong.length) errors.push(`'휴가 종류' 칸의 항목 ${wrong.join(', ')}은(는) 휴가 종류에 없습니다. 쓸 수 있는 이름: ${[...known].join(', ')}`);
   }
+  // 목록 이름(줄마다 값)은 반복 구간의 열이어야 하고, 같은 줄끼리 한 묶음이 되게 한 구간에 둔다
+  const sectionOf = new Map<string, string | null>();
+  Object.entries(s.cellMeta[APPROVAL_NS.name] ?? {}).forEach(([key, name]) => {
+    const mark = s.rowMeta[APPROVAL_NS.repeat]?.[key.slice(0, key.indexOf(':'))] as { id?: string } | undefined;
+    sectionOf.set(String(name), mark?.id ?? null);
+  });
+  const lists = def.names.filter((n) => n.list && sectionOf.has(n.key));
+  lists
+    .filter((n) => sectionOf.get(n.key) === null)
+    .forEach((n) => errors.push(`'${n.label}' 칸은 반복 구간 안에 있어야 합니다(줄마다 값이 하나씩). 그 줄을 반복 구간으로 지정해 주세요.`));
+  const inSection = lists.filter((n) => sectionOf.get(n.key) !== null);
+  if (new Set(inSection.map((n) => sectionOf.get(n.key))).size > 1) {
+    errors.push(`${inSection.map((n) => `'${n.label}'`).join('·')} 칸은 같은 반복 구간에 있어야 합니다(같은 줄끼리 한 묶음).`);
+  }
   return errors;
 }
 
@@ -1132,7 +1180,8 @@ export function linkFieldValues(s: Sheet, link: string | null | undefined, refs:
   const out: Record<string, string> = { __link: def.code };
   Object.entries(s.cellMeta[APPROVAL_NS.name] ?? {}).forEach(([key, name]) => {
     const n = def.names.find((x) => x.key === name);
-    if (!n) return;
+    // 목록 이름(반복 구간의 열)은 값이 줄마다 있어 맨 위 칸 하나로 못 담는다 — __named 에만
+    if (!n || n.list) return;
     const i = key.indexOf(':');
     const v = String(computed.rows[Number(key.slice(0, i))]?.[key.slice(i + 1)] ?? '');
     if (n.userId) out[n.key] = refs[key] ?? '';

@@ -192,9 +192,12 @@ export function legacyRepeatRows(
 
 export function legacyFormToSheet(form: ApprovalForm): LegacyConversion {
   const warnings: string[] = [];
-  const link = LINK_TYPES.some((t) => t.code === form.code) ? form.code : null;
-  const linkNames = new Set(linkTypeDef(link)?.names.map((n) => n.key) ?? []);
   const fields = form.fields ?? [];
+  // 연동 기능은 옛 항목 키가 연동 칸 이름과 같을 때만 잇는다(휴가원 period·leaveType 등 — 그 칸에 이름이 저절로 붙는다).
+  // 발주서처럼 코드는 같아도 옮길 칸이 없으면 잇지 않는다 — 연동만 켜지고 이름 붙은 칸이 없는 서식이 되지 않게(관리자가 칸에 이름을 붙이며 켠다)
+  const candidate = LINK_TYPES.find((t) => t.code === form.code);
+  const link = candidate && fields.some((f) => candidate.names.some((n) => n.key === f.key)) ? candidate.code : null;
+  const linkNames = new Set(linkTypeDef(link)?.names.map((n) => n.key) ?? []);
   // 기존 서식이 숨긴 문서 머리 항목 — 공문처럼 머리를 거의 다 끈 서식은 그 모양 그대로
   const hiddenHead = new Set(form.hiddenHeaderItems ?? []);
   const INFO_ITEMS = ['docNo', 'drafterDept', 'drafter', 'draftDate', 'preservation', 'visibility'];

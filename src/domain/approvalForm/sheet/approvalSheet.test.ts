@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createSheet, cellKey, type Sheet } from '@/lib/sheet/core';
 import { CHECK_MARK, conditionHiddenRows, conditionMatches, conditionSources, requiredMissing, rowConditionOf, setRowCondition, draftInfoValue, linkFieldValues, linkIssues, linkSystemValues, nameLabel, SHEET_VALUES_KEY, SHEET_VERSION_KEY, draftInputOf, invalidNumberCells, isSecretCell, readSheetValues, sheetDocFields, APPROVAL_NS, approvalCellProps, setApprovalProp, setCellName, validateApprovalSheet, applyValues, canMergeApprovalRange, extractValues, isDraftEditable, isStructureLocked, namedValues, pasteDraftTsv, setApprovalCellValue } from './approvalSheet';
-import { setCellMeta, setCellValue } from '@/lib/sheet/core';
+import { setCellMeta, setCellValue, setRowMeta } from '@/lib/sheet/core';
 
 function base(): Sheet {
   return createSheet(4, 3);
@@ -241,6 +241,42 @@ test('대체 서식 검사 — 꼭 있어야 할 연동 칸', () => {
   assert.equal(nameLabel('period'), '휴가 기간');
   assert.equal(nameLabel('amount'), '금액 키');
   assert.equal(nameLabel('품명'), '품명');
+});
+
+test('발주 연동 — 꼭 있어야 할 칸, 지급 조건은 반복 구간의 열', () => {
+  // 0행: 도입기업·발주처·공급가액 / 2~3행: 지급 조건(구분·비율)
+  let s = createSheet(4, 3);
+  assert.equal(linkIssues(s, '발주').length, 3); // 도입기업·발주처·매입 공급가액
+  s = setCellName(s, 0, 0, 'poClient');
+  s = setCellName(s, 0, 1, 'poVendor');
+  s = setCellName(s, 0, 2, 'poSupply');
+  assert.deepEqual(linkIssues(s, '발주'), []); // 지급 조건 칸은 없어도 된다(대장이 한 번에 지급으로 봄)
+
+  // 지급 구분을 반복 구간 밖에 두면 막는다
+  s = setCellName(s, 2, 0, 'poTerm');
+  assert.ok(linkIssues(s, '발주').some((m) => m.includes('지급 구분') && m.includes('반복 구간 안')));
+  s = setRowMeta(s, APPROVAL_NS.repeat, 2, { id: 'pay', label: '지급 조건' });
+  assert.deepEqual(linkIssues(s, '발주'), []);
+
+  // 다른 구간에 흩어지면 같은 줄끼리 묶을 수 없다
+  s = setCellName(s, 3, 1, 'poTermRate');
+  s = setRowMeta(s, APPROVAL_NS.repeat, 3, { id: 'other', label: '다른 표' });
+  assert.ok(linkIssues(s, '발주').some((m) => m.includes('같은 반복 구간')));
+  assert.equal(nameLabel('poTerm'), '지급 구분');
+});
+
+test('발주 연동 — 문서 맨 위 칸에는 한 값짜리만(지급 조건 열은 __named 에만)', () => {
+  let s = createSheet(3, 3);
+  s = setCellName(s, 0, 0, 'poClient');
+  s = setCellName(s, 0, 1, 'poVendor');
+  s = setCellName(s, 0, 2, 'poSupply');
+  s = setCellName(s, 2, 0, 'poTerm');
+  s = setRowMeta(s, APPROVAL_NS.repeat, 2, { id: 'pay', label: '지급 조건' });
+  s = setCellValue(s, 0, 0, '새솔테크');
+  s = setCellValue(s, 0, 1, '(주)미르시스템');
+  s = setCellValue(s, 0, 2, '40000000');
+  s = setCellValue(s, 2, 0, '선금');
+  assert.deepEqual(linkFieldValues(s, '발주'), { __link: '발주', poClient: '새솔테크', poVendor: '(주)미르시스템', poSupply: '40000000' });
 });
 
 test('휴가원 대체 — 휴가 종류 칸은 선택 칸, 항목은 휴가 정책 이름만', () => {
