@@ -56,8 +56,17 @@ export default function CompanyScreen() {
 
   const defaultAccount = (id: string) => {
     const a = accountsOf.get(id)?.find((x) => x.use && x.isDefault);
-    return a ? `${bankNames.get(a.bankCode) ?? ''} ${a.accountNo}`.trim() : '-';
+    if (!a) return <span className="text-ink3">-</span>;
+    const more = (accountsOf.get(id) ?? []).filter((x) => x.use).length - 1;
+    return (
+      <div className="flex items-center gap-2">
+        <span className="rounded bg-panel-alt px-1.5 py-0.5 text-[11px] font-bold text-ink2">{bankNames.get(a.bankCode) ?? '-'}</span>
+        <span className="font-mono text-ink">{a.accountNo}</span>
+        {more > 0 && <span className="text-[11px] text-ink3">외 {more}개</span>}
+      </div>
+    );
   };
+  const inUse = companies.filter((c) => c.use).length;
 
   return (
     <div className="flex flex-col gap-4">
@@ -89,7 +98,12 @@ export default function CompanyScreen() {
 
       <BizListCard
         title="기업 목록"
-        count={`총 ${rows.length}개 기업`}
+        count={
+          <span className="flex items-center gap-3">
+            <span>총 {rows.length}개 기업</span>
+            <span className="font-semibold text-ink3">사용 {inUse} · 사용 안 함 {companies.length - inUse}</span>
+          </span>
+        }
         footer={<BizPager total={rows.length} page={page} pageSize={pageSize} onPage={setPage} onPageSize={(n) => { setPageSize(n); setPage(1); }} />}
       >
         <table className="w-full border-collapse text-left">
@@ -104,13 +118,13 @@ export default function CompanyScreen() {
             {isLoading && <BizEmptyRow colSpan={8}>불러오는 중…</BizEmptyRow>}
             {!isLoading && rows.length === 0 && <BizEmptyRow colSpan={8}>{companies.length ? '검색 조건에 맞는 기업이 없습니다.' : '등록된 기업이 없습니다.'}</BizEmptyRow>}
             {pageRows.map((c, i) => (
-              <tr key={c.id} onClick={() => setDetailId(c.id)} className="cursor-pointer transition-colors hover:bg-panel-alt/60">
+              <tr key={c.id} onClick={() => setDetailId(c.id)} className={`cursor-pointer transition-colors hover:bg-panel-alt/60 ${c.use ? '' : 'text-ink3 [&_td]:opacity-60'}`}>
                 <td className={`${bizTd} text-center text-ink3`}>{(page - 1) * pageSize + i + 1}</td>
                 <td className={`${bizTd} font-bold text-ink`}>{c.name}</td>
                 <td className={`${bizTd} font-mono text-ink2`}>{formatBizNo(c.bizNo) || '-'}</td>
                 <td className={`${bizTd} text-ink2`}>{c.ceoName || '-'}</td>
                 <td className={`${bizTd} text-ink2`}>{c.phone || '-'}</td>
-                <td className={`${bizTd} text-ink2`}>{defaultAccount(c.id)}</td>
+                <td className={bizTd}>{defaultAccount(c.id)}</td>
                 <td className={`${bizTd} text-center`}><Pill tone={c.use ? 'ok' : 'mute'}>{c.use ? '사용' : '사용 안 함'}</Pill></td>
                 <td className={`${bizTd} text-center`} onClick={(e) => e.stopPropagation()}>
                   {canUpdate ? (

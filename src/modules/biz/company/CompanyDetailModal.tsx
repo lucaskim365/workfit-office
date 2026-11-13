@@ -25,18 +25,23 @@ export function CompanyDetailModal({
     ['사업자등록번호', formatBizNo(company.bizNo) || '-'],
     ['대표자', company.ceoName || '-'],
     ['대표번호', company.phone || '-'],
-    ['사용 여부', company.use ? '사용' : '사용 안 함'],
     ['주소', [company.address, company.addressDetail].filter(Boolean).join(' ') || '-', true],
     ['메모', company.note || '-', true],
   ];
+  const title = (
+    <span className="flex items-center gap-2">
+      {company.name}
+      <Pill tone={company.use ? 'ok' : 'mute'}>{company.use ? '사용' : '사용 안 함'}</Pill>
+    </span>
+  );
 
   return (
-    <Modal open onClose={onClose} title={company.name} width={760} footer={canEdit ? <Button onClick={onEdit}>기업 정보 수정</Button> : undefined}>
+    <Modal open onClose={onClose} title={title} width={760} footer={canEdit ? <Button onClick={onEdit}>기업 정보 수정</Button> : undefined}>
       <div className="flex flex-col gap-5">
-        <dl className="grid grid-cols-2 gap-x-6 gap-y-2.5 rounded-lg border border-border bg-panel-alt/40 p-4 text-[12px]">
+        <dl className="grid grid-cols-3 gap-x-6 gap-y-3 rounded-lg border border-border bg-panel-alt/40 p-4 text-[12px]">
           {info.map(([k, v, wide]) => (
-            <div key={k} className={`flex gap-3 ${wide ? 'col-span-2' : ''}`}>
-              <dt className="w-24 shrink-0 font-bold text-ink3">{k}</dt>
+            <div key={k} className={`flex flex-col gap-0.5 ${wide ? 'col-span-3' : ''}`}>
+              <dt className="text-[11px] font-bold text-ink3">{k}</dt>
               <dd className={`min-w-0 whitespace-pre-wrap text-ink ${k === '사업자등록번호' ? 'font-mono' : ''}`}>{v}</dd>
             </div>
           ))}
@@ -55,7 +60,7 @@ export function CompanyDetailModal({
                 )}
                 {list.map((a) => (
                   <tr key={a.id} className={a.use ? '' : 'opacity-50'}>
-                    <td className={`${bizTd} text-ink`}>{bankNames.get(a.bankCode) ?? '-'}</td>
+                    <td className={`${bizTd} font-bold text-ink`}>{bankNames.get(a.bankCode) ?? '-'}</td>
                     <td className={`${bizTd} font-mono text-ink`}>{a.accountNo}</td>
                     <td className={`${bizTd} text-ink2`}>{a.holder}</td>
                     <td className={`${bizTd} text-ink3`}>{a.note || '-'}</td>

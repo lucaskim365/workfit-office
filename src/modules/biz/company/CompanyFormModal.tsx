@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { Plus, X } from 'lucide-react';
 import { Modal } from '@/shared/ui/Modal';
 import { Button } from '@/shared/ui/Button';
@@ -98,7 +98,7 @@ export function CompanyFormModal({
       open
       onClose={onClose}
       title={isNew ? '기업 신규 등록' : '기업 정보 수정'}
-      width={760}
+      width={900}
       footer={
         <>
           <Button onClick={onClose}>취소</Button>
@@ -106,67 +106,70 @@ export function CompanyFormModal({
         </>
       }
     >
-      <div className="flex flex-col gap-5">
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="기업명" required>
-            <TextField value={form.name} onChange={(e) => set('name', e.target.value)} maxLength={128} placeholder="예: 대성반도체(주)" />
-          </Field>
-          <Field label="사업자등록번호" required error={check.duplicate ? check.errors.find((m) => m.startsWith('이미')) : undefined} hint={check.warnings[0]}>
-            <TextField
-              value={form.bizNo}
-              onChange={(e) => set('bizNo', e.target.value)}
-              onBlur={() => set('bizNo', formatBizNo(form.bizNo))}
-              invalid={Boolean(check.duplicate)}
-              maxLength={20}
-              placeholder="000-00-00000"
-              className="font-mono"
-            />
-          </Field>
-          {check.duplicate && (
-            <div className="col-span-2 -mt-1 flex justify-end">
-              <Button size="sm" onClick={() => onOpenCompany(check.duplicate!.id)}>등록된 기업 보기</Button>
-            </div>
-          )}
-          <Field label="대표자">
-            <TextField value={form.ceoName} onChange={(e) => set('ceoName', e.target.value)} maxLength={64} />
-          </Field>
-          <Field label="대표번호">
-            <TextField value={form.phone} onChange={(e) => set('phone', e.target.value)} maxLength={32} placeholder="예: 02-1234-5678" />
-          </Field>
-          <div className="col-span-2">
-            <Field label="주소">
-              <TextField value={form.address} onChange={(e) => set('address', e.target.value)} maxLength={256} className="w-full" />
+      <div className="flex flex-col gap-6">
+        <FormSection title="기본 정보">
+          <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+            <Field label="기업명" required>
+              <TextField value={form.name} onChange={(e) => set('name', e.target.value)} maxLength={128} placeholder="예: 대성반도체(주)" />
+            </Field>
+            <Field label="사업자등록번호" required error={check.duplicate ? check.errors.find((m) => m.startsWith('이미')) : undefined} hint={check.warnings[0]}>
+              <TextField
+                value={form.bizNo}
+                onChange={(e) => set('bizNo', e.target.value)}
+                onBlur={() => set('bizNo', formatBizNo(form.bizNo))}
+                invalid={Boolean(check.duplicate)}
+                maxLength={20}
+                placeholder="000-00-00000"
+                className="font-mono"
+              />
+            </Field>
+            {check.duplicate && (
+              <div className="col-span-2 -mt-1 flex justify-end">
+                <Button size="sm" onClick={() => onOpenCompany(check.duplicate!.id)}>등록된 기업 보기</Button>
+              </div>
+            )}
+            <Field label="대표자">
+              <TextField value={form.ceoName} onChange={(e) => set('ceoName', e.target.value)} maxLength={64} />
+            </Field>
+            <Field label="대표번호">
+              <TextField value={form.phone} onChange={(e) => set('phone', e.target.value)} maxLength={32} placeholder="예: 02-1234-5678" />
+            </Field>
+            <Field label="사용 여부">
+              <SelectField value={form.use ? 'Y' : 'N'} onChange={(e) => set('use', e.target.value === 'Y')} options={[{ value: 'Y', label: '사용' }, { value: 'N', label: '사용 안 함' }]} />
             </Field>
           </div>
-          <div className="col-span-2">
-            <Field label="상세 주소">
-              <TextField value={form.addressDetail} onChange={(e) => set('addressDetail', e.target.value)} maxLength={128} className="w-full" />
-            </Field>
-          </div>
-          <Field label="사용 여부">
-            <SelectField value={form.use ? 'Y' : 'N'} onChange={(e) => set('use', e.target.value === 'Y')} options={[{ value: 'Y', label: '사용' }, { value: 'N', label: '사용 안 함' }]} />
-          </Field>
-          <Field label="메모">
-            <TextField value={form.note} onChange={(e) => set('note', e.target.value)} maxLength={1000} />
-          </Field>
-        </div>
+        </FormSection>
 
-        <section className="flex flex-col gap-2">
-          <div className="flex items-center justify-between">
-            <h3 className="text-[13px] font-extrabold text-ink">계좌</h3>
-            <Button size="sm" onClick={addRow}><Plus size={12} /> 계좌 추가</Button>
+        <FormSection title="주소">
+          <div className="grid grid-cols-[2fr_1fr] gap-x-4">
+            <Field label="주소">
+              <TextField value={form.address} onChange={(e) => set('address', e.target.value)} maxLength={256} className="w-full" placeholder="도로명 주소" />
+            </Field>
+            <Field label="상세 주소">
+              <TextField value={form.addressDetail} onChange={(e) => set('addressDetail', e.target.value)} maxLength={128} className="w-full" placeholder="층·호수 등" />
+            </Field>
           </div>
+        </FormSection>
+
+        <FormSection title="메모">
+          <TextField value={form.note} onChange={(e) => set('note', e.target.value)} maxLength={1000} className="w-full" placeholder="참고할 내용" />
+        </FormSection>
+
+        <FormSection
+          title="계좌"
+          aside={<Button size="sm" onClick={addRow}><Plus size={12} /> 계좌 추가</Button>}
+        >
           <div className="overflow-x-auto rounded-lg border border-border">
-            <table className="w-full border-collapse text-left text-[12px]">
+            <table className="w-full table-fixed border-collapse text-left text-[12px]">
               <thead>
                 <tr className="bg-panel-alt/60 text-[11px] font-bold text-ink3 whitespace-nowrap">
-                  <th className="px-2 py-2 text-center">기본</th>
-                  <th className="px-2 py-2">은행</th>
+                  <th className="w-12 px-2 py-2 text-center">기본</th>
+                  <th className="w-40 px-2 py-2">은행</th>
                   <th className="px-2 py-2">계좌번호</th>
-                  <th className="px-2 py-2">예금주</th>
-                  <th className="px-2 py-2">메모</th>
-                  <th className="px-2 py-2 text-center">사용</th>
-                  <th className="px-2 py-2" />
+                  <th className="w-44 px-2 py-2">예금주</th>
+                  <th className="w-36 px-2 py-2">메모</th>
+                  <th className="w-12 px-2 py-2 text-center">사용</th>
+                  <th className="w-10 px-2 py-2" />
                 </tr>
               </thead>
               <tbody>
@@ -174,20 +177,20 @@ export function CompanyFormModal({
                   <tr><td colSpan={7} className="px-3 py-6 text-center text-ink3">등록된 계좌가 없습니다.</td></tr>
                 )}
                 {rows.map((r, i) => (
-                  <tr key={r.k} className={`border-t border-border ${r.use ? '' : 'opacity-50'}`}>
+                  <tr key={r.k} className={`border-t border-border ${r.use ? (shown[i].isDefault ? 'bg-teal/5' : '') : 'bg-panel-alt/50 opacity-60'}`}>
                     <td className="px-2 py-1.5 text-center">
                       <input type="radio" name="defaultAccount" aria-label="기본 계좌" checked={shown[i].isDefault} disabled={!r.use} onChange={() => pickDefault(r.k)} />
                     </td>
-                    <td className="px-2 py-1.5 w-40">
+                    <td className="px-2 py-1.5">
                       <SelectField value={r.bankCode} onChange={(e) => setRow(r.k, { bankCode: e.target.value })} options={bankOptions(r.bankCode)} />
                     </td>
                     <td className="px-2 py-1.5">
                       <TextField value={r.accountNo} onChange={(e) => setRow(r.k, { accountNo: e.target.value })} maxLength={32} className="w-full font-mono" placeholder="숫자와 -" />
                     </td>
-                    <td className="px-2 py-1.5 w-32">
+                    <td className="px-2 py-1.5">
                       <TextField value={r.holder} onChange={(e) => setRow(r.k, { holder: e.target.value })} maxLength={64} className="w-full" />
                     </td>
-                    <td className="px-2 py-1.5 w-32">
+                    <td className="px-2 py-1.5">
                       <TextField value={r.note} onChange={(e) => setRow(r.k, { note: e.target.value })} maxLength={200} className="w-full" placeholder="용도 등" />
                     </td>
                     <td className="px-2 py-1.5 text-center">
@@ -205,7 +208,7 @@ export function CompanyFormModal({
               </tbody>
             </table>
           </div>
-        </section>
+        </FormSection>
 
         {errors.length > 0 && (
           <ul className="flex flex-col gap-1 rounded-lg bg-danger/10 px-3 py-2 text-[11.5px] font-semibold text-danger">
@@ -214,5 +217,18 @@ export function CompanyFormModal({
         )}
       </div>
     </Modal>
+  );
+}
+
+/** 창 안의 묶음 — 작은 제목(오른쪽 단추 자리) + 내용. */
+function FormSection({ title, aside, children }: { title: string; aside?: ReactNode; children: ReactNode }) {
+  return (
+    <section className="flex flex-col gap-2.5">
+      <div className="flex items-center justify-between gap-3 border-b border-border pb-1.5">
+        <h3 className="text-[13px] font-extrabold text-ink">{title}</h3>
+        {aside}
+      </div>
+      {children}
+    </section>
   );
 }
