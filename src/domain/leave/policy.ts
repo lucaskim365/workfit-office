@@ -247,6 +247,8 @@ export interface CalculateLeaveDaysOptions {
   endDate?: string | null;
   rawDays?: number | null;
   title?: string | null;
+  /** 대체휴무 사용 단위 — 종일·오전반차·오후반차·반반차(없으면 종일) */
+  leaveUnit?: string | null;
   /** 공휴일 목록 — 기간 기반 일수 계산 시 주말과 함께 자동 제외 */
   holidays?: Array<{ date: string; name?: string }> | Map<string, string>;
 }
@@ -315,8 +317,15 @@ export function getExcludedHolidaysInRange(
  * - 종일 휴가는 기간(영업일) 또는 명시된 수치를 안전하게 반영합니다.
  * - 기간 기반 계산 시 주말 + 공휴일(holidays)을 자동 제외합니다.
  */
+/** 판정용 휴가 종류 — 단위(leaveUnit)가 반차·반반차면 그 단위, 아니면 종류 그대로(대체휴무 반차 등) */
+export function effectiveLeaveKind(leaveType?: string | null, leaveUnit?: string | null): string {
+  const unit = (leaveUnit || '').trim();
+  return unit && unit !== '종일' ? unit : (leaveType || '');
+}
+
 export function calculateLeaveDays(options: CalculateLeaveDaysOptions): number {
-  const { leaveType, startDate, endDate, rawDays, title, holidays } = options;
+  const { startDate, endDate, rawDays, title, holidays } = options;
+  const leaveType = effectiveLeaveKind(options.leaveType, options.leaveUnit);
 
   // 1. 반반차 최우선: 무조건 0.25일
   if (isQuarterDayLeave(leaveType, title)) {

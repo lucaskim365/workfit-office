@@ -61,6 +61,8 @@ export interface ApprovedLeaveInfo {
   docId?: string;
   /** 반반차 시간대 슬롯 (반반차일 때만) */
   quarterSlot?: QuarterLeaveSlot['key'];
+  /** 대체휴무 사용 단위 — 종일·오전반차·오후반차·반반차(없으면 종일). 다른 휴가는 종류로 판정 */
+  leaveUnit?: string;
 }
 
 
@@ -91,17 +93,17 @@ function netWindows(segments: Window[], from: number, to: number): Window[] {
   return out;
 }
 
+/** 반차 근무 4시간(분) */
+const HALF_MIN = 240;
+
 /**
- * 반차 부재 구간.
- * ⚠️ 임시 규칙(2026-10-02): 반차 경계 = 점심시간. 오후반차는 점심 시작(11:30)에 퇴근,
- * 오전반차는 점심 끝(12:30)에 출근. 회사 규칙이 확정되면 이 함수만 바꾼다.
+ * 반차 부재 구간 — 반차는 점심 없이 근무 4시간(2026-11-13 확정).
+ * 오후반차 = 출근 시각부터 4시간 근무 후 퇴근(08:30~12:30), 오전반차 = 퇴근 4시간 전 출근(13:30~17:30).
  */
 function halfDayWindows(policy: CommutePolicy): { AM: Window[]; PM: Window[] } {
-  const segments = workSegments(policy);
-  if (segments.length === 2) return { AM: [segments[0]], PM: [segments[1]] };
-  const [s, e] = segments[0];
-  const mid = s + Math.floor((e - s) / 2);
-  return { AM: [[s, mid]], PM: [[mid, e]] };
+  const ws = timeToMinutes(policy.workStartTime) ?? 510;
+  const we = timeToMinutes(policy.workEndTime) ?? 1050;
+  return { AM: [[ws, we - HALF_MIN]], PM: [[ws + HALF_MIN, we]] };
 }
 
 const QUARTER_SLOT_ORDER = ['AM1', 'AM2', 'PM1', 'PM2'] as const;
@@ -112,8 +114,22 @@ function quarterWindows(policy: CommutePolicy, slot: QuarterLeaveSlot['key']): W
   return netWindows(workSegments(policy), i * 120, (i + 1) * 120);
 }
 
+/** 휴가 한 건의 판정용 종류 — 대체휴무는 단위(leaveUnit)가 반차·반반차면 그 종류로 본다 */
+function kindOf(info: ApprovedLeaveInfo): string {
+  const unit = (info.leaveUnit || '').trim();
+  return unit && unit !== '종일' ? unit : info.leaveType;
+}
+
+function isHalf(info: ApprovedLeaveInfo): boolean {
+  return isHalfDayLeave(kindOf(info), info.docTitle);
+}
+
+function isQuarter(info: ApprovedLeaveInfo): boolean {
+  return isQuarterDayLeave(kindOf(info), info.docTitle);
+}
+
 function isAmHalf(info: ApprovedLeaveInfo): boolean {
-  const t = (info.leaveType || '').trim();
+  const t = kindOf(info).trim();
   if (t === '오전반차' || t === 'AM_HALF') return true;
   if (t === '오후반차' || t === 'PM_HALF') return false;
   const title = info.docTitle || '';
@@ -123,12 +139,25 @@ function isAmHalf(info: ApprovedLeaveInfo): boolean {
 
 /** 휴가 결재 1건이 차지하는 부재 구간 */
 function absenceWindowsOf(info: ApprovedLeaveInfo, policy: CommutePolicy): Window[] {
-  if (isQuarterDayLeave(info.leaveType, info.docTitle)) return quarterWindows(policy, info.quarterSlot ?? 'PM2');
-  if (isHalfDayLeave(info.leaveType, info.docTitle)) {
+  if (isQuarter(info)) return quarterWindows(policy, info.quarterSlot ?? 'PM2');
+  if (isHalf(info)) {
     const half = halfDayWindows(policy);
     return isAmHalf(info) ? half.AM : half.PM;
   }
   return workSegments(policy); // 연차 등 종일 휴가
+}
+
+/** 휴가 한 건이 인정하는 근무 분 — 반차 240, 반반차 120, 종일 480 */
+function creditOf(info: ApprovedLeaveInfo, policy: CommutePolicy): number {
+  if (isHalf(info)) return HALF_MIN;
+  return totalLength(absenceWindowsOf(info, policy));
+}
+
+/** 반차가 있는 날은 점심 없이 연속 근무 — 출근해야 하는 시간대를 근무 시작~끝 한 덩어리에서 뺀다 */
+function dayFrameOf(policy: CommutePolicy, leaves: ApprovedLeaveInfo[]): Window[] {
+  const segments = workSegments(policy);
+  if (!leaves.some(isHalf)) return segments;
+  return [[segments[0][0], segments[segments.length - 1][1]]];
 }
 
 function mergeWindows(windows: Window[]): Window[] {
@@ -171,7 +200,7 @@ export function approvedLeaveSpans(
   entries: ApprovedLeaveInfo[],
 ): { fullDay: boolean; windows: Window[] } {
   const leaves = entries.filter((e) => (e.category ?? 'LEAVE') === 'LEAVE');
-  const fullDay = leaves.some((e) => !isHalfDayLeave(e.leaveType, e.docTitle) && !isQuarterDayLeave(e.leaveType, e.docTitle));
+  const fullDay = leaves.some((e) => !isHalf(e) && !isQuarter(e));
   return { fullDay, windows: mergeWindows(leaves.flatMap((e) => absenceWindowsOf(e, policy))) };
 }
 
@@ -185,7 +214,7 @@ export function requiredWorkSpan(
 ): { start: number; end: number } | null {
   if (entries.some((e) => e.category === 'OUTSIDE' || e.category === 'TRIP')) return null;
   const leaves = entries.filter((e) => (e.category ?? 'LEAVE') === 'LEAVE');
-  const required = requiredWindows(workSegments(policy), mergeWindows(leaves.flatMap((e) => absenceWindowsOf(e, policy))));
+  const required = requiredWindows(dayFrameOf(policy, leaves), mergeWindows(leaves.flatMap((e) => absenceWindowsOf(e, policy))));
   if (required.length === 0) return null;
   return { start: required[0][0], end: required[required.length - 1][1] };
 }
@@ -240,8 +269,9 @@ export function evaluateCommuteRecord(
 
   const segments = workSegments(policy);
   const absence = mergeWindows(leaveEntries.flatMap((e) => absenceWindowsOf(e, policy)));
-  const leaveCreditMin = totalLength(absence);
-  const required = requiredWindows(segments, absence);
+  const leaveCreditMin = Math.min(480, leaveEntries.reduce((sum, e) => sum + creditOf(e, policy), 0));
+  const halfDay = leaveEntries.some(isHalf);
+  const required = requiredWindows(dayFrameOf(policy, leaveEntries), absence);
   const dayStart = segments[0][0];
   const dayEnd = segments[segments.length - 1][1];
 
@@ -316,7 +346,8 @@ export function evaluateCommuteRecord(
   // 근무시간: 체류 시간에서 점심시간과 겹친 만큼만 빼고, 휴가 인정 시간을 더한다(최대 8시간)
   const earlyLimitMin = timeToMinutes(policy.earlyInLimitTime) ?? 420;
   const stay: Window = [Math.max(inMin, earlyLimitMin), outMin];
-  const lunch: Window = segments.length === 2 ? [segments[0][1], segments[1][0]] : [0, 0];
+  // 반차 날은 점심 없이 4시간 연속 근무 — 점심을 빼지 않는다
+  const lunch: Window = segments.length === 2 && !halfDay ? [segments[0][1], segments[1][0]] : [0, 0];
   let totalMin = Math.max(0, stay[1] - stay[0] - overlap(stay, lunch));
   if (leaveCreditMin > 0) totalMin = Math.min(480, totalMin + leaveCreditMin);
   if (workStatus) totalMin = Math.max(totalMin, 480);

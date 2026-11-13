@@ -53,26 +53,36 @@ test('결재가 없으면 08:39 출근은 9분 지각이다', () => {
   assert.equal(r.lateMin, 9);
 });
 
-// ── 반차 (임시 규칙: 오후반차 11:30 퇴근, 오전반차 12:30 출근) ──
+// ── 반차 (2026-11-13 확정: 반차 = 점심 없이 근무 4시간. 오전반차 13:30 출근, 오후반차 12:30 퇴근) ──
 
-test('오전반차는 12:30까지 출근하면 지각이 아니다', () => {
-  const r = evalDay('12:30', '17:30', [leave('오전반차')]);
+test('오전반차는 13:30까지 출근하면 지각이 아니고, 13:30~17:30 근무로 8시간이 인정된다', () => {
+  const r = evalDay('13:30', '17:30', [leave('오전반차')]);
   assert.equal(r.status, 'normal');
   assert.equal(r.lateMin, 0);
   assert.equal(r.totalMin, 480);
 });
 
-test('오전반차인데 12:40에 출근하면 10분 지각이다', () => {
-  const r = evalDay('12:40', '17:30', [leave('오전반차')]);
+test('오전반차인데 13:40에 출근하면 10분 지각이다(예전 12:30 기준 아님)', () => {
+  const r = evalDay('13:40', '17:30', [leave('오전반차')]);
   assert.equal(r.status, 'late');
   assert.equal(r.lateMin, 10);
 });
 
-test('오후반차는 08:30~11:30 근무로 8시간이 인정된다', () => {
-  const r = evalDay('08:30', '11:30', [leave('오후반차')]);
+test('오후반차는 08:30~12:30 근무로 8시간이 인정된다 — 점심을 빼지 않는다', () => {
+  const r = evalDay('08:30', '12:30', [leave('오후반차')]);
   assert.equal(r.status, 'normal');
   assert.equal(r.lateMin, 0);
   assert.equal(r.totalMin, 480);
+});
+
+test('오후반차인데 11:30에 퇴근하면 근무 3시간 + 반차 4시간 = 7시간', () => {
+  const r = evalDay('08:30', '11:30', [leave('오후반차')]);
+  assert.equal(r.totalMin, 420);
+});
+
+test('반차 날 출근해야 하는 시간대 — 오후반차 08:30~12:30, 오전반차 13:30~17:30', () => {
+  assert.deepEqual(requiredWorkSpan(policy, [leave('오후반차')]), { start: 510, end: 750 });
+  assert.deepEqual(requiredWorkSpan(policy, [leave('오전반차')]), { start: 810, end: 1050 });
 });
 
 test('오후반차는 퇴근 태그가 없어도 정상 처리된다', () => {
@@ -87,9 +97,23 @@ test('오전반차는 출근 태그가 없어도 퇴근 태그만으로 정상 �
 });
 
 test('구버전 "반차"(오전/오후 구분 없음)는 오후반차로 본다', () => {
-  const r = evalDay('08:30', '11:30', [leave('반차')]);
+  const r = evalDay('08:30', '12:30', [leave('반차')]);
   assert.equal(r.status, 'normal');
   assert.equal(r.totalMin, 480);
+});
+
+test('대체휴무도 단위가 반차면 반차 시간대 — 오전반차 단위는 13:30 출근', () => {
+  const r = evalDay('13:30', '17:30', [leave('대체휴무', { leaveUnit: '오전반차' })]);
+  assert.equal(r.status, 'normal');
+  assert.equal(r.totalMin, 480);
+  const q = evalDay('10:30', '17:30', [leave('대체휴무', { leaveUnit: '반반차', quarterSlot: 'AM1' })]);
+  assert.equal(q.status, 'normal');
+  assert.equal(q.lateMin, 0);
+});
+
+test('대체휴무 종일(단위 없음)은 종일 휴가', () => {
+  const r = evalDay(null, null, [leave('대체휴무')]);
+  assert.equal(r.status, 'leave');
 });
 
 // ── 반반차 (점심 제외 실근무 타임라인을 2시간씩 나눈 슬롯) ──
@@ -141,14 +165,6 @@ test('결재가 없는 날의 근무 시간대는 정책의 출퇴근 시각이�
   assert.deepEqual(requiredWorkSpan(policy, []), { start: 510, end: 1050 });
 });
 
-test('오후반차 날은 11:30에 근무가 끝난다', () => {
-  assert.deepEqual(requiredWorkSpan(policy, [leave('오후반차')]), { start: 510, end: 690 });
-});
-
-test('오전반차 날은 12:30에 근무가 시작된다', () => {
-  assert.deepEqual(requiredWorkSpan(policy, [leave('오전반차')]), { start: 750, end: 1050 });
-});
-
 test('종일 휴가·외근·출장 날은 출근해야 하는 시간대가 없다', () => {
   assert.equal(requiredWorkSpan(policy, [leave('연차')]), null);
   assert.equal(requiredWorkSpan(policy, [OUTSIDE]), null);
@@ -158,7 +174,7 @@ test('종일 휴가·외근·출장 날은 출근해야 하는 시간대가 없�
 
 test('연차는 종일 휴가로, 반차는 해당 시간대로 돌려준다', () => {
   assert.deepEqual(approvedLeaveSpans(policy, [leave('연차')]), { fullDay: true, windows: [[510, 690], [750, 1050]] });
-  assert.deepEqual(approvedLeaveSpans(policy, [leave('오전반차')]), { fullDay: false, windows: [[510, 690]] });
+  assert.deepEqual(approvedLeaveSpans(policy, [leave('오전반차')]), { fullDay: false, windows: [[510, 810]] }); // 08:30~13:30 부재
   assert.deepEqual(approvedLeaveSpans(policy, [OUTSIDE]), { fullDay: false, windows: [] });
 });
 

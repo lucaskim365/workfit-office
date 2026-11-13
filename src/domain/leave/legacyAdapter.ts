@@ -8,7 +8,7 @@
  */
 
 import type { ApprovalDoc, DocStatus } from '@/domain/approvalDoc/schema';
-import { getDefaultTimeWindow, calculateLeaveDays, type CalculateLeaveDaysOptions } from './policy';
+import { getDefaultTimeWindow, calculateLeaveDays, effectiveLeaveKind, type CalculateLeaveDaysOptions } from './policy';
 
 export interface NormalizedLeaveRecord {
   docId: string;
@@ -22,6 +22,7 @@ export interface NormalizedLeaveRecord {
   startTime: string;              // "08:30" or "13:30"
   endTime: string;                // "12:30" or "17:30"
   days: number;                   // 1.0, 0.5, 0.25 (과거 수치 절대 보존)
+  leaveUnit?: string;             // 대체휴무 사용 단위(종일·오전반차·오후반차·반반차)
   status: DocStatus;
   isLegacy: boolean;              // 구버전 결재문서 여부
   reason?: string | null;
@@ -73,6 +74,8 @@ export function normalizeLegacyLeaveDoc(
   const fieldValues = (doc as any).fieldValues;
 
   const rawLeaveType = form?.leaveType || fieldValues?.leaveType || (doc.title?.includes('반차') ? '반차' : '연차');
+  const leaveUnit: string | undefined = (form as any)?.leaveUnit || fieldValues?.leaveUnit || undefined;
+  const kind = effectiveLeaveKind(rawLeaveType, leaveUnit);
   const startDate = form?.startDate || fieldValues?.period || doc.createdAt?.slice(0, 10) || '';
   const endDate = form?.endDate || fieldValues?.period__end || startDate;
 
@@ -92,6 +95,7 @@ export function normalizeLegacyLeaveDoc(
     startDate,
     endDate,
     rawDays,
+    leaveUnit,
     title: doc.title,
     holidays: opts?.holidays,
   });
@@ -104,13 +108,13 @@ export function normalizeLegacyLeaveDoc(
 
   if (!startTime || !endTime) {
     isLegacy = true;
-    if (rawLeaveType === '반차' || doc.title?.includes('반차')) {
+    if (kind === '반차' || (kind === rawLeaveType && doc.title?.includes('반차'))) {
       const inferred = inferHalfDayTimeWindow(doc.title, doc.body || (doc as any).content || '');
       finalLeaveType = inferred.leaveType;
       startTime = inferred.startTime;
       endTime = inferred.endTime;
     } else {
-      const defaultWin = getDefaultTimeWindow(rawLeaveType);
+      const defaultWin = getDefaultTimeWindow(kind);
       startTime = defaultWin.startTime;
       endTime = defaultWin.endTime;
     }
@@ -128,6 +132,7 @@ export function normalizeLegacyLeaveDoc(
     startTime,
     endTime,
     days,
+    leaveUnit,
     status: doc.status,
     isLegacy,
     reason: doc.body || (doc as any).content,

@@ -1,6 +1,6 @@
 import type { ApprovalDoc } from '@/domain/approvalDoc/schema';
 import { extractScheduleInfo, type StandardScheduleInfo } from '@/domain/approvalDoc/scheduleEngine';
-import { isQuarterDayLeave, QUARTER_LEAVE_SLOTS, type QuarterLeaveSlot } from '@/domain/leave/policy';
+import { effectiveLeaveKind, isQuarterDayLeave, QUARTER_LEAVE_SLOTS, type QuarterLeaveSlot } from '@/domain/leave/policy';
 import type { ApprovedLeaveInfo } from './engine';
 import type { OutsideWork } from '@/domain/outsideWork/schema';
 import { outsideWorkToDayInfo } from '@/domain/outsideWork/view';
@@ -27,8 +27,14 @@ function eachDate(start: string, end: string, fn: (date: string) => void) {
   }
 }
 
+/** 대체휴무 사용 단위(종일·오전반차·오후반차·반반차) — 없으면 undefined */
+function leaveUnitOf(doc: ApprovalDoc): string | undefined {
+  const v = (doc.form as { leaveUnit?: unknown } | undefined)?.leaveUnit ?? doc.fieldValues?.leaveUnit;
+  return typeof v === 'string' && v.trim() ? v.trim() : undefined;
+}
+
 function quarterSlotOf(doc: ApprovalDoc, s: StandardScheduleInfo): QuarterLeaveSlot['key'] | undefined {
-  if (!isQuarterDayLeave(s.leaveType, s.docTitle)) return undefined;
+  if (!isQuarterDayLeave(effectiveLeaveKind(s.leaveType, leaveUnitOf(doc)), s.docTitle)) return undefined;
   const fromField = QUARTER_LEAVE_SLOTS.find((slot) => slot.key === doc.fieldValues?.quarterSlot);
   if (fromField) return fromField.key;
   const fromTime = QUARTER_LEAVE_SLOTS.find((slot) => slot.startTime === s.startTime);
@@ -47,6 +53,7 @@ function toInfo(doc: ApprovalDoc, s: StandardScheduleInfo): ApprovedLeaveInfo {
     docTitle: s.docTitle,
     docId: s.docId,
     quarterSlot: quarterSlotOf(doc, s),
+    leaveUnit: s.category === 'LEAVE' ? leaveUnitOf(doc) : undefined,
   };
 }
 
