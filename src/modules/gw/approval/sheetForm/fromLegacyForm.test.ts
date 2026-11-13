@@ -3,8 +3,8 @@ import test from 'node:test';
 import type { Sheet } from '@/lib/sheet';
 import { approvalFormSchema, formFieldSchema, type ApprovalForm } from '@/domain/approvalForm/schema';
 import { APPROVAL_NS, approvalCellProps, clearStaleDependent, conditionHiddenRows, draftOptions, requiredMissing, rowConditionOf, sheetDocFields, type CellInput } from '@/domain/approvalForm/sheet/approvalSheet';
-import { setCellValue } from '@/lib/sheet';
-import { legacyFormToSheet, legacyRepeatRows, translateLegacyFormula } from './fromLegacyForm';
+import { colLetter, setCellValue } from '@/lib/sheet';
+import { legacyFormToSheet, legacyRepeatRows, spreadColumns, translateLegacyFormula } from './fromLegacyForm';
 import { repeatSections } from '@/domain/approvalForm/sheet/repeatRows';
 import { isFullHeaderSheet } from '@/domain/approvalForm/sheet/sheetHeader';
 
@@ -112,11 +112,12 @@ test('기존 서식 → 시트 — 표·직인·자동번호·회사정보·안�
   const head = findText(s, '품명')!;
   assert.equal(s.styles[`${head.r}:${s.cols[0]}`]?.bg, '#f2f2f2');
   assert.equal(approvalCellProps(s, head.r + 1, 0).input?.type, 'text');
-  assert.equal(approvalCellProps(s, head.r + 1, 1).input, undefined, '수식 칸은 입력 칸이 아님');
+  const qty = findText(s, '수량')!.c; // 표 둘째 열이 놓인 시트 열(표 열이 시트보다 적어 나뉘어 놓임)
+  assert.equal(approvalCellProps(s, head.r + 1, qty).input, undefined, '수식 칸은 입력 칸이 아님');
   assert.equal(repeatSections(s).length, 1);
   assert.equal(repeatSections(s)[0].first, head.r + 1);
   // 기존 수식(표 안 좌표 A1 = 머리 줄 첫 칸) → 시트 수식(행만 민다)
-  assert.equal(s.formulas[`${head.r + 1}:${s.cols[1]}`], `=A${head.r + 1}`);
+  assert.equal(s.formulas[`${head.r + 1}:${s.cols[qty]}`], `=A${head.r + 1}`);
   assert.ok(!warnings.some((w) => w.includes('수식')));
   // 직인 — 발신 명의 + 직인 칸(고른 직인)
   const seal = findText(s, '주식회사 워크핏 대표이사')!;
@@ -165,7 +166,7 @@ test('기존 서식 → 시트 — 표: 수식 칸 말고 모두 입력 칸(미�
   assert.equal(approvalCellProps(s, head.r, 0).input?.type, 'text', '머리 줄도 고칠 수 있음');
   const pre = findText(s, '자재')!;
   assert.equal(approvalCellProps(s, pre.r, pre.c).input?.type, 'text', '미리 쓴 글자는 기본값이 든 입력 칸');
-  assert.equal(approvalCellProps(s, pre.r, pre.c + 1).input?.type, 'text');
+  assert.equal(approvalCellProps(s, pre.r, head.c).input?.type, 'text');
   // 표 밖 항목 이름표(라벨)는 기존 양식에서도 못 고쳤다 — 고정
   const label = findText(s, '내역');
   assert.ok(!label || approvalCellProps(s, label.r, label.c).input === undefined);
@@ -295,7 +296,10 @@ test('다른 표를 가리키는 수식은 그 표가 아래에 놓여도 옮긴
   const { sheet: s, warnings } = legacyFormToSheet(form);
   const profit = findText(s, '이익')!;
   const total = findText(s, '소계')!;
-  assert.equal(s.formulas[`${profit.r}:${s.cols[1]}`], `=B${total.r + 1} - 1`);
+  // 두 표 모두 둘째 열('금액')이 같은 시트 열에 놓인다 — 수식도 그 열을 가리킨다
+  const amountCol = findText(s, '금액')!.c;
+  assert.ok(amountCol > 1, '표 열이 시트 열에 나뉘어 놓임');
+  assert.equal(s.formulas[`${profit.r}:${s.cols[amountCol]}`], `=${colLetter(amountCol)}${total.r + 1} - 1`);
   assert.ok(!warnings.some((w) => w.includes('수식')));
 });
 
@@ -327,9 +331,10 @@ test('금액 모양 — 금액 항목, 금액 수식(소계)이 든 열의 빈 �
   const amt = findText(s, '청구 금액')!;
   assert.equal(s.styles[`${amt.r}:${s.cols[1]}`]?.numFmt, 'currency');
   const sw = findText(s, 'SW')!;
-  assert.equal(approvalCellProps(s, sw.r, 1).input?.type, 'currency');
-  assert.equal(s.styles[`${sw.r}:${s.cols[1]}`]?.numFmt, 'currency');
-  assert.equal(approvalCellProps(s, findText(s, '금액')!.r, 1).input?.type, 'text', '머리 줄 이름표는 그대로');
+  const money = findText(s, '금액')!; // 표의 금액 열 머리 — 그 열이 놓인 시트 열
+  assert.equal(approvalCellProps(s, sw.r, money.c).input?.type, 'currency');
+  assert.equal(s.styles[`${sw.r}:${s.cols[money.c]}`]?.numFmt, 'currency');
+  assert.equal(approvalCellProps(s, money.r, money.c).input?.type, 'text', '머리 줄 이름표는 그대로');
 });
 
 test('기존 표 변환 — 금액 칸·금액 수식 칸은 오른쪽 정렬(기존 표의 가운데 정렬 대신), 글자 칸은 그대로', () => {
@@ -359,4 +364,49 @@ test('기존 표 변환 — 금액 칸·금액 수식 칸은 오른쪽 정렬(�
   assert.equal(s.styles[`${r}:${s.cols[0]}`]?.align, 'center', '글자 칸은 기존 정렬');
   assert.equal(s.styles[`${r}:${s.cols[1]}`]?.align, 'right', '금액 입력 칸');
   assert.equal(s.styles[`${r}:${s.cols[2]}`]?.align, 'right', '금액 수식 칸');
+});
+
+test('표 열 나누기 — 기존 양식의 열 너비 비율대로, 모든 열이 한 칸은 받고 합은 시트 열 수', () => {
+  assert.deepEqual(spreadColumns([1, 1, 1, 1], 12), [3, 3, 3, 3]);
+  assert.deepEqual(spreadColumns([100, 100, 100, 300], 12), [2, 2, 2, 6]);
+  assert.deepEqual(spreadColumns([1, 1], 4), [2, 2]);
+  assert.deepEqual(spreadColumns([1, 1, 1], 4), [2, 1, 1]);
+  // 아주 좁은 열이 있어도 한 칸은 받는다
+  assert.deepEqual(spreadColumns([1, 1000, 1], 12), [1, 10, 1]);
+  // 표 열 수 = 시트 열 수면 그대로
+  assert.deepEqual(spreadColumns([5, 1, 9], 3), [1, 1, 1]);
+  for (const [w, n] of [[[3, 1, 4, 1, 5], 12], [[1, 1, 1, 1, 1, 1, 1], 12], [[0, NaN, 2], 9]] as const) {
+    const spans = spreadColumns([...w], n);
+    assert.equal(spans.reduce((a, x) => a + x, 0), n);
+    assert.ok(spans.every((x) => x >= 1));
+  }
+});
+
+test('열이 적은 표는 시트 폭에 고르게 놓인다 — 마지막 열만 넓어지지 않는다(대금 지급 조건 표)', () => {
+  const tbl = (cols: string[], rows: Record<string, string>[], extra: Record<string, unknown> = {}) =>
+    JSON.stringify({ version: 2, cols, rows, legacyHeaderRow: true, colWidths: {}, tableWidth: '100%', merges: [], cellFormulas: {}, cellStyles: {}, secretCols: [], secretCells: [], secretRows: [], ...extra });
+  const wide = Array.from({ length: 12 }, (_, i) => `c${i}`);
+  const form = legacyForm('발주', [
+    { key: 'w', label: '견적', type: '표', placeholder: tbl(wide, [Object.fromEntries(wide.map((c) => [c, c]))]) },
+    {
+      key: 'pay', label: '지급 조건', type: '표',
+      placeholder: tbl(['구분', '비율', '금액', '조건'], [{ 구분: '구분', 비율: '비율', 금액: '금액', 조건: '조건' }, { 구분: '선금', 비율: '', 금액: '', 조건: '' }], {
+        colWidths: { 구분: '100px', 비율: '100px', 금액: '100px', 조건: '300px' },
+        merges: [{ startRow: 1, startCol: 1, rowSpan: 1, colSpan: 2 }],
+        cellFormulas: { '1:조건': { expression: '=[금액]' } },
+      }),
+    },
+  ]);
+  const { sheet: s } = legacyFormToSheet(form);
+  assert.equal(s.cols.length, 12);
+  const head = findText(s, '구분')!;
+  // 열 자리 — 너비 비율 1:1:1:3 → 2·2·2·6 칸
+  assert.deepEqual(['구분', '비율', '금액', '조건'].map((t) => findText(s, t)!.c), [0, 2, 4, 6]);
+  const mergeAt = (r: number, c: number) => s.merges.find((m) => m.startRow === r && m.startCol === c);
+  assert.equal(mergeAt(head.r, 0)?.colSpan, 2);
+  assert.equal(mergeAt(head.r, 6)?.colSpan, 6);
+  // 표 안 병합(비율~금액)은 두 열이 차지한 시트 칸 전체로
+  assert.equal(mergeAt(head.r + 1, 2)?.colSpan, 4);
+  // 수식의 열 이름은 그 열이 놓인 시트 열로
+  assert.equal(s.formulas[`${head.r + 1}:${s.cols[6]}`], `=E${head.r + 2}`);
 });

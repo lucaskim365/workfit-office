@@ -9,6 +9,7 @@
  */
 import {
   applyBorder,
+  colIndex,
   colLetter,
   parseNumber,
   applyStyle,
@@ -67,6 +68,42 @@ export interface LegacyTableAt {
   top: number;
   cols: string[];
   rows: Array<Record<string, string>>;
+  /** 표 열(0부터) → 그 열이 시작하는 시트 열. 없으면 표 열 자리 그대로(표 열 수 = 시트 열 수) */
+  colAt?: number[];
+}
+
+/** 표 열이 놓인 시트 열 */
+const sheetColOf = (t: LegacyTableAt, j: number) => t.colAt?.[j] ?? j;
+
+/**
+ * 표 열을 시트 열에 나눠 놓기 — 표 열이 시트 열보다 적을 때, 열마다 시트 열 몇 칸을 차지할지(합 = n).
+ * 기존 양식의 열 너비 비율(weights)대로 나눈다 — 모든 열이 한 칸은 받고, 남는 칸은 비율이 큰 열부터.
+ * 예전에는 앞 열들을 한 칸씩 두고 마지막 열이 남는 칸을 모두 덮어, 왼쪽 칸은 좁고 오른쪽 끝만 넓은 표가 됐다
+ */
+export function spreadColumns(weights: number[], n: number): number[] {
+  const tc = weights.length;
+  if (tc === 0) return [];
+  if (tc >= n) return weights.map(() => 1);
+  const w = weights.map((x) => (Number.isFinite(x) && x > 0 ? x : 1));
+  const total = w.reduce((a, x) => a + x, 0);
+  // 한 칸씩 먼저 주고, 나머지 칸을 비율대로(큰 나머지부터)
+  const extra = n - tc;
+  const ideal = w.map((x) => (x / total) * n - 1);
+  const floor = ideal.map((x) => Math.max(0, Math.floor(x)));
+  let left = extra - floor.reduce((a, x) => a + x, 0);
+  const order = ideal.map((x, i) => ({ i, rest: x - floor[i] })).sort((a, b) => b.rest - a.rest || a.i - b.i);
+  for (let k = 0; left > 0; k = (k + 1) % tc, left--) floor[order[k].i]++;
+  // 한 칸 보장 때문에 넘치면(아주 좁은 열이 많을 때) 가장 넓은 열에서 덜어 낸다
+  for (; left < 0; left++) floor[floor.indexOf(Math.max(...floor))]--;
+  return floor.map((x) => x + 1);
+}
+
+/** 기존 표 열의 너비 어림(px) — 정해 둔 너비가 있으면 그 값, 없으면(자동 너비) 그 열에서 가장 긴 글자 길이로 */
+function legacyColWeight(t: { rows: Array<Record<string, string>>; colWidths: Record<string, string> }, col: string): number {
+  const set = parseFloat(t.colWidths[col] ?? '');
+  if (Number.isFinite(set) && set > 0) return set;
+  const longest = Math.max(0, ...t.rows.map((row) => Math.max(0, ...String(row[col] ?? '').split(/\r?\n/).map((line) => line.length))));
+  return Math.min(360, Math.max(48, longest * 13 + 16));
 }
 
 /** 표 열 자리 — 열 키 또는 머리 줄(0번 줄) 글자 */
@@ -103,7 +140,7 @@ export function translateLegacyFormula(
       failed = true;
       return m;
     }
-    outside.push(`${colLetter(j)}${t.top + rr + 1}`);
+    outside.push(`${colLetter(sheetColOf(t, j))}${t.top + rr + 1}`);
     return `@@${outside.length - 1}@@`;
   });
   if (failed || expr.includes('!')) return null;
@@ -118,7 +155,8 @@ export function translateLegacyFormula(
       if (/^SUM/i.test(m)) {
         const j = sumCol !== undefined ? colOf(sumCol) : at.cols.indexOf(at.col);
         if (j < 0) return fail();
-        return at.r === 0 ? '0' : `SUM(${colLetter(j)}${sheetRow(0)}:${colLetter(j)}${sheetRow(at.r - 1)})`;
+        const L = colLetter(sheetColOf(at, j));
+        return at.r === 0 ? '0' : `SUM(${L}${sheetRow(0)}:${L}${sheetRow(at.r - 1)})`;
       }
       if (bracket !== undefined) {
         // [줄 이름:열] — 첫 열이 그 이름인 줄의 그 열, [열] — 같은 줄의 그 열
@@ -128,16 +166,17 @@ export function translateLegacyFormula(
           const j = colOf(bracket.slice(k + 1));
           const rr = at.rows.findIndex((row) => String(row[at.cols[0]] ?? '').trim() === label);
           if (j < 0 || rr < 0) return fail();
-          return `${colLetter(j)}${sheetRow(rr)}`;
+          return `${colLetter(sheetColOf(at, j))}${sheetRow(rr)}`;
         }
         const j = colOf(bracket);
         if (j < 0) return fail();
-        return `${colLetter(j)}${sheetRow(at.r)}`;
+        return `${colLetter(sheetColOf(at, j))}${sheetRow(at.r)}`;
       }
-      // 표 안 좌표 A1 — 열 글자 그대로, 행만 민다
+      // 표 안 좌표 A1 — 표 열 글자를 그 열이 놓인 시트 열로, 행은 표 자리만큼 민다
       const n = Number(num);
       if (!L || !Number.isFinite(n) || n < 1) return fail();
-      return `${L.toUpperCase()}${at.top + n}`;
+      const tj = colIndex(L.toUpperCase());
+      return `${colLetter(tj < at.cols.length ? sheetColOf(at, tj) : tj)}${at.top + n}`;
     }
   );
   if (failed) return null;
@@ -451,8 +490,11 @@ export function legacyFormToSheet(form: ApprovalForm): LegacyConversion {
       extHide(r, f);
     }
     const top = row;
-    const tc = t.cols.length;
-    if (f.label) tables.set(f.label.trim(), { top, cols: t.cols, rows: t.rows });
+    // 표 열이 시트보다 적으면 기존 양식의 열 너비 비율대로 시트 열에 나눠 놓는다(spreadColumns)
+    const spans = spreadColumns(t.cols.map((c) => legacyColWeight(t, c)), n);
+    const colAt = spans.map((_, j) => spans.slice(0, j).reduce((a, x) => a + x, 0));
+    const colEnd = (j: number) => colAt[j] + spans[j] - 1;
+    if (f.label) tables.set(f.label.trim(), { top, cols: t.cols, rows: t.rows, colAt });
     const headerRows = t.legacyHeaderRow || t.cols.some((c) => t.cellStyles[`0:${c}`]?.bold) ? 1 : 0;
     const repeat = legacyRepeatRows(t, headerRows);
     /** 금액 수식(소계 등)이 든 열 — 그 열의 빈 입력 칸도 금액(쉼표)으로. 기존 표는 입력 칸에 금액 서식을 안 건 경우가 많다 */
@@ -464,13 +506,13 @@ export function legacyFormToSheet(form: ApprovalForm): LegacyConversion {
     const untranslated: string[] = [];
     t.rows.forEach((tr, i) => {
       const r = nextRow();
-      t.cols.forEach((tcol, j) => {
-        // 표 열이 시트보다 적으면 마지막 열이 남는 열을 덮는다
-        const c2 = j === tc - 1 ? n - 1 : j;
-        if (c2 > j) merge(r, j, c2);
+      t.cols.forEach((tcol, tj) => {
+        /** 이 칸이 놓이는 시트 열(여러 칸을 차지하면 합친다) */
+        const j = colAt[tj];
+        if (colEnd(tj) > j) merge(r, j, colEnd(tj));
         const text = String(tr[tcol] ?? '');
         const legacyFormula = t.cellFormulas[`${i}:${tcol}`] ?? (t.sumCell && t.sumCell.rIdx === i && t.sumCell.col === tcol ? { expression: '=SUM(ABOVE)' } : undefined);
-        const at = { r: i, col: tcol, top, cols: t.cols, rows: t.rows };
+        const at = { r: i, col: tcol, top, cols: t.cols, rows: t.rows, colAt };
         const formula = legacyFormula ? translateLegacyFormula(legacyFormula.expression, { ...at, tables }, legacyFormula.format) : null;
         if (formula) putFormula(r, j, formula, legacyFormula?.format);
         else {
@@ -509,7 +551,7 @@ export function legacyFormToSheet(form: ApprovalForm): LegacyConversion {
     });
     // 표 안 병합
     t.merges.forEach((m) => {
-      s = mergeRange(s, { r1: top + m.startRow, r2: top + m.startRow + m.rowSpan - 1, c1: m.startCol, c2: m.startCol + m.colSpan - 1 });
+      s = mergeRange(s, { r1: top + m.startRow, r2: top + m.startRow + m.rowSpan - 1, c1: colAt[m.startCol], c2: colEnd(m.startCol + m.colSpan - 1) });
     });
     const bottom = row - 1;
     if (bottom >= top) {
