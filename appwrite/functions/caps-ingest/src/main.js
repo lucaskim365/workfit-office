@@ -23,6 +23,7 @@ import { Client, Databases, Query } from 'node-appwrite';
 import { z } from 'zod';
 import { resolveUserId } from './token.js';
 import { affiliationOf, headDepts, matchesExecMapping, memberUserIds } from './scope.js';
+import { commuteScopeFromAuthz, givesCommuteView, toAssignment, toDept, toPosition, toRole, toUser } from './authz.js';
 
 /* ------------------------------------------------------------------ 계약 §2 인증 */
 
@@ -284,6 +285,92 @@ async function mastersOf(dbs, DB, profiles, log) {
  *   - 부서장: 위 + 내가 맡은 부서, 그 부서의 인명관리·계정·직원
  * 직원(employees)과는 예전처럼 이름이 같은지로 잇는다(이름 앞뒤 공백까지 같아야 한다).
  */
+/**
+ * 새 권한 체계(authRoles·authAssignments)로 정한 열람 범위. 역할이 없거나(옮기기 전) 못 읽으면 null — 예전 규칙으로 간다.
+ * 판정은 authz.js(웹 앱 판정 엔진과 같은 규칙)가 하고, 여기서는 범위 안 부서의 직원을 찾는다.
+ */
+async function authzViewerScope(dbs, DB, me, myProfiles, myEmployees, myEmpId, myName, log) {
+  /*
+    전량 조회는 하지 않는다(요청이 몰리면 30초 한도에 걸린다 — caps-ingest-read.test). 판정에 쓰이는 것만 조건으로 묻는다.
+    역할은 종류 조건으로 전부(웹 앱처럼 하나라도 있으면 새 체계), 지정은 열람을 주는 역할 것만,
+    부서는 내 부서·겸직·맡은 부서·지정에 나온 부서와 그 하위 부서만, 직급은 직급 지정이 있을 때 그 직급과 내 직급만.
+  */
+  let roleDocs;
+  try {
+    roleDocs = await listAll(dbs, DB, 'authRoles', [Query.equal('kind', ['super', 'base', 'custom'])], log);
+  } catch (err) {
+    log(`authRoles 조회 스킵/실패 — 예전 규칙: ${err?.message || err}`);
+    return null;
+  }
+  if (roleDocs.length === 0) return null;
+  const roles = roleDocs.map(toRole);
+  const viewRoleIds = roles.filter((r) => r.use && r.kind !== 'base' && givesCommuteView(r)).map((r) => r.id);
+  const assignments = (viewRoleIds.length ? await listWhereIn(dbs, DB, 'authAssignments', 'roleId', viewRoleIds, log) : []).map(toAssignment);
+  const user = toUser(me, myProfiles[0]);
+
+  const deptById = new Map();
+  const keep = (docs) => {
+    const fresh = [];
+    for (const d of docs) {
+      const x = toDept(d);
+      if (!deptById.has(x.id)) {
+        deptById.set(x.id, { x, raw: d });
+        fresh.push(x.id);
+      }
+    }
+    return fresh;
+  };
+  const seedIds = [
+    user.deptId,
+    ...user.assignments.map((a) => a?.deptId),
+    ...assignments.filter((a) => a.targetType === 'DEPT').map((a) => a.targetId),
+    ...assignments.flatMap((a) => (a.scopeType === 'DEPTS' ? a.scopeDeptIds : [])),
+  ];
+  const [byIds, byDeptName, headed] = await Promise.all([
+    listWhereIn(dbs, DB, 'departments', '$id', seedIds, log),
+    listWhereIn(dbs, DB, 'departments', 'name', [user.dept], log),
+    listAll(dbs, DB, 'departments', [Query.equal('headUserId', me.id)], log),
+  ]);
+  // 하위 부서 — 아는 부서들의 자식을 더 나오지 않을 때까지(부서 단계만큼만 묻는다)
+  for (let frontier = keep([...byIds, ...byDeptName, ...headed]); frontier.length; ) {
+    frontier = keep(await listWhereIn(dbs, DB, 'departments', 'parentId', frontier, log));
+  }
+  const positionTargets = assignments.filter((a) => a.targetType === 'POSITION').map((a) => a.targetId);
+  const posDocs = positionTargets.length
+    ? [
+        ...(await listWhereIn(dbs, DB, 'positions', '$id', positionTargets, log)),
+        ...(await listWhereIn(dbs, DB, 'positions', 'name', [user.position], log)),
+      ]
+    : [];
+  const deptDocs = [...deptById.values()].map((v) => v.raw);
+  const org = { depts: [...deptById.values()].map((v) => v.x), positions: posDocs.map(toPosition) };
+  const sc = commuteScopeFromAuthz({ user, roles, assignments, org });
+  const uid = me.id;
+  if (sc.all) {
+    log(`scope uid=${uid} kind=admin (authz 전사) empId=${myEmpId ?? '(없음)'}`);
+    return { empIds: null, kind: 'admin', deptNames: [], myEmpId, myName };
+  }
+  if (sc.deptIds.size === 0) {
+    const empIds = new Set(myEmployees.map((e) => Number(e.empId)));
+    log(`scope uid=${uid} kind=self (authz) 대상 ${empIds.size}명 empId=${myEmpId ?? '(없음)'}`);
+    return { empIds, kind: 'self', deptNames: [], myEmpId, myName };
+  }
+  const deptIds = [...sc.deptIds];
+  const deptNames = org.depts.filter((d) => sc.deptIds.has(d.id)).map((d) => d.name);
+  // 범위 안 부서의 인명관리 — 부서 ID 가 맞는 것 + ID 를 아직 안 채운 예전 프로필 중 부서 이름이 맞는 것
+  const [byId, byName] = await Promise.all([
+    listWhereIn(dbs, DB, 'employeeProfiles', 'deptId', deptIds, log),
+    listWhereIn(dbs, DB, 'employeeProfiles', 'dept', deptNames, log),
+  ]);
+  const memberIds = memberUserIds([...byId, ...byName], deptIds, { depts: deptDocs, positions: [], jobTitles: [] });
+  memberIds.add(uid);
+  const members = await listWhereIn(dbs, DB, 'users', 'id', [...memberIds], log);
+  const employees = await listWhereIn(dbs, DB, 'employees', 'name', members.map((u) => String(u.name).trim()), log);
+  const empIds = new Set(employees.map((e) => Number(e.empId)));
+  log(`scope uid=${uid} kind=head (authz) 부서=${deptNames.join(',')} 대상 ${empIds.size}명 empId=${myEmpId ?? '(없음)'}`);
+  return { empIds, kind: 'head', deptNames, myEmpId, myName };
+}
+
 async function resolveViewerScope(dbs, DB, uid, log) {
   const [me, myProfiles, execMappings] = await Promise.all([
     dbs.listDocuments(DB, 'users', [Query.equal('id', uid), Query.limit(1)]).then((r) => r.documents[0]),
@@ -306,6 +393,12 @@ async function resolveViewerScope(dbs, DB, uid, log) {
   ]);
   const aff = affiliationOf(uid, myProfiles, masters);
   const myEmpId = myEmployees.length > 0 ? Number(myEmployees[0].empId) : null;
+
+  // 0. 새 권한 체계로 옮겼으면(authRoles 에 역할이 있으면) 그것만 본다 — 화면과 같은 판정. 아래 예전 규칙은 쓰지 않는다
+  if (me) {
+    const viaAuthz = await authzViewerScope(dbs, DB, me, myProfiles, myEmployees, myEmpId, myName, log);
+    if (viaAuthz) return viaAuthz;
+  }
 
   // 1. roleMappings 컬렉션에서 EXEC(임원) 또는 OPERATOR(시스템 관리자) 매핑 검사
   if (execMappings.some((m) => matchesExecMapping(m, { uid, empNo: me?.empNo, myName, aff }))) {
