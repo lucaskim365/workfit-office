@@ -34,6 +34,7 @@ import { DraftApprovalLineModal } from './components/DraftApprovalLineModal';
 import { DraftSubmitConfirmDialog } from './components/DraftSubmitConfirmDialog';
 import { ApprovalDraftDocumentSheet } from './components/ApprovalDraftDocumentSheet';
 import { SheetDraftForm, type RelatedSource } from './sheetForm/SheetDraftForm';
+import { sheetDraftTouched } from '@/domain/approvalForm/sheet/draftTouched';
 import { isSheetDoc } from './sheetForm/SheetDocView';
 import { SHEET_NAMED_KEY, namedFromLegacy, readNamed, secretNames, withoutNames } from '@/domain/approvalForm/sheet/relatedImport';
 import { SHEET_OWN_KEY, readOwnSheet } from '@/domain/approvalForm/sheet/ownSheet';
@@ -402,13 +403,20 @@ function ApprovalDraftInner({
 
   const hasManuallyEnteredValues = (): boolean => {
     // 1. 사용자 입력(제목, 금액, 첨부, 관련문서)이 유의미하게 존재하는 경우 무조건 작성 중으로 판정
+    // 시트 서식 — 시트가 열리자마자 예약 키(__formVersion·__values·__rows·__refs·__named)와 이름 붙은 칸 값(금액 키 등)이
+    // values·amount 에 들어가므로 '값이 있나'로 보지 않고, 기안자가 쓴 칸이 있는지로 본다(틀이 처음 내보낸 값과 같으면 안 쓴 것)
+    const isSheetDraft = sheetVersion !== null;
+    const sheetTouched = isSheetDraft && !!sheetTpl?.sheet && sheetDraftTouched(sheetTpl.sheet, values);
+
     if (title.trim().length > 0) return true;
-    if (amount.trim().length > 0) return true;
+    if (!isSheetDraft && amount.trim().length > 0) return true;
     if (attachments.length > 0) return true;
     if (relatedDocs.length > 0) return true;
+    if (sheetTouched) return true;
 
-    // 2. values 내부 필드 검사 (표나 텍스트가 조금이라도 입력되었는지 직접 확인)
-    const hasValues = Object.values(values).some((v) => {
+    // 2. values 내부 필드 검사 (표나 텍스트가 조금이라도 입력되었는지 직접 확인) — 예약 키(__로 시작)는 기안자가 쓴 값이 아니다
+    const hasValues = !isSheetDraft && Object.entries(values).some(([k, v]) => {
+      if (k.startsWith('__')) return false;
       if (v === null || v === undefined || v === '') return false;
       if (typeof v === 'string') {
         if (v.trim() === '') return false;
@@ -437,8 +445,9 @@ function ApprovalDraftInner({
 
     // 각 핵심 상태의 최초 스냅샷 대비 변경 사항을 엄격히 감지
     const titleChanged = title.trim() !== initialState.title.trim();
-    const amountChanged = amount.trim() !== initialState.amount.trim();
-    const valuesChanged = JSON.stringify(values) !== JSON.stringify(initialState.values);
+    // 시트 서식의 값·금액은 위에서 판정했다(처음 상태를 찍은 뒤에 시트가 값을 내보내면 늘 '바뀜'이 되므로 여기서는 보지 않는다)
+    const amountChanged = !isSheetDraft && amount.trim() !== initialState.amount.trim();
+    const valuesChanged = !isSheetDraft && JSON.stringify(values) !== JSON.stringify(initialState.values);
     const filesChanged = JSON.stringify(attachments) !== JSON.stringify(initialState.attachments);
     const relatedDocsChanged = JSON.stringify(relatedDocs) !== JSON.stringify(initialState.relatedDocs);
     const stepsChanged = JSON.stringify(steps) !== JSON.stringify(initialState.steps);

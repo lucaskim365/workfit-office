@@ -107,9 +107,11 @@ export interface ImportResult {
   filled: string[];
 }
 
-/** 가져와 채울 수 있는 칸 — 입력 칸이거나 프로젝트 값 칸이고 수식이 아닌 칸 */
+/** 가져와 채울 수 있는 칸 — 입력 칸이거나 프로젝트 값 칸이고 수식이 아닌 칸. 기안자 수정 잠금 칸은 건너뛴다(기안자가 못 고치는 값) */
 const fillable = (s: Sheet, key: string) =>
-  s.formulas[key] === undefined && (s.cellMeta[APPROVAL_NS.input]?.[key] !== undefined || s.cellMeta[APPROVAL_NS.bind]?.[key] !== undefined);
+  s.formulas[key] === undefined &&
+  s.cellMeta[APPROVAL_NS.lock]?.[key] !== true &&
+  (s.cellMeta[APPROVAL_NS.input]?.[key] !== undefined || s.cellMeta[APPROVAL_NS.bind]?.[key] !== undefined);
 
 /**
  * 원본 이름 값을 이 문서로 — 같은 이름 칸을 채운다. 반복 구간 열은 줄 수만큼 행을 늘려 위에서부터 채우고 남는 줄은 비운다.

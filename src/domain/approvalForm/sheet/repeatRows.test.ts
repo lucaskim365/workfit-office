@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { cellKey, createSheet, insertRow, setCellMeta, setCellValue, type Sheet } from '@/lib/sheet/core';
-import { APPROVAL_NS, applyValues } from './approvalSheet';
+import { APPROVAL_NS, applyValues, requiredMissing } from './approvalSheet';
 import {
   addRepeatRow,
   clearRepeatSection,
@@ -109,6 +109,32 @@ test('검사 — 끊긴 구간, 구간 안 칸 이름', () => {
   t = setCellMeta(t, APPROVAL_NS.name, 1, 3, 'amount');
   assert.ok(repeatIssues(t).some((m) => m.includes('금액 키')));
   assert.deepEqual(repeatIssues(itemForm()), []);
+});
+
+test("붙인 줄에도 '필수'가 따라가고, 필수 검사가 붙인 줄의 빈 칸을 잡는다", () => {
+  let tpl = itemForm();
+  tpl = setCellValue(tpl, 0, 2, '단가');
+  for (const r of [1, 2]) tpl = setCellMeta(tpl, APPROVAL_NS.required, r, 2, true);
+  const id = repeatSections(tpl)[0].id;
+  const c = tpl.cols[2];
+  const grown = expandRepeats(tpl, { [id]: 1 });
+  assert.equal(grown.cellMeta[APPROVAL_NS.required][cellKey(3, c)], true);
+  // 그린 두 줄만 채우면 붙인 줄(4행)의 단가가 비어 걸린다
+  const two = { [cellKey(1, c)]: '100', [cellKey(2, c)]: '200' };
+  assert.deepEqual(requiredMissing(applyValues(grown, two, { recalc: true })), ['단가']);
+  assert.deepEqual(requiredMissing(applyValues(grown, { ...two, [cellKey(3, c)]: '300' }, { recalc: true })), []);
+});
+
+test('검사 — 구간 안 칸 이름은 구간 첫 줄에만', () => {
+  const first = setCellMeta(itemForm(), APPROVAL_NS.name, 1, 1, '수량');
+  assert.deepEqual(repeatIssues(first), []);
+  // 둘째 줄에 붙이면 기안자가 [행 삭제]로 그 줄을 지울 때 이름이 사라진다
+  const second = setCellMeta(itemForm(), APPROVAL_NS.name, 2, 1, '수량');
+  const issues = repeatIssues(second);
+  assert.equal(issues.length, 1);
+  assert.match(issues[0], /칸 이름은 구간 첫 줄에 붙여 주세요\('수량' — 지금 3행, 첫 줄은 2행\)/);
+  const id = repeatSections(second)[0].id;
+  assert.equal(expandRepeats(second, { [id]: -1 }).cellMeta[APPROVAL_NS.name]?.[cellKey(2, second.cols[1])], undefined, '줄을 지우면 이름도 없어짐');
 });
 
 test('붙인 줄 수 읽기', () => {

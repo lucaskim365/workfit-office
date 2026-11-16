@@ -248,13 +248,16 @@ export function valueRuleIssues(s: Sheet): string[] {
 
 /**
  * 종속 칸으로 고를 수 있나 — 막히면 이유, 바꾸기 전에 물어볼 것이 있으면 ask.
- * 이름표(글자만 있는 칸)·수식 칸·기준 칸 자신은 안 되고, 선택 칸이 아닌 입력 칸·다른 기준 칸의 종속 칸은 묻는다
+ * 이름표(글자만 있는 칸)·수식 칸·저절로 채워지는 칸·자동번호 칸·기준 칸 자신은 안 되고, 선택 칸이 아닌 입력 칸·다른 기준 칸의 종속 칸은 묻는다
  */
 export function dependentCheck(s: Sheet, r: number, c: number, src: { r: number; c: number; name?: string }): { block?: string; ask?: string } {
   if (r === src.r && c === src.c) return { block: '기준 칸 자신은 고를 수 없습니다.' };
   const key = `${r}:${s.cols[c]}`;
   if (s.formulas[key] !== undefined) return { block: '수식 칸은 고를 항목 칸이 될 수 없습니다.' };
-  const input = approvalCellProps(s, r, c).input;
+  const props = approvalCellProps(s, r, c);
+  // 시스템이 채우는 칸을 선택 칸으로 만들면 '저절로 채워짐'과 '기안자가 고름'이 한 칸에 함께 남는다
+  if (props.bind || props.autoNo) return { block: '저절로 채워지는 칸·자동번호 칸은 고를 수 없습니다. 그 칸의 부품을 먼저 빼 주세요.' };
+  const input = props.input;
   if (!input) return (s.rows[r]?.[s.cols[c]] ?? '').trim() ? { block: '글자가 적힌 칸(이름표)은 고를 수 없습니다. 값을 고를 빈 칸을 누르세요.' } : {};
   if (input.depends && src.name && input.depends.name === src.name) return {};
   if (input.depends) return { ask: '이 칸은 다른 칸 값에 따라 항목이 바뀌는 칸입니다. 이 기준 칸으로 옮길까요? (그 칸 값별 항목은 지워집니다)' };
@@ -268,6 +271,31 @@ export function makeDependent(s: Sheet, r: number, c: number, name: string): She
   if (cur?.depends?.name === name) return s;
   const input: CellInput = { type: 'select', options: cur?.type === 'select' || cur?.type === 'multiSelect' ? (cur.options ?? []) : [], depends: { name, branches: [] } };
   return setApprovalProp(s, cellRange(r, c), APPROVAL_NS.input, input);
+}
+
+/**
+ * 여러 칸을 고른 채 입력 칸 속성 하나(입력 예시·고를 항목·직접 입력 허용)를 고칠 때 —
+ * 초점 칸과 입력 종류가 같은 칸에만, patch 가 바꾼 속성만 넣는다. 종류가 다른 칸은 그대로 둔다(종류·항목·종속이 지워지지 않게).
+ * skipDependent: 종속 칸은 건너뛴다(고를 항목이 기준 칸 값마다 따로라 한 목록으로 덮으면 안 됨)
+ */
+export function patchSameInputs(
+  s: Sheet,
+  range: { r1: number; r2: number; c1: number; c2: number },
+  focus: { r: number; c: number },
+  patch: (input: CellInput) => CellInput,
+  opts: { skipDependent?: boolean } = {}
+): Sheet {
+  const type = approvalCellProps(s, focus.r, focus.c).input?.type;
+  if (!type) return s;
+  let out = s;
+  for (let r = Math.min(range.r1, range.r2); r <= Math.max(range.r1, range.r2); r++) {
+    for (let c = Math.min(range.c1, range.c2); c <= Math.max(range.c1, range.c2); c++) {
+      const cur = approvalCellProps(s, r, c).input;
+      if (!cur || cur.type !== type || (opts.skipDependent && cur.depends)) continue;
+      out = setApprovalProp(out, cellRange(r, c), APPROVAL_NS.input, patch(cur));
+    }
+  }
+  return out;
 }
 
 /** 종속 선택을 푼다 — 모든 갈래 항목을 한 목록으로 */

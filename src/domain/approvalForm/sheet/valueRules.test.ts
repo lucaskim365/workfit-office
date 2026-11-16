@@ -3,6 +3,7 @@ import test from 'node:test';
 import { createSheet, setCellValue, type Sheet } from '@/lib/sheet/core';
 import { APPROVAL_NS, approvalCellProps, rowConditionOf, setApprovalProp, setCellName, setRowCondition } from './approvalSheet';
 import { setRepeatSection } from './repeatRows';
+import { DEFAULT_AUTO_NUMBER } from '@/domain/approvalForm/autoNumber';
 import {
   clearDependent,
   dependentCells,
@@ -10,6 +11,7 @@ import {
   ensureSourceName,
   hasValueRules,
   makeDependent,
+  patchSameInputs,
   removeRowsFor,
   rowsShownFor,
   rowsWithOtherCondition,
@@ -118,6 +120,43 @@ test('종속 칸 고르기 검사 — 이름표·수식·자기 자신은 막고
   s = setApprovalProp(s, at(4, 1), APPROVAL_NS.input, keep);
   assert.deepEqual(dependentCheck(s, 4, 1, src), {});
   assert.equal(makeDependent(s, 4, 1, '지출항목'), s);
+});
+
+test('종속 칸 고르기 검사 — 저절로 채워지는 칸·자동번호 칸은 막는다', () => {
+  let s = ensureSourceName(base(), 0, 1).sheet;
+  const src = { r: 0, c: 1, name: '지출항목' };
+  s = setApprovalProp(s, at(2, 1), APPROVAL_NS.bind, 'draft.drafter');
+  s = setApprovalProp(s, at(3, 1), APPROVAL_NS.autoNo, DEFAULT_AUTO_NUMBER);
+  assert.match(dependentCheck(s, 2, 1, src).block ?? '', /저절로 채워지는 칸/);
+  assert.match(dependentCheck(s, 3, 1, src).block ?? '', /자동번호 칸/);
+});
+
+test('여러 칸을 고른 채 속성 하나 고치기 — 초점 칸과 종류가 같은 칸에만, 고친 속성만', () => {
+  // 0행 선택(기준), 1행 종속 선택, 2행 선택(다른 항목), 3행 글, 4행 날짜
+  let s = ensureSourceName(base(), 0, 1).sheet;
+  s = setBranchOptions(makeDependent(s, 1, 1, '지출항목'), 1, 1, '식대', ['간식대']);
+  s = setApprovalProp(s, at(2, 1), APPROVAL_NS.input, { type: 'select', options: ['가', '나'] });
+  s = setApprovalProp(s, at(3, 1), APPROVAL_NS.input, { type: 'text', placeholder: '옛 예시' });
+  s = setApprovalProp(s, at(4, 1), APPROVAL_NS.input, { type: 'date' });
+  const all = { r1: 0, r2: 5, c1: 0, c2: 1 };
+  const inputAt = (x: Sheet, r: number) => approvalCellProps(x, r, 1).input;
+
+  // 초점 = 2행 선택 칸에서 '직접입력'을 붙인다 → 선택 칸마다 제 항목 뒤에, 종속 칸·글·날짜 칸은 그대로
+  const direct = patchSameInputs(s, all, { r: 2, c: 1 }, (i) => ({ ...i, options: [...(i.options ?? []), '직접입력'] }), { skipDependent: true });
+  assert.deepEqual(inputAt(direct, 2)?.options, ['가', '나', '직접입력']);
+  assert.deepEqual(inputAt(direct, 0)?.options, ['식대', '회의비', '직접입력', '직접입력']);
+  assert.deepEqual(inputAt(direct, 1), inputAt(s, 1), '종속 칸은 그대로');
+  assert.deepEqual(inputAt(direct, 3), inputAt(s, 3));
+  assert.deepEqual(inputAt(direct, 4), { type: 'date' });
+  assert.equal(inputAt(direct, 5), undefined, '입력 칸이 아닌 칸은 입력 칸이 되지 않는다');
+
+  // 초점 = 3행 글 칸에서 입력 예시를 고친다 → 글 칸만
+  const ph = patchSameInputs(s, all, { r: 3, c: 1 }, (i) => ({ ...i, placeholder: '새 예시' }));
+  assert.deepEqual(inputAt(ph, 3), { type: 'text', placeholder: '새 예시' });
+  assert.deepEqual(inputAt(ph, 2), { type: 'select', options: ['가', '나'] });
+  assert.deepEqual(inputAt(ph, 1), inputAt(s, 1));
+  // 초점 칸이 입력 칸이 아니면 아무것도 바꾸지 않는다
+  assert.equal(patchSameInputs(s, all, { r: 5, c: 1 }, (i) => ({ ...i, placeholder: 'x' })), s);
 });
 
 test('반복 구간 안 이름 없는 선택 칸은 기준 칸 후보가 아니다', () => {

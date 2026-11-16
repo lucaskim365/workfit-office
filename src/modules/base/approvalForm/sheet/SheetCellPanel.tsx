@@ -27,6 +27,7 @@ import {
   ensureSourceName,
   hasValueRules,
   makeDependent,
+  patchSameInputs,
   ruleSourceKind,
   rowsWithOtherCondition,
   showRowsFor,
@@ -159,11 +160,13 @@ export function SheetCellPanel({
   const [options, setOptions] = useState(optionsText);
   useEffect(() => setOptions(optionsText), [optionsText, focus.r, focus.c]);
 
-  const setInput = (input: CellInput | undefined) => onChange(setApprovalProp(sheet, range, APPROVAL_NS.input, input));
+  // 여러 칸을 골랐어도 초점 칸과 종류가 같은 칸에만, 고친 속성만 넣는다 — 종류가 다른 칸의 종류·항목·종속이 지워지지 않게
+  const patchInputs = (patch: (input: CellInput) => CellInput, opts?: { skipDependent?: boolean }) =>
+    onChange(patchSameInputs(sheet, range, focus, patch, opts));
   const commitOptions = () => {
     if (!props.input) return;
     const list = options.split('\n').map((o) => o.trim()).filter(Boolean);
-    setInput({ ...props.input, options: list });
+    patchInputs((input) => ({ ...input, options: list }), { skipDependent: true });
   };
 
   const hasOptions = props.input?.type === 'select' || props.input?.type === 'multiSelect';
@@ -177,8 +180,10 @@ export function SheetCellPanel({
     if (!props.input) return;
     const p = placeholder.trim().slice(0, PLACEHOLDER_MAX);
     if (p === (props.input.placeholder ?? '')) return;
-    const { placeholder: _old, ...rest } = props.input;
-    setInput(p ? { ...rest, placeholder: p } : rest);
+    patchInputs((input) => {
+      const { placeholder: _old, ...rest } = input;
+      return p ? { ...rest, placeholder: p } : rest;
+    });
   };
 
   // 칸 종류 — 입력 칸·자동 채우기·자동번호를 하나로(부품을 누르는 것과 같다)
@@ -404,10 +409,16 @@ export function SheetCellPanel({
       {props.input?.type === 'select' && !props.input.depends && (
         <Check
           checked={(props.input.options ?? []).some(isDirectInputOption)}
-          onChange={(v) => {
-            const rest = (props.input?.options ?? []).filter((o) => !isDirectInputOption(o));
-            setInput({ ...props.input!, options: v ? [...rest, DIRECT_INPUT_OPTION] : rest });
-          }}
+          onChange={(v) =>
+            // 칸마다 제 항목은 그대로 두고 '직접입력'만 붙이거나 뗀다
+            patchInputs(
+              (input) => {
+                const rest = (input.options ?? []).filter((o) => !isDirectInputOption(o));
+                return { ...input, options: v ? [...rest, DIRECT_INPUT_OPTION] : rest };
+              },
+              { skipDependent: true }
+            )
+          }
           label="직접 입력 허용"
           hint="목록 끝에 '직접입력'이 붙습니다. 기안자가 그걸 고르면 글자 칸으로 바뀌어 목록에 없는 값을 직접 씁니다."
         />

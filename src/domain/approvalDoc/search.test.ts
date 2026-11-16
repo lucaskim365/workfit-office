@@ -32,6 +32,13 @@ test('여러 낱말은 제목·기안자·문서번호 어디에 있든 모두 �
   assert.equal(matchesSearchQuery(d, '   '), true);
 });
 
+test('화면에 보이는 문서번호(자동번호를 문서번호로 쓰는 문서)로도, 고유번호로도 찾는다', () => {
+  const d = doc('A', { docNo: 'AP-261101-001', fieldValues: { __docNo: '20261101 - 01호' } });
+  assert.equal(matchesSearchQuery(d, '20261101-01호'), true);
+  assert.equal(matchesSearchQuery(d, 'ap-261101'), true);
+  assert.equal(matchesSearchQuery(d, '20261102'), false);
+});
+
 // ── 부서 문서함 ──
 
 test('부서 문서함은 같은 부서의 결재 완료·공개 문서만이다', () => {

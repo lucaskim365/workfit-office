@@ -58,6 +58,19 @@ test('가져오기 — 목록이 짧으면 남는 줄은 비우고, 한 칸에 �
   assert.equal(res.values[cellKey(0, b)], '가, 나');
 });
 
+test('가져오기 — 기안자 수정 잠금 칸은 건너뛴다(한 칸·반복 구간 열 모두)', () => {
+  let tpl = poForm();
+  const [a, b] = tpl.cols;
+  tpl = setCellMeta(tpl, APPROVAL_NS.lock, 0, 1, true); // 거래처
+  for (const r of [1, 2]) tpl = setCellMeta(tpl, APPROVAL_NS.lock, r, 1, true); // 수량 열
+  const before = { [cellKey(0, b)]: '고정 거래처', [cellKey(1, b)]: '5' };
+  const res = importNamed(tpl, {}, before, {}, { 거래처: '에이스', 품명: ['태블릿'], 수량: ['14'] });
+  assert.deepEqual(res.filled, ['품명']);
+  assert.equal(res.values[cellKey(0, b)], '고정 거래처');
+  assert.equal(res.values[cellKey(1, b)], '5');
+  assert.equal(res.values[cellKey(1, a)], '태블릿');
+});
+
 test('옛 서식 문서 — 라벨을 이름으로, 한 칸짜리 필드만', () => {
   const fields = [
     { key: 'vendor', label: '거래처', type: '텍스트' },

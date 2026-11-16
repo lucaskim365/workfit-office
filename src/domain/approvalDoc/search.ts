@@ -1,4 +1,5 @@
 import type { ApprovalBox, ApprovalDoc } from './schema';
+import { docNoOf } from './docNo';
 import {
   byRecent,
   isCompletedBoxMatch,
@@ -35,9 +36,12 @@ export function normalizeSearchText(s: string | null | undefined): string {
   return (s ?? '').normalize('NFC').toLowerCase().replace(/\s+/g, '');
 }
 
-/** 검색 대상 글자 — 제목·문서번호·기안자·문서종류·기안부서 */
+/**
+ * 검색 대상 글자 — 제목·문서번호·기안자·문서종류·기안부서.
+ * 문서번호는 화면에 보이는 번호(자동번호를 문서번호로 쓰는 문서)와 고유번호(AP-…) 둘 다로 찾는다
+ */
 function haystackOf(doc: ApprovalDoc): string {
-  return normalizeSearchText([doc.title, doc.docNo, doc.drafterName, doc.docType, doc.drafterDept].join(' '));
+  return normalizeSearchText([doc.title, docNoOf(doc), doc.docNo, doc.drafterName, doc.docType, doc.drafterDept].join(' '));
 }
 
 /**

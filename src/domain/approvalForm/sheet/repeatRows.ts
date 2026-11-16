@@ -34,8 +34,8 @@ export const SHEET_ROWS_KEY = '__rows';
 /** 한 구간에 더 붙일 수 있는 줄 수 */
 export const MAX_EXTRA_ROWS = 200;
 
-/** 붙인 행에 본뜨는 칸 속성 — 칸 이름(서식에 하나뿐)·직인은 본뜨지 않는다 */
-const COPY_CELL_NS = [APPROVAL_NS.input, APPROVAL_NS.bind, APPROVAL_NS.lock, APPROVAL_NS.secret];
+/** 붙인 행에 본뜨는 칸 속성 — 칸 이름(서식에 하나뿐)·직인은 본뜨지 않는다. '필수'도 따라가야 붙인 줄의 빈 칸을 상신 전에 잡는다 */
+const COPY_CELL_NS = [APPROVAL_NS.input, APPROVAL_NS.bind, APPROVAL_NS.lock, APPROVAL_NS.secret, APPROVAL_NS.required];
 
 const markAt = (s: Sheet, r: number): RepeatMark | undefined => {
   const v = s.rowMeta[APPROVAL_NS.repeat]?.[String(r)] as RepeatMark | undefined;
@@ -87,7 +87,7 @@ export function renameRepeatSection(s: Sheet, id: string, label: string): Sheet 
   return { ...s, rowMeta: { ...s.rowMeta, [APPROVAL_NS.repeat]: rec } };
 }
 
-/** 서식 저장 전 검사 — 끊긴 구간, 구간 안의 칸 이름(새 행에 본뜨지 않으므로) */
+/** 서식 저장 전 검사 — 끊긴 구간, 구간 안의 칸 이름(새 행에 본뜨지 않으므로 — 금액 키·한 열에 둘·첫 줄이 아닌 줄) */
 export function repeatIssues(s: Sheet): string[] {
   const errors: string[] = [];
   const sections = repeatSections(s);
@@ -106,6 +106,10 @@ export function repeatIssues(s: Sheet): string[] {
     if (name === 'amount') {
       errors.push(`반복 구간 '${x.label}' 안의 칸에는 금액 키를 붙일 수 없습니다. 합계처럼 구간 밖 칸에 붙여 주세요.`);
       return;
+    }
+    // 기안자가 [행 삭제]로 줄을 지우면 아래 줄부터 없어진다 — 첫 줄이 아닌 줄의 이름은 줄과 함께 사라진다
+    if (r !== x.first) {
+      errors.push(`반복 구간 '${x.label}' 안의 칸 이름은 구간 첫 줄에 붙여 주세요('${String(name)}' — 지금 ${r + 1}행, 첫 줄은 ${x.first + 1}행). 기안자가 줄을 지우면 이름이 사라집니다.`);
     }
     const colKey = `${x.id}|${key.slice(i + 1)}`;
     if (colNames.has(colKey)) errors.push(`반복 구간 '${x.label}'의 한 열에 칸 이름이 둘입니다('${colNames.get(colKey)}', '${String(name)}'). 열마다 하나만 붙여 주세요.`);
