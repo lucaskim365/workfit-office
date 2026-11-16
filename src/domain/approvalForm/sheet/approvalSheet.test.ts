@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createSheet, cellKey, type Sheet } from '@/lib/sheet/core';
-import { CHECK_MARK, conditionHiddenRows, conditionMatches, conditionSources, requiredMissing, rowConditionOf, setRowCondition, draftInfoValue, linkFieldValues, linkIssues, linkSystemValues, nameLabel, SHEET_VALUES_KEY, SHEET_VERSION_KEY, draftInputOf, invalidNumberCells, isSecretCell, readSheetValues, sheetDocFields, APPROVAL_NS, approvalCellProps, setApprovalProp, setCellName, validateApprovalSheet, applyValues, canMergeApprovalRange, extractValues, isDraftEditable, isStructureLocked, namedValues, pasteDraftTsv, setApprovalCellValue } from './approvalSheet';
+import { CHECK_MARK, hasAmountKeyCell, routeConditionSources, conditionHiddenRows, conditionMatches, conditionSources, requiredMissing, rowConditionOf, setRowCondition, draftInfoValue, linkFieldValues, linkIssues, linkSystemValues, nameLabel, SHEET_VALUES_KEY, SHEET_VERSION_KEY, draftInputOf, invalidNumberCells, isSecretCell, readSheetValues, sheetDocFields, APPROVAL_NS, approvalCellProps, setApprovalProp, setCellName, validateApprovalSheet, applyValues, canMergeApprovalRange, extractValues, isDraftEditable, isStructureLocked, namedValues, pasteDraftTsv, setApprovalCellValue } from './approvalSheet';
 import { setCellMeta, setCellValue, setRowMeta } from '@/lib/sheet/core';
 
 function base(): Sheet {
@@ -438,4 +438,32 @@ test('연동 칸 — 동행자는 사람 칸이면 사용자 ID(여러 명은 �
   assert.equal(linked.companions, 'U001,U002');
   assert.equal(linked.period__end, '', '날짜 칸 하나면 끝 날짜는 빈 값');
   assert.equal(linkFieldValues(s, '국내출장').companions, '김하나 (영업), 이두리 (영업)', 'ID 가 없으면(글자 칸) 글자 그대로');
+});
+
+test('결재선 규칙이 읽는 칸 — 금액 키 칸이 있는지, 선택 값 조건 후보(이름 붙은 선택 칸)', () => {
+  let s = createSheet(5, 2);
+  s = setCellValue(s, 0, 0, '지출 항목');
+  s = setCellMeta(s, APPROVAL_NS.input, 0, 1, { type: 'select', options: ['식대', '교통비', ' ', '식대'] });
+  s = setCellName(s, 0, 1, 'expenseItem');
+  // 이름 없는 선택 칸·여러 개 선택 칸·글자 칸은 후보가 아니다
+  s = setCellMeta(s, APPROVAL_NS.input, 1, 1, { type: 'select', options: ['가', '나'] });
+  s = setCellMeta(s, APPROVAL_NS.input, 2, 1, { type: 'multiSelect', options: ['A', 'B'] });
+  s = setCellName(s, 2, 1, 'tags');
+  s = setCellMeta(s, APPROVAL_NS.input, 3, 1, { type: 'text' });
+  s = setCellName(s, 3, 1, 'memo');
+  assert.deepEqual(routeConditionSources(s), [{ key: 'expenseItem', label: '지출 항목', options: ['식대', '교통비'] }]);
+  // 후보 칸 값은 문서 맨 위 칸(칸 이름 = 키)으로 나간다 — 규칙 엔진이 읽는 자리
+  assert.equal(sheetDocFields(setCellValue(s, 0, 1, '교통비'), 'f@v1').expenseItem, '교통비');
+
+  assert.equal(hasAmountKeyCell(s), false);
+  let withAmount = setCellMeta(s, APPROVAL_NS.input, 4, 1, { type: 'currency' });
+  withAmount = setCellName(withAmount, 4, 1, 'amount');
+  assert.equal(hasAmountKeyCell(withAmount), true);
+
+  // 반복 구간 안 이름은 맨 위 칸으로 나가지 않는다 — 금액 키도 선택 칸도 없는 것으로 본다
+  let inRepeat = setRowMeta(withAmount, APPROVAL_NS.repeat, 4, { id: 'items', label: '품목' });
+  inRepeat = setRowMeta(inRepeat, APPROVAL_NS.repeat, 0, { id: 'items', label: '품목' });
+  assert.equal(hasAmountKeyCell(inRepeat), false);
+  assert.deepEqual(routeConditionSources(inRepeat), []);
+  assert.ok(!('amount' in sheetDocFields(inRepeat, 'f@v1')));
 });

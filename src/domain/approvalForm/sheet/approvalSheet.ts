@@ -741,6 +741,55 @@ export function sheetDocFields(s: Sheet, formVersion: string, rowExtras: Record<
   };
 }
 
+// ── 결재선 규칙이 읽는 칸 ──
+
+/** 이름 붙은 칸 중 문서 맨 위 칸으로 나가는 것 — 반복 구간 안 이름은 빠진다(sheetDocFields 와 같은 기준) */
+function topLevelNamedCells(s: Sheet): { key: string; name: string; r: number; c: number }[] {
+  const repeatRows = s.rowMeta[APPROVAL_NS.repeat] ?? {};
+  const out: { key: string; name: string; r: number; c: number }[] = [];
+  Object.entries(s.cellMeta[APPROVAL_NS.name] ?? {}).forEach(([key, name]) => {
+    const i = key.indexOf(':');
+    const r = Number(key.slice(0, i));
+    const c = s.cols.indexOf(key.slice(i + 1));
+    if (typeof name !== 'string' || !name || c < 0 || r < 0 || r >= s.rows.length) return;
+    if (repeatRows[String(r)] !== undefined) return;
+    out.push({ key, name, r, c });
+  });
+  return out;
+}
+
+/**
+ * 금액 키 칸(칸 이름 amount)이 있는 시트인가 — 없으면 문서 금액이 비어 결재선 규칙의 금액 조건이 0원으로 계산된다.
+ * 반복 구간 안에 둔 금액 키는 문서 금액으로 나가지 않으므로 없는 것으로 본다
+ */
+export function hasAmountKeyCell(s: Sheet): boolean {
+  return topLevelNamedCells(s).some((x) => x.name === 'amount');
+}
+
+/** 결재선 규칙의 '선택 값 조건'으로 쓸 수 있는 칸 — key 는 문서 맨 위 칸 이름(= 칸 이름) */
+export interface RouteConditionSource {
+  key: string;
+  /** 화면에 보일 이름 — 칸 왼쪽 글자(예: '지출 항목') */
+  label: string;
+  options: string[];
+}
+
+/**
+ * 결재선 규칙 조건 후보 — 칸 이름이 붙은 선택(하나) 칸과 그 고를 항목.
+ * 그 칸 값은 문서 맨 위 칸(칸 이름 = 키)으로 나가 규칙 엔진이 읽는다(sheetDocFields).
+ * 여러 개 선택 칸은 값이 '식대, 교통비'처럼 이어 붙어 규칙 값과 똑같이 맞지 않으므로 뺀다(기존 양식도 '선택' 항목만 후보)
+ */
+export function routeConditionSources(s: Sheet): RouteConditionSource[] {
+  const out = new Map<string, RouteConditionSource>();
+  topLevelNamedCells(s).forEach(({ key, name, r, c }) => {
+    const input = s.cellMeta[APPROVAL_NS.input]?.[key] as CellInput | undefined;
+    if (!input || input.type !== 'select' || out.has(name)) return;
+    const options = [...new Set((input.options ?? []).map((o) => o.trim()).filter(Boolean))];
+    out.set(name, { key: name, label: cellCaption(s, r, c), options });
+  });
+  return [...out.values()];
+}
+
 /** 기안자가 이 칸에 쓰는 입력 종류 — 고칠 수 없는 칸이면 undefined */
 export function draftInputOf(s: Sheet, r: number, c: number): CellInput | undefined {
   if (!isDraftEditable(s, r, c)) return undefined;

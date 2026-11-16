@@ -39,6 +39,7 @@ import {
   isDocFieldBind,
   setApprovalCellValue,
   validateApprovalSheet,
+  hasAmountKeyCell,
 } from '@/domain/approvalForm/sheet/approvalSheet';
 import { Help, SheetCellPanel } from './SheetCellPanel';
 import { requestSidebarCollapse } from '@/app/shell/collapseSidebar';
@@ -48,6 +49,8 @@ import { SheetEditorTour } from './SheetEditorTour';
 import { SheetEditorGuide } from './SheetEditorGuide';
 import { healRepeatSections, repeatIssues, repeatSections } from '@/domain/approvalForm/sheet/repeatRows';
 import { valueRuleIssues } from '@/domain/approvalForm/sheet/valueRules';
+import { missingAmountKeyIssues } from '@/domain/approvalRoute/amountRules';
+import { useRouteRules } from '@/features/gw/useRouteRules';
 
 const inp ='w-full rounded-lg border border-border-hi bg-panel px-2.5 py-1.5 text-[12px] text-ink outline-none focus:border-teal disabled:bg-panel-alt disabled:text-ink3';
 
@@ -246,6 +249,8 @@ function Designer({
   };
 
   // ── 저장 ──
+  // 결재선 규칙 — 저장할 때 금액 조건 규칙이 걸린 서식에 금액 키 칸이 없으면 알린다(못 읽었으면 알리지 않음)
+  const { data: routeRules } = useRouteRules();
   const onSave = async () => {
     const code = effectiveCode.trim();
     const name = form.name.trim();
@@ -283,13 +288,17 @@ function Designer({
       setBaseVersion(res.version);
       setNote('');
       // 끊긴 '값에 따라 바뀌는 것'은 저장을 막지 않고 알려만 준다(기존 서식에서 온 조건이 섞여 있을 수 있다)
-      const loose = valueRuleIssues(sheet);
+      // 금액 조건 규칙이 걸려 있는데 금액 키 칸이 없는 것도 — 금액이 0원으로 계산되어 결재선이 뜻과 다르게 잡힌다
+      const loose = [
+        ...valueRuleIssues(sheet),
+        ...missingAmountKeyIssues(routeRules ?? [], { docType: code, linkType: link, hasAmountKey: hasAmountKeyCell(sheet) }),
+      ];
       setMsg({
         kind: loose.length ? 'info' : 'ok',
         text:
           (res.created ? `저장했습니다 — v${res.version}` : `틀이 바뀌지 않아 서식 정보만 저장했습니다(v${res.version} 그대로).`) +
           (legacy && !applied ? " 아직 '시트로 기안'이 꺼져 있어 기안자는 기존 양식으로 씁니다 — 다 다듬으면 위에서 켜세요." : '') +
-          (loose.length ? ' 다만 아래는 기안 화면에서 뜻대로 움직이지 않으니 확인해 주세요.' : ''),
+          (loose.length ? ' 다만 아래는 기안할 때 뜻대로 움직이지 않으니 확인해 주세요.' : ''),
         list: loose.length ? loose : undefined,
       });
       onSaved?.(code, res.version);

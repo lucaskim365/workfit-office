@@ -2,6 +2,8 @@ import { useMemo } from 'react';
 import type { ApprovalRouteRule, Resolver, RouteStep } from '@/domain/approvalRoute/schema';
 import type { ApprovalForm } from '@/domain/approvalForm/schema';
 import { RoutePreview } from './RoutePreview';
+import { routeConditionFields } from './conditionFields';
+import { useFormVersionSheet, useSheetFormVersions } from '@/features/gw/useApprovalFormVersions';
 import type { ApprovalStep, StepKind } from '@/domain/approvalDoc/schema';
 import { ApprovalLineBuilder } from '@/modules/gw/approval/ApprovalLineBuilder';
 import {
@@ -114,9 +116,11 @@ export function ApprovalRouteRuleEditor({
     () => forms.find((f) => f.code === rule.docType),
     [forms, rule.docType]
   );
-  const dropdownFields = useMemo(() => {
-    return selectedForm?.fields.filter((f) => f.type === '선택') ?? [];
-  }, [selectedForm]);
+  // 그 서식의 최신 시트 틀 — 처음부터 시트로 만든 서식은 항목 목록이 비어 있어, 조건 후보를 시트의 이름 붙은 선택 칸에서 찾는다
+  const { latest: sheetVersions } = useSheetFormVersions();
+  const sheetFormId = selectedForm?.id || null;
+  const { data: sheetVersion } = useFormVersionSheet(sheetFormId, sheetFormId ? (sheetVersions.get(sheetFormId) ?? null) : null);
+  const dropdownFields = useMemo(() => routeConditionFields(selectedForm, sheetVersion?.sheet), [selectedForm, sheetVersion]);
 
   // 서식 대상 (전사 공통 vs 특정 서식)
   const isGlobalForm = !rule.docType || rule.docType === '전체';

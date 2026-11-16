@@ -2,7 +2,7 @@
  * 기존 서식 → 시트 서식 초안 자동 변환(§11.17). 기존 서식은 읽기만 한다 — 결과는 새 서식으로 저장된다.
  *
  * - 항목은 [라벨 | 값] 칸으로: 반쪽(half) 항목은 한 줄에 둘, 한 줄(full) 항목은 값 칸을 끝까지 합침. 섹션은 제목 줄
- * - 입력 종류·금액 키·연동 칸 이름(휴가 기간 등)·비공개·대외 숨김을 옮긴다
+ * - 입력 종류·금액 키(정해 두지 않았으면 첫 금액 항목)·연동 칸 이름(휴가 기간 등)·비공개·대외 숨김을 옮긴다
  * - '표'는 칸·병합·굵게·정렬·회색 바탕을 옮기고 마지막 줄을 반복 구간으로(수식은 값만 — 경고)
  * - 직인·자동번호·회사정보·안내문은 시트 부품으로, 문서제목은 문서 정보 표의 제목 칸이 대신한다
  * - 맨 위·아래에 문서 머리 전체(로고·큰 제목·결재란·문서 정보·맺음말)를 넣는다
@@ -21,7 +21,7 @@ import {
   type CellStyle,
   type Sheet,
 } from '@/lib/sheet';
-import type { ApprovalForm, FormField } from '@/domain/approvalForm/schema';
+import { amountFieldOf, type ApprovalForm, type FormField } from '@/domain/approvalForm/schema';
 import { DEFAULT_AUTO_NUMBER } from '@/domain/approvalForm/autoNumber';
 import { normalizeTablePayload } from '../formFields/sheetModel';
 import {
@@ -284,6 +284,8 @@ export function legacyFormToSheet(form: ApprovalForm): LegacyConversion {
   const candidate = LINK_TYPES.find((t) => t.code === form.code);
   const link = candidate && fields.some((f) => candidate.names.some((n) => n.key === f.key)) ? candidate.code : null;
   const linkNames = new Set(linkTypeDef(link)?.names.map((n) => n.key) ?? []);
+  // 문서 금액이 되는 항목 — 기존 양식과 같은 규칙(amountFieldOf): 금액 키로 정한 금액 항목, 없으면 첫 금액 항목
+  const amountKey = amountFieldOf({ ...form, fields })?.key;
   // 기존 서식이 숨긴 문서 머리 항목 — 공문처럼 머리를 거의 다 끈 서식은 그 모양 그대로
   const hiddenHead = new Set(form.hiddenHeaderItems ?? []);
   const INFO_ITEMS = ['docNo', 'drafterDept', 'drafter', 'draftDate', 'preservation', 'visibility'];
@@ -337,7 +339,7 @@ export function legacyFormToSheet(form: ApprovalForm): LegacyConversion {
       s = setApprovalProp(s, at, APPROVAL_NS.autoNo, { ...(f.autoNumber ?? DEFAULT_AUTO_NUMBER), channelKey: f.key });
     }
     // 금액 키 → 결재선 금액, 연동 서식의 연동 칸(휴가 기간 등)은 같은 이름
-    if (f.type === '금액' && f.isAmountKey) s = setCellName(s, r, c1, 'amount');
+    if (f.key === amountKey) s = setCellName(s, r, c1, 'amount');
     else if (linkNames.has(f.key)) s = setCellName(s, r, c1, f.key);
     // 선택 항목은 기존 키 그대로 — 결재선 규칙 조건(예: 지출결의 expenseItem = 식대)이 이 키로 값을 읽는다
     else if (f.type === '선택' || f.type === '다중선택') s = setCellName(s, r, c1, f.key);

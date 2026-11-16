@@ -481,3 +481,32 @@ test('기존 서식 → 시트 — 항목 입력 예시(placeholder)는 글·숫
   assert.equal(at('외근 복귀 시각')?.placeholder, undefined, '빈 입력 예시는 안 넣음');
   assert.equal(at('외근 구분')?.placeholder, undefined, '선택 칸엔 안 넣음(고르는 화면이 따로)');
 });
+
+test('기존 서식 → 시트 — 금액 키를 정해 두지 않은 서식은 첫 금액 항목이 금액 키(기존 양식과 같은 규칙)', () => {
+  const nameOf = (s: Sheet, label: string) => approvalCellProps(s, findText(s, label)!.r, 1).name;
+  // 금액 키 표시가 없으면 첫 금액 항목
+  const plain = legacyFormToSheet(
+    legacyForm('구매', [
+      { key: 'item', label: '품명', type: '텍스트' },
+      { key: 'price', label: '구입 금액', type: '금액' },
+      { key: 'vat', label: '부가세', type: '금액' },
+    ])
+  ).sheet;
+  assert.equal(nameOf(plain, '구입 금액'), 'amount');
+  assert.equal(nameOf(plain, '부가세'), undefined, '금액 키는 하나뿐');
+  // 값이 문서 금액(맨 위 칸 amount)으로 나간다
+  const at = findText(plain, '구입 금액')!;
+  assert.equal(sheetDocFields(setCellValue(plain, at.r, 1, '35000'), '구매@v1').amount, '35000');
+  // 금액 키로 정한 항목이 있으면 첫 항목이 아니라 그 항목
+  const marked = legacyFormToSheet(
+    legacyForm('구매', [
+      { key: 'price', label: '구입 금액', type: '금액' },
+      { key: 'total', label: '합계 금액', type: '금액', isAmountKey: true },
+    ])
+  ).sheet;
+  assert.equal(nameOf(marked, '합계 금액'), 'amount');
+  assert.equal(nameOf(marked, '구입 금액'), undefined);
+  // 금액 항목이 없으면 금액 키도 없다
+  const none = legacyFormToSheet(legacyForm('메모', [{ key: 'memo', label: '내용', type: '텍스트' }])).sheet;
+  assert.ok(!metaCells(none, APPROVAL_NS.name).some((x) => x.v === 'amount'));
+});
