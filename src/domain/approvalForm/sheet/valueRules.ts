@@ -10,7 +10,9 @@ import {
   COMMON_CELL_NAMES,
   LINK_TYPES,
   approvalCellProps,
+  cellAddress,
   cellCaption,
+  dependentKeyValues,
   isDirectInputOption,
   rowConditionOf,
   setApprovalProp,
@@ -163,11 +165,85 @@ export function dependentCells(s: Sheet, name: string): DependentCell[] {
   return out.sort((a, b) => a.r - b.r || a.c - b.c);
 }
 
-/** 이 기준 칸에 걸린 것이 있나 — 값에 따라 보이는 행이나 항목이 바뀌는 칸 */
+/** 이 기준 칸에 걸린 것이 있나 — 값에 따라 보이는 행이나 항목이 바뀌는 칸(지금 항목에 없는 값에 걸린 것도 센다) */
 export function hasValueRules(s: Sheet, src: ValueSource): boolean {
   const name = src.name;
   if (!name) return false;
-  return dependentCells(s, name).length > 0 || src.options.some((v) => rowsShownFor(s, name, v).length > 0);
+  if (dependentCells(s, name).length > 0) return true;
+  for (let r = 0; r < s.rows.length; r++) if (rowConditionOf(s, r)?.name === name) return true;
+  return false;
+}
+
+/**
+ * 이 기준 칸에 걸려 있지만 지금 '고를 항목'에 없는 값 — 항목 이름을 고치거나 지워서 남은 것.
+ * 그 값에 걸린 행은 보이지 않고 종속 항목은 쓰이지 않으니, 편집기가 보여 주어 옮기거나 풀 수 있게 한다
+ */
+export function staleRuleValues(s: Sheet, src: ValueSource): string[] {
+  const name = src.name;
+  if (!name) return [];
+  const seen = new Set<string>();
+  for (let r = 0; r < s.rows.length; r++) {
+    const cond = rowConditionOf(s, r);
+    if (cond?.name === name) cond.values.forEach((v) => seen.add(v));
+  }
+  dependentCells(s, name).forEach((d) => d.input.depends?.branches.forEach((b) => b.options.length && seen.add(b.when)));
+  return [...seen].filter((v) => !src.options.includes(v));
+}
+
+/** 조건이 가리키는 이름이 무엇인가 — choice: 선택·체크 칸, key: 종속 갈래 이름(기존 서식), plain: 이름은 있지만 고르는 칸이 아님, missing: 시트에 없음 */
+export function ruleSourceKind(s: Sheet, name: string): 'choice' | 'key' | 'plain' | 'missing' {
+  if (valueSources(s).some((x) => x.name === name)) return 'choice';
+  if (Object.values(s.cellMeta[APPROVAL_NS.name] ?? {}).includes(name)) return 'plain';
+  return name in dependentKeyValues(s) ? 'key' : 'missing';
+}
+
+const rowsLabel = (rows: number[]) => rows.map((r) => r + 1).join('·') + '행';
+
+/**
+ * 끊긴 '값에 따라 바뀌는 것' — 저장은 되지만 기안 화면에서 뜻대로 움직이지 않는 것을 알려 준다(막지는 않음).
+ * 기준 칸에서 부품을 빼거나, 고를 항목 이름을 고치거나, 칸 이름을 지웠을 때 생긴다
+ */
+export function valueRuleIssues(s: Sheet): string[] {
+  const out: string[] = [];
+  const sources = valueSources(s);
+  // 직접 입력을 받는 기준 칸은 목록에 없는 값도 나올 수 있어 '없는 값'으로 보지 않는다
+  const openEnded = (src: ValueSource) => (approvalCellProps(s, src.r, src.c).input?.options ?? []).some(isDirectInputOption);
+
+  // 행 보이기 조건 — 이름별로 모아서
+  const byName = new Map<string, Array<{ r: number; values: string[] }>>();
+  for (let r = 0; r < s.rows.length; r++) {
+    const cond = rowConditionOf(s, r);
+    if (cond) byName.set(cond.name, [...(byName.get(cond.name) ?? []), { r, values: cond.values }]);
+  }
+  byName.forEach((rows, name) => {
+    const kind = ruleSourceKind(s, name);
+    const all = rows.map((x) => x.r);
+    if (kind === 'missing') out.push(`${rowsLabel(all)}: 보이기 조건의 기준 칸 '${name}'이(가) 시트에 없어 항상 보입니다. 조건을 풀거나 기준 칸을 다시 정해 주세요.`);
+    if (kind === 'plain') out.push(`${rowsLabel(all)}: 보이기 조건의 기준 칸 '${name}'이(가) 선택·체크 칸이 아닙니다. 기안 화면에서 이 줄이 보이지 않을 수 있습니다.`);
+    const src = sources.find((x) => x.name === name);
+    if (!src || openEnded(src)) return;
+    const dead = rows.filter((x) => !x.values.some((v) => src.options.includes(v)));
+    if (dead.length) {
+      const values = [...new Set(dead.flatMap((x) => x.values))].join('·');
+      out.push(`${rowsLabel(dead.map((x) => x.r))}: '${src.label}'의 고를 항목에 없는 값(${values})에만 걸려 있어 기안 화면에서 보이지 않습니다.`);
+    }
+  });
+
+  // 종속 선택
+  Object.entries(s.cellMeta[APPROVAL_NS.input] ?? {}).forEach(([key, v]) => {
+    const dep = (v as CellInput | undefined)?.depends;
+    if (!dep) return;
+    const i = key.indexOf(':');
+    const r = Number(key.slice(0, i));
+    const c = s.cols.indexOf(key.slice(i + 1));
+    if (c < 0 || r >= s.rows.length) return;
+    const where = `${cellCaption(s, r, c)}(${cellAddress(r, c)})`;
+    const src = sources.find((x) => x.name === dep.name);
+    if (!src) return void out.push(`${where}: 고를 항목의 기준 칸 '${dep.name}'이(가) 없거나 선택 칸이 아닙니다. 기안 화면에서 항목이 뜻대로 나오지 않습니다.`);
+    const dead = dep.branches.filter((b) => b.options.length && !src.options.includes(b.when)).map((b) => b.when);
+    if (dead.length) out.push(`${where}: '${src.label}'의 고를 항목에 없는 값(${dead.join('·')})에 적어 둔 항목은 쓰이지 않습니다.`);
+  });
+  return out;
 }
 
 /**

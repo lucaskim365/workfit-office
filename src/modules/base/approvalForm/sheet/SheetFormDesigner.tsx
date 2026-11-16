@@ -47,6 +47,7 @@ import { InputLook } from './InputLook';
 import { SheetEditorTour } from './SheetEditorTour';
 import { SheetEditorGuide } from './SheetEditorGuide';
 import { healRepeatSections, repeatIssues, repeatSections } from '@/domain/approvalForm/sheet/repeatRows';
+import { valueRuleIssues } from '@/domain/approvalForm/sheet/valueRules';
 
 const inp ='w-full rounded-lg border border-border-hi bg-panel px-2.5 py-1.5 text-[12px] text-ink outline-none focus:border-teal disabled:bg-panel-alt disabled:text-ink3';
 
@@ -281,11 +282,15 @@ function Designer({
       setSavedSheet(sheet);
       setBaseVersion(res.version);
       setNote('');
+      // 끊긴 '값에 따라 바뀌는 것'은 저장을 막지 않고 알려만 준다(기존 서식에서 온 조건이 섞여 있을 수 있다)
+      const loose = valueRuleIssues(sheet);
       setMsg({
-        kind: 'ok',
+        kind: loose.length ? 'info' : 'ok',
         text:
           (res.created ? `저장했습니다 — v${res.version}` : `틀이 바뀌지 않아 서식 정보만 저장했습니다(v${res.version} 그대로).`) +
-          (legacy && !applied ? " 아직 '시트로 기안'이 꺼져 있어 기안자는 기존 양식으로 씁니다 — 다 다듬으면 위에서 켜세요." : ''),
+          (legacy && !applied ? " 아직 '시트로 기안'이 꺼져 있어 기안자는 기존 양식으로 씁니다 — 다 다듬으면 위에서 켜세요." : '') +
+          (loose.length ? ' 다만 아래는 기안 화면에서 뜻대로 움직이지 않으니 확인해 주세요.' : ''),
+        list: loose.length ? loose : undefined,
       });
       onSaved?.(code, res.version);
     } catch (err) {

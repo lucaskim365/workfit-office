@@ -14,6 +14,7 @@ import {
   removeRowsFor,
   rowsShownFor,
   setBranchOptions,
+  staleRuleValues,
   valueSourceAt,
 } from '@/domain/approvalForm/sheet/valueRules';
 
@@ -77,6 +78,8 @@ export function ValueRulesPanel({
   if (!src) return null;
   // 체크 칸은 값이 하나라 종속 기준이 되지 않는다(칸 속성의 '항목을 다른 칸 값에 따라'와 같게)
   const canDepend = src.kind !== 'checkbox';
+  // 항목 이름을 고치거나 지워 남은 값 — 걸린 행·항목을 옮기거나 풀 수 있게 끝에 함께 보인다
+  const stale = staleRuleValues(sheet, src);
 
   return (
     <div className="space-y-2 rounded-xl border border-indigo-200 bg-indigo-50/40 p-2.5">
@@ -104,7 +107,7 @@ export function ValueRulesPanel({
         </div>
       )}
 
-      {src.options.length === 0 ? (
+      {src.options.length === 0 && stale.length === 0 ? (
         <div className="text-[10.5px] text-amber-700">먼저 이 칸의 '고를 항목'을 적으세요.</div>
       ) : (
         <div className="space-y-1.5">
@@ -121,11 +124,19 @@ export function ValueRulesPanel({
               ))}
             </div>
           )}
-          {src.options.map((v) => {
+          {[...src.options, ...stale].map((v) => {
             const groups = name ? rowsShownFor(sheet, name, v) : [];
+            const gone = !src.options.includes(v);
             return (
               <div key={v} className="space-y-1 rounded-lg bg-white px-2 py-1.5 ring-1 ring-border">
-                <div className="text-[11.5px] font-bold text-ink">{valueText(v)}</div>
+                <div className="text-[11.5px] font-bold text-ink">
+                  {valueText(v)}
+                  {gone && (
+                    <span className="ml-1.5 font-semibold text-rose-600" title="이 값에 걸린 행은 기안 화면에서 보이지 않고, 적어 둔 항목은 쓰이지 않습니다. ×로 빼거나 지금 값에 다시 넣어 주세요.">
+                      지금 고를 항목에 없음
+                    </span>
+                  )}
+                </div>
                 <div className="flex flex-wrap items-center gap-1 text-[10.5px]">
                   <span className="text-ink3">보이는 행:</span>
                   {groups.length === 0 && <span className="text-ink3">(따로 없음)</span>}
@@ -137,13 +148,13 @@ export function ValueRulesPanel({
                       </button>
                     </span>
                   ))}
-                  <button
+                  {!gone && <button
                     type="button"
                     onClick={() => onPick({ kind: 'rows', value: v })}
                     className={`rounded border px-1.5 py-0.5 font-semibold ${pick?.kind === 'rows' && pick.value === v ? 'border-amber-400 bg-amber-100 text-amber-800' : 'border-dashed border-indigo-300 text-indigo-600 hover:bg-indigo-50'}`}
                   >
                     + 행 고르기
-                  </button>
+                  </button>}
                 </div>
                 {deps.map((d) => {
                   const key = `${d.r}:${d.c}:${v}`;

@@ -27,6 +27,7 @@ import {
   ensureSourceName,
   hasValueRules,
   makeDependent,
+  ruleSourceKind,
   rowsWithOtherCondition,
   showRowsFor,
   valueSourceAt,
@@ -256,6 +257,8 @@ export function SheetCellPanel({
   const ruleSource = isSource(pick?.src) ?? (hold?.at === selKey ? isSource(hold.src) : null) ?? (focusSrc && hasValueRules(sheet, focusSrc) ? focusSource : null);
   /** 다른 칸에서 그 기준 칸 설정을 연다 — 다른 칸을 누르면 닫힌다 */
   const openSource = (src: { r: number; c: number }) => setHold({ src: { r: src.r, c: src.c }, at: selKey });
+  // 선택이 바뀌면 열어 둔 설정을 잊는다 — 그 칸으로 돌아왔을 때 누르지 않았는데 다시 열리지 않게
+  useEffect(() => setHold((h) => (h && h.at !== selKey ? null : h)), [selKey]);
   // 고르던 기준 칸이 더는 기준 칸이 아니면(입력 종류를 바꿈 등) 고르기를 푼다
   useEffect(() => {
     if (pick && !isSource(pick.src)) setPick(null);
@@ -299,7 +302,11 @@ export function SheetCellPanel({
           pick={pick?.what ?? null}
           pickPlan={pickPlan}
           onApplyPick={applyPick}
-          onChange={onChange}
+          // 패널에서 고치는 동안은 열어 둔다 — 마지막 조건을 빼도 바로 접히지 않게
+          onChange={(next) => {
+            setHold({ src: ruleSource, at: selKey });
+            onChange(next);
+          }}
           onPick={startPick}
         />
       )}
@@ -316,7 +323,7 @@ export function SheetCellPanel({
       {dependsOn && !dependsSource && (
         // 기준 칸이 지워졌거나 입력 종류가 바뀐 종속 칸 — 풀 수만 있게
         <div className="flex items-center justify-between gap-2 rounded-lg border border-dashed border-rose-300 px-2 py-1.5 text-[11px] text-rose-600">
-          <span>항목의 기준 칸 '{nameLabel(dependsOn)}'이(가) 시트에 없습니다.</span>
+          <span>항목의 기준 칸 '{nameLabel(dependsOn)}'이(가) 없거나 선택 칸이 아닙니다.</span>
           <button type="button" onClick={() => onChange(clearDependent(sheet, focus.r, focus.c))} className="shrink-0 rounded border border-rose-300 px-1.5 py-0.5 font-semibold hover:bg-rose-50">
             종속 풀기
           </button>
@@ -592,6 +599,11 @@ function RowConditionPanel({
   const r2 = Math.max(range.r1, range.r2);
   const current = rowConditionOf(sheet, focus.r);
   const src = current && valueSources(sheet).find((x) => x.name === current.name);
+  const kind = current ? ruleSourceKind(sheet, current.name) : null;
+  // 기준 칸의 고를 항목에 없는 값에만 걸렸나(직접 입력을 받는 칸은 목록 밖 값도 나온다)
+  const openEnded = !!src && (approvalCellProps(sheet, src.r, src.c).input?.options ?? []).some(isDirectInputOption);
+  const dead = !!current && !!src && !openEnded && !current.values.some((v) => src.options.includes(v));
+  const rowsText = r1 === r2 ? '' : `${r1 + 1}~${r2 + 1}행 `;
   return (
     <div className="space-y-1">
       <Help text="다른 칸 값에 따라 이 줄을 보이거나 숨깁니다(예: 지출 항목이 '식대'일 때만 식대 분류 줄). 정하려면 기준이 되는 선택·체크 칸을 누르고, 위에 뜨는 '값에 따라 바뀌는 것'에서 값마다 [+ 행 고르기]를 누르세요.">
@@ -604,7 +616,9 @@ function RowConditionPanel({
           <div className="text-[11px] font-semibold text-indigo-600">
             {src?.label ?? nameLabel(current.name)} = {current.values.map((v) => (v === CHECK_MARK ? '체크' : v)).join(' · ')}일 때만 보임
           </div>
-          {!src && <div className="text-[10.5px] text-rose-600">조건 칸이 시트에 없어 지금은 항상 보입니다.</div>}
+          {kind === 'missing' && <div className="text-[10.5px] text-rose-600">기준 칸이 시트에 없어 지금은 항상 보입니다.</div>}
+          {kind === 'plain' && <div className="text-[10.5px] text-rose-600">기준 칸이 선택·체크 칸이 아니어서 기안 화면에서 이 줄이 보이지 않을 수 있습니다. 기준 칸에 부품을 다시 넣거나 조건을 푸세요.</div>}
+          {dead && <div className="text-[10.5px] text-rose-600">기준 칸의 고를 항목에 없는 값이라 기안 화면에서 이 줄이 보이지 않습니다. [설정 열기]에서 지금 값에 다시 넣어 주세요.</div>}
           <div className="flex gap-1.5">
             {src && (
               <button type="button" onClick={() => onOpenSource(src)} className="rounded-lg border border-indigo-300 px-2 py-0.5 text-[11px] font-semibold text-indigo-600 hover:bg-indigo-50">
@@ -616,7 +630,7 @@ function RowConditionPanel({
               onClick={() => onChange(setRowCondition(sheet, r1, r2, undefined))}
               className="rounded-lg border border-border px-2 py-0.5 text-[11px] font-semibold text-ink2 hover:text-rose-600"
             >
-              조건 풀기
+              {rowsText}조건 풀기
             </button>
           </div>
         </>

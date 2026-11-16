@@ -8,12 +8,16 @@ import {
   dependentCells,
   dependentCheck,
   ensureSourceName,
+  hasValueRules,
   makeDependent,
   removeRowsFor,
   rowsShownFor,
   rowsWithOtherCondition,
+  ruleSourceKind,
   setBranchOptions,
   showRowsFor,
+  staleRuleValues,
+  valueRuleIssues,
   valueSourceAt,
   valueSources,
 } from './valueRules';
@@ -121,4 +125,53 @@ test('반복 구간 안 이름 없는 선택 칸은 기준 칸 후보가 아니�
   s = setRepeatSection(s, 3, 4, '내역');
   assert.equal(valueSourceAt(s, 3, 1), null);
   assert.ok(valueSourceAt(setCellName(s, 3, 1, '구분'), 3, 1), '이름이 있으면 후보');
+});
+
+test('끊긴 조건 — 고를 항목 이름을 고치면 옛 값에 걸린 행·항목이 남는다(걸린 것으로 세고, 따로 보여 주고, 저장 때 알린다)', () => {
+  let s = ensureSourceName(base(), 0, 1).sheet;
+  s = showRowsFor(s, 2, 2, '지출항목', '식대');
+  s = makeDependent(s, 1, 1, '지출항목');
+  s = setBranchOptions(s, 1, 1, '식대', ['간식대', '야근식대']);
+  const src = () => valueSourceAt(s, 0, 1)!;
+  assert.deepEqual(staleRuleValues(s, src()), []);
+  assert.deepEqual(valueRuleIssues(s), []);
+
+  // '식대'를 '식비'로 고친다(직접입력 없음 — 목록 밖 값은 나올 수 없다)
+  s = setApprovalProp(s, at(0, 1), APPROVAL_NS.input, { type: 'select', options: ['식비', '회의비'] });
+  assert.deepEqual(staleRuleValues(s, src()), ['식대']);
+  assert.equal(hasValueRules(s, src()), true, '지금 항목에 없는 값에만 걸려 있어도 걸린 것');
+  const issues = valueRuleIssues(s);
+  assert.equal(issues.length, 2);
+  assert.match(issues[0], /^3행: .*식대.*보이지 않습니다/);
+  assert.match(issues[1], /분류\(B2\).*식대.*쓰이지 않습니다/);
+
+  // 직접 입력을 받는 기준 칸은 목록 밖 값도 나오므로 행 조건은 알리지 않는다
+  const open = setApprovalProp(s, at(0, 1), APPROVAL_NS.input, { type: 'select', options: ['식비', '직접입력'] });
+  assert.equal(valueRuleIssues(open).some((x) => x.startsWith('3행')), false);
+});
+
+test('끊긴 조건 — 기준 칸에서 부품을 빼면(이름은 남음) 고르는 칸이 아니고, 이름까지 지우면 없는 칸', () => {
+  let s = ensureSourceName(base(), 0, 1).sheet;
+  s = showRowsFor(s, 2, 3, '지출항목', '식대');
+  s = makeDependent(s, 1, 1, '지출항목');
+  assert.equal(ruleSourceKind(s, '지출항목'), 'choice');
+
+  const plain = setApprovalProp(s, at(0, 1), APPROVAL_NS.input, undefined);
+  assert.equal(ruleSourceKind(plain, '지출항목'), 'plain');
+  const a = valueRuleIssues(plain);
+  assert.equal(a.length, 2);
+  assert.match(a[0], /^3·4행: .*선택·체크 칸이 아닙니다/);
+  assert.match(a[1], /분류\(B2\).*없거나 선택 칸이 아닙니다/);
+
+  const gone = setCellName(plain, 0, 1, undefined);
+  assert.equal(ruleSourceKind(gone, '지출항목'), 'missing');
+  assert.match(valueRuleIssues(gone)[0], /^3·4행: .*시트에 없어 항상 보입니다/);
+});
+
+test('끊긴 조건 — 기존 서식에서 온 갈래 이름(key)에 걸린 행 조건은 문제로 보지 않는다', () => {
+  let s = ensureSourceName(base(), 0, 1).sheet;
+  s = setApprovalProp(s, at(1, 1), APPROVAL_NS.input, { type: 'select', options: ['간식대'], depends: { name: '지출항목', branches: [{ when: '식대', options: ['간식대'], key: 'mealKind' }] } });
+  s = setRowCondition(s, 4, 4, { name: 'mealKind', values: ['간식대'] });
+  assert.equal(ruleSourceKind(s, 'mealKind'), 'key');
+  assert.deepEqual(valueRuleIssues(s), []);
 });

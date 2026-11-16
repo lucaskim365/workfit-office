@@ -31,7 +31,7 @@ export const SHEET_EDITOR_TOUR: TourStep[] = [
   {
     target: 'sheet',
     title: '시트 — 문서 틀',
-    body: '칸을 누르고 글자를 쓰면 됩니다. 끌어서 여러 칸을 한 번에 고릅니다.\n빗금 칸은 기안자가 고칠 수 없는 칸, 세로 점선은 A4 인쇄 폭입니다.\n행·열 머리 경계를 끌면 크기가 바뀝니다.',
+    body: '칸을 누르고 글자를 쓰면 됩니다. 끌어서 여러 칸을 한 번에 고릅니다.\n빗금 칸은 기안자가 고칠 수 없는 칸입니다. [격자 보기]로 바꾸면 A4 인쇄 폭이 세로 점선으로 보입니다.\n행·열 머리 경계를 끌면 크기가 바뀝니다.',
   },
   {
     target: 'toolbar',
@@ -95,6 +95,7 @@ export function SheetEditorTour({ steps = SHEET_EDITOR_TOUR, onStep, onClose }: 
   const last = i === steps.length - 1;
   const rootRef = useRef<HTMLDivElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
+  const nextRef = useRef<HTMLButtonElement>(null);
   /** 비출 곳 — 화면 전체를 덮는 바탕(root) 기준 자리. 못 찾으면 null(가운데 설명만) */
   const [box, setBox] = useState<Box | null>(null);
   const [cardPos, setCardPos] = useState<{ left: number; top: number } | null>(null);
@@ -102,7 +103,6 @@ export function SheetEditorTour({ steps = SHEET_EDITOR_TOUR, onStep, onClose }: 
   // 단계가 바뀌면 그 단계의 탭을 열고, 비출 곳이 화면 밖이면 보이는 곳으로 옮긴다
   useEffect(() => {
     onStep?.(step);
-    (document.activeElement as HTMLElement | null)?.blur?.();
     const t = setTimeout(() => {
       const el = step.target ? findTarget(step.target) : null;
       if (!el) return;
@@ -166,13 +166,25 @@ export function SheetEditorTour({ steps = SHEET_EDITOR_TOUR, onStep, onClose }: 
     else setCardPos({ left: clampX(right - cw - GAP * 2), top: clampY(bottom - ch - GAP * 2) });
   }, [box, i]);
 
-  // 글쇠 — Esc 닫기, ←/→(Enter) 이전·다음. 뒤의 편집기로는 넘기지 않는다
+  // 초점은 늘 [다음]에 — Enter·Space 로 넘기고, 뒤 편집기의 입력란에 글자가 들어가지 않게
+  const shown = !!cardPos;
+  useEffect(() => {
+    if (shown) nextRef.current?.focus();
+  }, [i, shown]);
+
+  // 글쇠 — Esc 닫기, ←/→ 이전·다음, Tab 은 카드 안 단추끼리만 돈다. 뒤의 편집기로는 넘기지 않는다
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       e.stopPropagation();
       if (e.key === 'Escape') onClose();
-      else if (e.key === 'ArrowRight' || e.key === 'Enter') (e.preventDefault(), last ? onClose() : setI(i + 1));
+      else if (e.key === 'ArrowRight') (e.preventDefault(), last ? onClose() : setI(i + 1));
       else if (e.key === 'ArrowLeft') (e.preventDefault(), setI(Math.max(0, i - 1)));
+      else if (e.key === 'Tab') {
+        e.preventDefault();
+        const buttons = [...(cardRef.current?.querySelectorAll<HTMLButtonElement>('button') ?? [])];
+        const at = buttons.indexOf(document.activeElement as HTMLButtonElement);
+        buttons[(Math.max(at, 0) + (e.shiftKey ? buttons.length - 1 : 1)) % buttons.length]?.focus();
+      }
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
@@ -220,7 +232,7 @@ export function SheetEditorTour({ steps = SHEET_EDITOR_TOUR, onStep, onClose }: 
                 이전
               </button>
             )}
-            <button type="button" onClick={() => (last ? onClose() : setI(i + 1))} className="rounded-lg bg-teal px-3.5 py-1.5 text-[12px] font-bold text-white hover:opacity-90">
+            <button ref={nextRef} type="button" onClick={() => (last ? onClose() : setI(i + 1))} className="rounded-lg bg-teal px-3.5 py-1.5 text-[12px] font-bold text-white hover:opacity-90">
               {last ? '마침' : '다음'}
             </button>
           </div>
