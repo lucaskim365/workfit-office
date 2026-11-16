@@ -26,19 +26,14 @@ const rowsText = (g: { r1: number; r2: number }) => (g.r1 === g.r2 ? `${g.r1 + 1
 export function ValueRulesPanel({
   sheet,
   source,
-  pinned,
   pick,
   pickPlan,
   onApplyPick,
   onChange,
   onPick,
-  onPin,
-  onPreview,
 }: {
   sheet: Sheet;
   source: { r: number; c: number };
-  /** 다른 칸을 눌러도 이 패널을 붙들어 둔다 */
-  pinned: boolean;
   pick: ValuePick | null;
   /** 고르는 중 지금 시트 선택 — 무엇을(target), 넣을 수 없는 이유(block). 아직 안 골랐으면 null */
   pickPlan: { target: string; block?: string } | null;
@@ -46,21 +41,10 @@ export function ValueRulesPanel({
   onApplyPick: () => void;
   onChange: (next: Sheet) => void;
   onPick: (pick: ValuePick | null) => void;
-  onPin: (pinned: boolean) => void;
-  /** 편집 화면 미리보기 — 기준 칸 값이 이것일 때 숨는 행을 흐리게 */
-  onPreview?: (preview: { name: string; value: string } | null) => void;
 }) {
   const src = valueSourceAt(sheet, source.r, source.c);
   const name = src?.name;
   const deps = name ? dependentCells(sheet, name) : [];
-  const [preview, setPreview] = useState('');
-  // 기준 칸이 바뀌거나(이름·항목 포함) 패널이 닫히면 미리보기도 끈다
-  const optionsKey = src?.options.join('\n');
-  useEffect(() => {
-    setPreview('');
-    onPreview?.(null);
-    return () => onPreview?.(null);
-  }, [source.r, source.c, name, optionsKey]); // eslint-disable-line react-hooks/exhaustive-deps
   // 갈래 항목 입력 중 글자(쉼표 그대로) — 칸을 벗어날 때 넣고 지운다
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   useEffect(() => setDrafts({}), [source.r, source.c, deps.length]);
@@ -79,21 +63,11 @@ export function ValueRulesPanel({
 
   return (
     <div className="space-y-2 rounded-xl border border-indigo-200 bg-indigo-50/40 p-2.5">
-      <div className="flex items-start justify-between gap-2">
-        <div>
-          <div className="text-[12px] font-extrabold text-ink">
-            <span className="text-indigo-600">{src.label}</span> 값에 따라 바뀌는 것
-          </div>
-          <div className="text-[10.5px] leading-snug text-ink3">값마다 보일 행과, 고를 항목이 바뀌는 칸을 정합니다. 행·칸은 시트에서 눌러 고릅니다.</div>
+      <div>
+        <div className="text-[12px] font-extrabold text-ink">
+          <span className="text-indigo-600">{src.label}</span> 값에 따라 바뀌는 것
         </div>
-        <button
-          type="button"
-          onClick={() => onPin(!pinned)}
-          title={pinned ? '다른 칸을 누르면 그 칸 설정으로 바뀌게' : '다른 칸을 눌러도 이 설정을 계속 보이게'}
-          className={`shrink-0 rounded-md border px-1.5 py-0.5 text-[10.5px] font-semibold ${pinned ? 'border-indigo-400 bg-indigo-500 text-white' : 'border-border text-ink2 hover:border-indigo-400'}`}
-        >
-          {pinned ? '고정 풀기' : '고정'}
-        </button>
+        <div className="text-[10.5px] leading-snug text-ink3">값마다 보일 행과, 고를 항목이 바뀌는 칸을 정합니다. 행·칸은 시트에서 눌러 고릅니다.</div>
       </div>
 
       {pick && (
@@ -182,26 +156,6 @@ export function ValueRulesPanel({
             >
               + 값에 따라 고를 항목이 바뀌는 칸 고르기
             </button>
-          )}
-          {name && (
-            <label className="flex items-center gap-1.5 text-[10.5px] text-ink3">
-              <span className="shrink-0">미리보기</span>
-              <select
-                className={inp}
-                value={preview}
-                onChange={(e) => {
-                  setPreview(e.target.value);
-                  onPreview?.(e.target.value ? { name, value: e.target.value } : null);
-                }}
-              >
-                <option value="">끄기</option>
-                {src.options.map((v) => (
-                  <option key={v} value={v}>
-                    {valueText(v)}일 때 — 숨는 행 흐리게
-                  </option>
-                ))}
-              </select>
-            </label>
           )}
         </div>
       )}

@@ -1,6 +1,5 @@
-import { useState } from 'react';
 import type { LucideIcon } from 'lucide-react';
-import { ChevronRight, AlignLeft, Archive, CalendarCheck, Info, Landmark, ListOrdered, ImageIcon, Signature, Table2, Banknote, Building2, Calendar, CalendarRange, Eraser, Eye, FileDigit, Hash, Heading, List, ListChecks, Repeat, SquareCheck, Stamp, Type, User, UserRound, Users, CalendarDays } from 'lucide-react';
+import { AlignLeft, Archive, CalendarCheck, Landmark, ListOrdered, ImageIcon, Signature, Table2, Banknote, Building2, Calendar, CalendarRange, Eye, FileDigit, Hash, Heading, List, ListChecks, SquareCheck, Type, User, UserRound, Users, CalendarDays } from 'lucide-react';
 import type { CellRange, Sheet, SheetSelection } from '@/lib/sheet';
 import {
   APPROVAL_NS,
@@ -11,12 +10,12 @@ import {
   type ApprovalCellProps,
   type CellInputType,
 } from '@/domain/approvalForm/sheet/approvalSheet';
-import { repeatSectionAt, setRepeatSection } from '@/domain/approvalForm/sheet/repeatRows';
 import { DEFAULT_AUTO_NUMBER } from '@/domain/approvalForm/autoNumber';
 
 /**
  * 부품 목록 — 칸에 넣을 부품을 왼쪽에 모아 둔다. 칸을 고르고 부품을 누르거나, 부품을 칸으로 끌어다 놓는다.
- * 하는 일은 오른쪽 '칸 속성'의 입력 칸·자동 채우기·직인·반복 구간과 같다(같은 저장 형식).
+ * 하는 일은 오른쪽 '칸 속성'의 칸 종류 고르기와 같다(같은 저장 형식).
+ * 직인·작성 요령·반복 구간은 부품이 아니다 — 다른 종류와 함께 켜는 것이라 '칸 속성'의 체크와 '이 줄'에서만 정한다.
  */
 
 /** 끌어 놓기 데이터 종류 */
@@ -122,16 +121,6 @@ const BIND_LABELS = new Map<string, string>(BIND_GROUPS.flatMap((g) => g.items.m
 const binds = (...values: string[]) => values.map((v) => bindPart(v, BIND_LABELS.get(v) ?? v));
 const inputs = (...types: CellInputType[]) => types.map(inputPart);
 
-const sealPart: Part = {
-  id: 'seal',
-  label: '회사 직인',
-  icon: Stamp,
-  hint: '결재가 끝나면 이 칸에 회사 직인을 찍습니다',
-  apply: (s, g) => setApprovalProp(s, g, APPROVAL_NS.seal, true),
-  active: (p) => p.seal,
-  remove: (s, g) => setApprovalProp(s, g, APPROVAL_NS.seal, false),
-};
-
 const autoNoPart: Part = {
   id: 'autoNo',
   label: '자동번호',
@@ -148,7 +137,7 @@ const autoNoPart: Part = {
 };
 
 /**
- * 부품 목록 — 누가 채우는지로 크게 나눈다: 기안자가 쓰는 칸 / 저절로 채워지는 칸 / 도구.
+ * 부품 목록 — 누가 채우는지로 크게 나눈다: 기안자가 쓰는 칸 / 저절로 채워지는 칸.
  * 첨부·관련 문서는 부품이 아니다 — 그릴 때 저절로 맺음말 위에(docExtras.ts)
  */
 export const PART_SECTIONS: { title: string; desc?: string; groups: { label?: string; parts: Part[] }[] }[] = [
@@ -168,48 +157,7 @@ export const PART_SECTIONS: { title: string; desc?: string; groups: { label?: st
     desc: '시스템이 채웁니다 — 기안자는 고칠 수 없습니다',
     groups: [
       { label: '기안 정보', parts: [...binds('draft.drafter', 'draft.dept', 'draft.date', 'draft.docNo', 'draft.completedDate'), autoNoPart] },
-      { label: '회사·결재', parts: [...binds('doc.formTitle', 'doc.logo', 'doc.letterhead', 'doc.approvalLine', 'draft.sign'), sealPart] },
-    ],
-  },
-  {
-    title: '도구',
-    groups: [
-      {
-        parts: [
-      {
-        id: 'guide',
-        label: '안내문',
-        icon: Info,
-        hint: '칸에 쓴 글을 작성 화면에만 흐리게 보입니다(결재·인쇄 화면엔 안 나옴) — 작성 요령 안내용(기존 서식 \'안내문\'과 같음)',
-        apply: (s, g) => setApprovalProp(setApprovalProp(s, g, APPROVAL_NS.input, undefined), g, APPROVAL_NS.guide, true),
-        active: (p) => p.guide,
-        remove: (s, g) => setApprovalProp(s, g, APPROVAL_NS.guide, false),
-      },
-      {
-        id: 'repeat',
-        label: '반복 구간',
-        icon: Repeat,
-        hint: '고른 행을 기안자가 [행 추가]·[행 삭제]로 늘이고 줄이는 구간으로(이름은 오른쪽 칸 속성에서)',
-        apply: (s, g) => {
-          const r1 = Math.min(g.r1, g.r2);
-          const r2 = Math.max(g.r1, g.r2);
-          for (let r = r1; r <= r2; r++) if (repeatSectionAt(s, r)) return { notice: '이미 반복 구간인 행이 있습니다 — 오른쪽 칸 속성에서 해제한 뒤 다시 지정하세요.' };
-          return setRepeatSection(s, r1, r2, '반복 구간');
-        },
-      },
-      {
-        id: 'clear',
-        label: '부품 빼기',
-        icon: Eraser,
-        hint: '고른 칸의 입력 칸·자동 채우기·문서 항목·직인·자동번호·안내문을 뺍니다(글자·서식은 그대로)',
-        apply: (s, g) =>
-          [APPROVAL_NS.input, APPROVAL_NS.bind, APPROVAL_NS.seal, APPROVAL_NS.sealMark, APPROVAL_NS.logoMark, APPROVAL_NS.autoNo, APPROVAL_NS.guide].reduce(
-            (acc, ns) => setApprovalProp(acc, g, ns, undefined),
-            s,
-          ),
-      },
-        ],
-      },
+      { label: '회사·결재', parts: binds('doc.formTitle', 'doc.logo', 'doc.letterhead', 'doc.approvalLine', 'draft.sign') },
     ],
   },
 ];
@@ -236,94 +184,55 @@ export function SheetPalette({
 }: {
   sheet: Sheet;
   selection: SheetSelection;
-  /** full: 4열(옆 패널 안) · side: 2열(편집기 왼쪽 막대) · icons: 아이콘만 1열(좁은 화면의 왼쪽 막대 — 이름은 마우스를 올리면) */
-  variant?: 'full' | 'side' | 'icons';
+  /** full: 3열(옆 패널 안) · side: 2열(편집기 왼쪽 막대) */
+  variant?: 'full' | 'side';
   /** 부품 id 와 넣을 범위 — 넣기·빼기·알림은 쓰는 쪽에서(누르기는 toggle: 이미 있으면 뺀다) */
   onApply: (id: string, range: CellRange, toggle?: boolean) => void;
 }) {
   const props = approvalCellProps(sheet, selection.focus.r, selection.focus.c);
-  const icons = variant === 'icons';
-  // 접은 묶음 — 이 브라우저에 기억(편의용, 없어도 됨)
-  const [folded, setFolded] = useState<string[]>(() => {
-    try {
-      const saved: unknown = JSON.parse(localStorage.getItem(FOLD_KEY) ?? '[]');
-      return Array.isArray(saved) ? saved.filter((x): x is string => typeof x === 'string') : [];
-    } catch {
-      return [];
-    }
-  });
-  const toggleFold = (title: string) =>
-    setFolded((cur) => {
-      const next = cur.includes(title) ? cur.filter((t) => t !== title) : [...cur, title];
-      try {
-        localStorage.setItem(FOLD_KEY, JSON.stringify(next));
-      } catch {
-        /* 저장 못 해도 동작은 같음 */
-      }
-      return next;
-    });
   return (
-    <div className={icons ? 'space-y-2' : 'space-y-2.5'}>
+    <div className="space-y-2.5">
       {/* 옆 패널 안(full)은 제목·도움말이 없어 안내를 한 줄로 */}
       {variant === 'full' && <div className="text-[10.5px] leading-snug text-ink3">{PALETTE_HELP}</div>}
-      {PART_SECTIONS.map((sec) => {
-        const open = icons || !folded.includes(sec.title);
-        return (
-          <section key={sec.title} className={icons ? 'space-y-2 border-t-2 border-border pt-2 first:border-t-0 first:pt-0' : undefined}>
-            {!icons && (
-              <button
-                type="button"
-                onClick={() => toggleFold(sec.title)}
-                aria-expanded={open}
-                title={sec.desc}
-                className="mb-1 flex w-full items-center gap-1 text-left text-[11px] font-extrabold text-ink hover:text-teal"
-              >
-                <ChevronRight className={`h-3 w-3 shrink-0 text-ink3 transition-transform ${open ? 'rotate-90' : ''}`} />
-                {sec.title}
-              </button>
-            )}
-            {open && (
-              <div className={icons ? 'space-y-2' : 'space-y-1'}>
-                {sec.groups.map((g, gi) => (
-                  <div key={g.label ?? gi} className={icons && gi > 0 ? 'border-t border-dashed border-border pt-2' : undefined}>
-                    <div className={`grid gap-1 ${icons ? 'grid-cols-1' : variant === 'side' ? 'grid-cols-2' : 'grid-cols-3'}`}>
-                      {g.parts.map((p) => {
-                        const on = p.active?.(props) ?? false;
-                        const Icon = p.icon;
-                        const name = SHORT_LABEL[p.id] ?? p.label;
-                        return (
-                          <button
-                            key={p.id}
-                            type="button"
-                            draggable
-                            onDragStart={(e) => {
-                              e.dataTransfer.setData(PART_MIME, p.id);
-                              e.dataTransfer.effectAllowed = 'copy';
-                            }}
-                            onClick={() => onApply(p.id, selection.range, true)}
-                            title={`${icons ? `[${sec.title}] ` : ''}${p.label} — ${on && p.remove ? `${p.hint} — 다시 누르면 뺍니다` : p.hint}`}
-                            className={`flex min-w-0 cursor-grab items-center rounded-md border font-semibold active:cursor-grabbing ${
-                              icons ? 'justify-center py-1' : 'gap-1 px-1.5 py-[3px] text-[10.5px] leading-tight'
-                            } ${on ? 'border-teal bg-teal-soft text-teal' : 'border-border bg-panel-alt/60 text-ink2 hover:border-teal/60 hover:text-ink'}`}
-                          >
-                            <Icon className={`shrink-0 ${icons ? 'h-4 w-4' : 'h-3 w-3'}`} />
-                            {!icons && <span className="truncate">{name}</span>}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ))}
+      {PART_SECTIONS.map((sec) => (
+        <section key={sec.title}>
+          <div title={sec.desc} className="mb-1 text-[11px] font-extrabold text-ink">
+            {sec.title}
+          </div>
+          <div className="space-y-1">
+            {sec.groups.map((g, gi) => (
+              <div key={g.label ?? gi} className={`grid gap-1 ${variant === 'side' ? 'grid-cols-2' : 'grid-cols-3'}`}>
+                {g.parts.map((p) => {
+                  const on = p.active?.(props) ?? false;
+                  const Icon = p.icon;
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      draggable
+                      onDragStart={(e) => {
+                        e.dataTransfer.setData(PART_MIME, p.id);
+                        e.dataTransfer.effectAllowed = 'copy';
+                      }}
+                      onClick={() => onApply(p.id, selection.range, true)}
+                      title={`${p.label} — ${on && p.remove ? `${p.hint} — 다시 누르면 뺍니다` : p.hint}`}
+                      className={`flex min-w-0 cursor-grab items-center gap-1 rounded-md border px-1.5 py-[3px] text-[10.5px] font-semibold leading-tight active:cursor-grabbing ${
+                        on ? 'border-teal bg-teal-soft text-teal' : 'border-border bg-panel-alt/60 text-ink2 hover:border-teal/60 hover:text-ink'
+                      }`}
+                    >
+                      <Icon className="h-3 w-3 shrink-0" />
+                      <span className="truncate">{SHORT_LABEL[p.id] ?? p.label}</span>
+                    </button>
+                  );
+                })}
               </div>
-            )}
-          </section>
-        );
-      })}
+            ))}
+          </div>
+        </section>
+      ))}
     </div>
   );
 }
-
-const FOLD_KEY = 'sheetPalette.folded';
 
 /** 부품 쓰는 법 — 편집기 왼쪽 막대는 '부품' 옆 (?)에, 옆 패널 안은 한 줄로 */
 export const PALETTE_HELP = '칸을 고르고 누르거나, 칸으로 끌어다 놓으세요. 넣은 부품(하늘색)을 다시 누르면 뺍니다. 부품 이름에 마우스를 올리면 설명이 나옵니다.';

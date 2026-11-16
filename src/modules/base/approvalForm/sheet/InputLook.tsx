@@ -1,28 +1,10 @@
 import { Building2, Calendar, CheckSquare, ChevronDown, Square } from 'lucide-react';
-import type { CellInput, CellInputType } from '@/domain/approvalForm/sheet/approvalSheet';
+import type { CellInput } from '@/domain/approvalForm/sheet/approvalSheet';
 
 /**
- * 아이콘은 왼쪽에 — 칸 오른쪽 위에는 '입력·날짜' 같은 칸 표시가 붙는다
- *
  * 서식 편집기 — 비어 있는 입력 칸 안에 기안 화면에서 뜰 입력 도구 모양을 흐리게 그린다.
  * 눌러도 동작하지 않는 그림이다(편집기에서 칸 클릭은 칸 선택·편집). 실제 동작은 '기안 미리보기'에서.
  */
-
-/** 칸 표시용 짧은 이름 */
-export const INPUT_SHORT_LABELS: Record<CellInputType, string> = {
-  text: '글',
-  multiline: '여러 줄',
-  number: '숫자',
-  currency: '금액',
-  date: '날짜',
-  dateRange: '기간',
-  select: '선택',
-  multiSelect: '여러 선택',
-  checkbox: '체크',
-  user: '사람',
-  users: '여러 명',
-  dept: '부서',
-};
 
 const ic = 'h-3 w-3 shrink-0';
 
@@ -97,9 +79,9 @@ function look(input: CellInput) {
   }
 }
 
-/** quiet — 간단 표시: 글 입력 칸은 아무것도 안 그린다(빗금이 없으면 쓸 수 있는 칸) */
-export function InputLook({ input, quiet }: { input: CellInput; quiet?: boolean }) {
-  if (quiet && input.type === 'text') return null;
+/** 글 입력 칸은 아무것도 안 그린다(빗금이 없으면 쓸 수 있는 칸) */
+export function InputLook({ input }: { input: CellInput }) {
+  if (input.type === 'text') return null;
   return (
     <span
       aria-hidden

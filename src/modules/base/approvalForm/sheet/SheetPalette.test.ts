@@ -21,11 +21,8 @@ test('부품 — 누르면 넣고, 같은 부품을 다시 누르면 뺀다(끌�
   assert.equal(approvalCellProps(s3, 0, 1).input?.type, 'user');
   // 끌어 놓기(toggle 없음)는 이미 있어도 그대로 넣기
   assert.equal(approvalCellProps(sheetOf(applyPart(s1, one, 'input.date')), 0, 1).input?.type, 'date');
-  // 자동 채우기·직인도 같은 방식
+  // 자동 채우기도 같은 방식
   const b1 = sheetOf(applyPart(s0, one, 'bind.draft.drafter', true));
   assert.equal(approvalCellProps(b1, 0, 1).bind, 'draft.drafter');
   assert.equal(approvalCellProps(sheetOf(applyPart(b1, one, 'bind.draft.drafter', true)), 0, 1).bind, undefined);
-  const seal = sheetOf(applyPart(s0, one, 'seal', true));
-  assert.equal(approvalCellProps(seal, 0, 1).seal, true);
-  assert.equal(approvalCellProps(sheetOf(applyPart(seal, one, 'seal', true)), 0, 1).seal, false);
 });

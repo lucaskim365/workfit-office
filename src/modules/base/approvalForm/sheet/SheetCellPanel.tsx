@@ -30,7 +30,6 @@ import {
   showRowsFor,
   valueSourceAt,
   valueSources,
-  withBranchOptions,
 } from '@/domain/approvalForm/sheet/valueRules';
 import { ValueRulesPanel, type ValuePick } from './ValueRulesPanel';
 import { PART_SECTIONS, applyPart } from './SheetPalette';
@@ -43,46 +42,35 @@ import { marksOf } from '@/domain/companyMark/schema';
 import { autoNumberPreview } from '@/domain/approvalForm/autoNumber';
 
 /**
- * 시트 서식 편집기 — 고른 칸의 결재 속성(입력 칸·칸 이름·불러오기·잠금·비공개·직인).
+ * 시트 서식 편집기 — 고른 칸의 결재 속성(칸 종류·필수·잠금·직인·칸 이름·비공개·작성 요령)과 그 줄의 설정(보이기 조건·거래처용 숨김·반복 구간).
  * 보이는 값은 초점 칸 기준이고, 바꾸면 고른 범위 전체에 넣는다(칸 이름만 초점 칸 하나에).
  */
 /** 칸 이름 고르기에서 '직접 쓰기' 항목 값 */
 const CUSTOM = '__custom__';
 const inp = 'w-full rounded-lg border border-border-hi bg-panel px-2 py-1.5 text-[12px] text-ink outline-none focus:border-teal disabled:opacity-50';
 
-/** 설명 — 늘 펼쳐 두면 화면이 글로 가득해서 (?)에 마우스를 올리거나 누를 때만(키보드 초점·누르기로도 열림) */
-/** (?) 단추 — 마우스를 올리면 툴팁, 누르면(키보드·터치도) 아래에 설명을 펼친다(HelpText) */
-function HelpButton({ text, open, onToggle, size = 'h-3 w-3' }: { text: string; open: boolean; onToggle: () => void; size?: string }) {
+/** (?) — 마우스를 올리면 설명(늘 펼쳐 두면 화면이 글로 가득하다) */
+function HelpMark({ text, size = 'h-3 w-3' }: { text: string; size?: string }) {
   return (
-    <button
-      type="button"
+    <span
+      role="img"
       aria-label={`설명: ${text}`}
-      aria-expanded={open}
       title={text}
-      onClick={(e) => {
-        // 체크 칸 label 안에 있어도 체크가 바뀌지 않게
-        e.preventDefault();
-        e.stopPropagation();
-        onToggle();
-      }}
-      className={`inline-flex cursor-help hover:text-teal focus-visible:text-teal ${open ? 'text-teal' : 'text-ink3'}`}
+      // 체크 칸 label 안에 있어도 체크가 바뀌지 않게
+      onClick={(e) => e.preventDefault()}
+      className="inline-flex cursor-help text-ink3 hover:text-teal"
     >
       <CircleHelp className={size} />
-    </button>
+    </span>
   );
 }
-const HelpText = ({ text }: { text: string }) => <div className="text-[10.5px] font-normal leading-snug text-ink3">{text}</div>;
 
-/** 제목 옆 (?) + 누르면 아래에 설명 — 패널 밖으로 넘치지 않게 펼침은 제자리(흐름 안)에 */
+/** 제목 옆 (?) */
 export function Help({ text, size, children }: { text?: string; size?: string; children: React.ReactNode }) {
-  const [open, setOpen] = useState(false);
   return (
-    <div className="space-y-0.5">
-      <div className="flex items-center gap-1">
-        {children}
-        {text && <HelpButton text={text} open={open} onToggle={() => setOpen((v) => !v)} size={size} />}
-      </div>
-      {open && text && <HelpText text={text} />}
+    <div className="flex items-center gap-1">
+      {children}
+      {text && <HelpMark text={text} size={size} />}
     </div>
   );
 }
@@ -99,20 +87,12 @@ function Row({ label, hint, children }: { label: string; hint?: string; children
 }
 
 function Check({ checked, onChange, label, hint, disabled = false }: { checked: boolean; onChange: (v: boolean) => void; label: string; hint: string; disabled?: boolean }) {
-  const [open, setOpen] = useState(false);
   return (
-    <div>
-      <label className={`flex items-center gap-2 rounded-md px-1 py-0.5 ${disabled ? 'cursor-not-allowed opacity-70' : 'cursor-pointer hover:bg-panel-alt'}`}>
-        <input type="checkbox" checked={checked} disabled={disabled} onChange={(e) => onChange(e.target.checked)} className="h-3.5 w-3.5 accent-teal" />
-        <span className="text-[11.5px] font-semibold text-ink">{label}</span>
-        <HelpButton text={hint} open={open} onToggle={() => setOpen((v) => !v)} />
-      </label>
-      {open && (
-        <div className="pb-1 pl-6">
-          <HelpText text={hint} />
-        </div>
-      )}
-    </div>
+    <label className={`flex items-center gap-2 rounded-md px-1 py-0.5 ${disabled ? 'cursor-not-allowed opacity-70' : 'cursor-pointer hover:bg-panel-alt'}`}>
+      <input type="checkbox" checked={checked} disabled={disabled} onChange={(e) => onChange(e.target.checked)} className="h-3.5 w-3.5 accent-teal" />
+      <span className="text-[11.5px] font-semibold text-ink">{label}</span>
+      <HelpMark text={hint} />
+    </label>
   );
 }
 
@@ -145,11 +125,8 @@ function Fold({
   );
 }
 
-/** '칸 종류' 고르기 — 왼쪽 부품 목록과 같은 묶음·같은 동작(도구·직인은 빼고, 직인은 아래 체크) */
-const KIND_GROUPS = PART_SECTIONS.filter((s) => s.title !== '도구').map((s) => ({
-  title: s.title,
-  parts: s.groups.flatMap((g) => g.parts).filter((p) => p.id !== 'seal'),
-}));
+/** '칸 종류' 고르기 — 왼쪽 부품 목록과 같은 묶음·같은 동작 */
+const KIND_GROUPS = PART_SECTIONS.map((s) => ({ title: s.title, parts: s.groups.flatMap((g) => g.parts) }));
 const KIND_PARTS = new Map(KIND_GROUPS.flatMap((g) => g.parts).map((p) => [p.id, p]));
 const UNKNOWN_KIND = '__unknown__';
 
@@ -158,13 +135,10 @@ export function SheetCellPanel({
   selection,
   onChange,
   link = null,
-  onPreview,
 }: {
   sheet: Sheet;
   selection: SheetSelection;
   onChange: (next: Sheet) => void;
-  /** '값에 따라 바뀌는 것' 미리보기 — 기준 칸 값이 이것일 때 숨는 행을 편집 화면에서 흐리게 */
-  onPreview?: (preview: { name: string; value: string } | null) => void;
   /** 연동 기능(연동 유형) — 있으면 그 연동 칸 이름(휴가 기간 등)을 칸 이름 목록에 */
   link?: string | null;
 }) {
@@ -235,8 +209,8 @@ export function SheetCellPanel({
 
   // 더 보기 — 접혀 있어도 켜진 것은 한 줄로 보인다
   const [moreOpen, setMoreOpen] = useState(false);
-  const moreSet = [props.name ? `칸 이름: ${nameLabel(props.name)}` : '', props.secret ? '비공개' : '', props.guide ? '안내문' : ''].filter(Boolean);
-  const moreSummary = moreSet.length ? moreSet.join(' · ') : '칸 이름 · 비공개 · 안내문';
+  const moreSet = [props.name ? `칸 이름: ${nameLabel(props.name)}` : '', props.secret ? '비공개' : '', props.guide ? '작성 요령' : ''].filter(Boolean);
+  const moreSummary = moreSet.length ? moreSet.join(' · ') : '칸 이름 · 비공개 · 작성 요령';
   const { data: marks } = useCompanyMarks();
   const seals = marksOf(marks, 'seal');
   const logos = marksOf(marks, 'logo');
@@ -267,19 +241,18 @@ export function SheetCellPanel({
   };
 
   // ── 값에 따라 바뀌는 것(기준 칸 중심 설정) ──
-  // 고정하면 다른 칸을 눌러도 그 기준 칸 설정이 남는다(행·칸을 시트에서 눌러 고르는 동안에도)
-  // 고르기는 '선택을 모아 두었다가 [적용]' — 누르는 순간 넣으면 끌어서 여러 행 고르기·화살표 이동과 구분이 안 된다.
-  // 고르는 동안·적용 직후(다른 칸을 누르기 전)에는 기준 칸 설정을 계속 보인다 — 사용자가 켜지 않은 고정은 남기지 않는다
-  const [pinned, setPinned] = useState<{ r: number; c: number } | null>(null);
+  // 고르기는 '선택을 모아 두었다가 [넣기]' — 누르는 순간 넣으면 끌어서 여러 행 고르기·화살표 이동과 구분이 안 된다.
+  // 기준 칸 설정은 그 칸을 골랐을 때, 행·칸을 고르는 동안(pick), 그리고 다른 칸을 누르기 전까지(hold — 넣은 직후·'설정 열기'로 연 때) 보인다
   const [pick, setPick] = useState<{ what: ValuePick; src: { r: number; c: number }; from: string } | null>(null);
   const [hold, setHold] = useState<{ src: { r: number; c: number }; at: string } | null>(null);
   const selKey = `${range.r1}:${range.c1}:${range.r2}:${range.c2}:${focus.r}:${focus.c}`;
   const isSource = (p: { r: number; c: number } | null | undefined) => (p && valueSourceAt(sheet, p.r, p.c) ? p : null);
   const focusSource = multi ? null : isSource(focus);
-  const ruleSource = isSource(pinned) ?? isSource(pick?.src) ?? (hold?.at === selKey ? isSource(hold.src) : null) ?? focusSource;
-  // 고정한 칸이 더는 기준 칸이 아니면(입력 종류를 바꿈 등) 고정·고르기를 푼다
+  const ruleSource = isSource(pick?.src) ?? (hold?.at === selKey ? isSource(hold.src) : null) ?? focusSource;
+  /** 다른 칸에서 그 기준 칸 설정을 연다 — 다른 칸을 누르면 닫힌다 */
+  const openSource = (src: { r: number; c: number }) => setHold({ src: { r: src.r, c: src.c }, at: selKey });
+  // 고르던 기준 칸이 더는 기준 칸이 아니면(입력 종류를 바꿈 등) 고르기를 푼다
   useEffect(() => {
-    if (pinned && !isSource(pinned)) setPinned(null);
     if (pick && !isSource(pick.src)) setPick(null);
   }); // eslint-disable-line react-hooks/exhaustive-deps
   // 종속 칸을 누르면 그 기준 칸 설정으로 갈 수 있게
@@ -318,24 +291,31 @@ export function SheetCellPanel({
         <ValueRulesPanel
           sheet={sheet}
           source={ruleSource}
-          pinned={!!pinned}
           pick={pick?.what ?? null}
           pickPlan={pickPlan}
           onApplyPick={applyPick}
           onChange={onChange}
           onPick={startPick}
-          onPin={(on) => setPinned(on ? ruleSource : null)}
-          onPreview={onPreview}
         />
       )}
-      {!ruleSource && dependsSource && (
+      {/* 종속 칸도 선택 칸이라 자기 설정(위)이 뜬다 — 그 기준 칸 설정으로 가는 길은 따로 둔다 */}
+      {dependsSource && !(ruleSource?.r === dependsSource.r && ruleSource?.c === dependsSource.c) && (
         <button
           type="button"
-          onClick={() => setPinned({ r: dependsSource.r, c: dependsSource.c })}
+          onClick={() => openSource(dependsSource)}
           className="w-full rounded-lg border border-dashed border-indigo-300 px-2 py-1.5 text-left text-[11px] font-semibold text-indigo-600 hover:bg-indigo-50"
         >
           이 칸의 항목은 '{dependsSource.label}' 값에 따라 바뀝니다 — 그 설정 열기
         </button>
+      )}
+      {dependsOn && !dependsSource && (
+        // 기준 칸이 지워졌거나 입력 종류가 바뀐 종속 칸 — 풀 수만 있게
+        <div className="flex items-center justify-between gap-2 rounded-lg border border-dashed border-rose-300 px-2 py-1.5 text-[11px] text-rose-600">
+          <span>항목의 기준 칸 '{nameLabel(dependsOn)}'이(가) 시트에 없습니다.</span>
+          <button type="button" onClick={() => onChange(clearDependent(sheet, focus.r, focus.c))} className="shrink-0 rounded border border-rose-300 px-1.5 py-0.5 font-semibold hover:bg-rose-50">
+            종속 풀기
+          </button>
+        </div>
       )}
       <div className="space-y-1.5">
         <div className="flex items-baseline justify-between">
@@ -391,9 +371,6 @@ export function SheetCellPanel({
           label="직접 입력 허용"
           hint="목록 끝에 '직접입력'이 붙습니다. 기안자가 그걸 고르면 글자 칸으로 바뀌어 목록에 없는 값을 직접 씁니다."
         />
-      )}
-      {props.input?.type === 'select' && !multi && (
-        <DependsEditor sheet={sheet} r={focus.r} c={focus.c} input={props.input} onChange={onChange} />
       )}
 
       {props.autoNo && (
@@ -539,15 +516,16 @@ export function SheetCellPanel({
         />
         <Check
           checked={props.guide}
-          onChange={(v) => onChange(setApprovalProp(sheet, range, APPROVAL_NS.guide, v))}
-          label="안내문"
-          hint="칸에 쓴 글을 작성 화면에만 흐리게 보입니다(결재·인쇄 화면엔 안 나옴)."
+          // 작성 요령 칸은 기안자가 쓰는 칸이 아니다 — 켜면 입력 칸에서 뺀다
+          onChange={(v) => onChange(setApprovalProp(v ? setApprovalProp(sheet, range, APPROVAL_NS.input, undefined) : sheet, range, APPROVAL_NS.guide, v))}
+          label="작성 요령"
+          hint="칸에 쓴 글을 작성 화면에만 흐리게 보입니다(결재·인쇄 화면엔 안 나옴) — 기안자에게 쓰는 법을 알려 줄 때. 입력 칸이었다면 글자 칸으로 바뀝니다."
         />
       </Fold>
 
       <div className="space-y-2 rounded-lg border border-border bg-panel-alt/40 px-2 py-2">
         <div className="text-[11.5px] font-extrabold text-ink">이 줄 ({rowLabel})</div>
-        <RowConditionPanel sheet={sheet} selection={selection} onChange={onChange} />
+        <RowConditionPanel sheet={sheet} selection={selection} onChange={onChange} onOpenSource={openSource} />
         <Check
           checked={rowsExternalHidden}
           onChange={(v) => onChange(setExternalHiddenRows(sheet, range.r1, range.r2, v))}
@@ -560,155 +538,54 @@ export function SheetCellPanel({
   );
 }
 
-/** 기준 칸 고르기 목록의 값 — 이름이 있으면 이름, 없으면 칸 자리(@행:열) */
-const sourceOptionKey = (x: { name?: string; r: number; c: number }) => x.name ?? `@${x.r}:${x.c}`;
-
 /**
- * 종속 선택 — 이 선택 칸의 항목을 다른 선택 칸 값에 따라 바꾼다(엑셀 종속 드롭다운).
- * 예: 지출 항목이 식대면 [간식대·외근식대·야근식대], 운반비면 [우편/택배·퀵서비스], 그 밖엔 칸을 쓸 수 없음
+ * 행 보이기 조건 — 이 줄에 걸린 조건을 보여 주고 푼다.
+ * 거는 곳은 한 군데: 기준 칸(선택·체크 칸)의 '값에 따라 바뀌는 것'에서 값마다 [+ 행 고르기]
  */
-function DependsEditor({ sheet, r, c, input, onChange }: { sheet: Sheet; r: number; c: number; input: CellInput; onChange: (next: Sheet) => void }) {
-  const at = { r1: r, r2: r, c1: c, c2: c };
-  const onInput = (next: CellInput) => onChange(setApprovalProp(sheet, at, APPROVAL_NS.input, next));
-  // 기준 칸 후보 — 이름 없는 칸도(고르면 이름을 지어 붙인다). 자기 자신·체크 칸은 빼고
-  const sources = valueSources(sheet).filter((x) => !(x.r === r && x.c === c) && x.kind !== 'checkbox');
-  const dep = input.depends;
-  const src = dep ? sources.find((x) => x.name === dep.name) : undefined;
-  // 갈래 항목 글자 — 칸을 벗어날 때 넣는다(입력 중 쉼표 그대로)
-  const textOf = (when: string) => (dep?.branches.find((b) => b.when === when)?.options ?? []).join(', ');
-  const [drafts, setDrafts] = useState<Record<string, string>>({});
-  useEffect(() => setDrafts({}), [r, c, dep?.name]);
-  // 반영하면 입력 중 글자는 지운다(되돌리기와 어긋나지 않게). 글자가 그대로면 시트를 바꾸지 않는다(눌렀다 나가기만 해도 항목이 지워지지 않게)
-  const commit = (when: string, text: string) => {
-    setDrafts(({ [when]: _done, ...rest }) => rest);
-    if (!dep || text === textOf(when)) return;
-    onInput(withBranchOptions(input, when, text.split(/[,\n]/).map((o) => o.trim()).filter(Boolean)));
-  };
-  const choose = (key: string) => {
-    // 종속 해제 — 모든 갈래 항목을 일반 목록으로
-    if (!key) return onChange(clearDependent(sheet, r, c));
-    const pick = sources.find((x) => sourceOptionKey(x) === key);
-    if (!pick) return;
-    // 기준 칸에 이름이 없으면 지어 붙이고 같은 판에서 종속을 건다
-    const { sheet: named, name } = ensureSourceName(sheet, pick.r, pick.c);
-    onChange(setApprovalProp(named, at, APPROVAL_NS.input, { ...input, depends: { name, branches: [] }, options: input.options ?? [] }));
-  };
-  if (!dep && sources.length === 0) return null;
-  return (
-    <Row
-      label="항목을 다른 칸 값에 따라"
-      hint="기준 칸 값마다 고를 항목을 쉼표로 적습니다. 비워 둔 값을 고르면 이 칸은 쓸 수 없는 칸(—)이 됩니다. 항목에 '직접입력'을 넣으면 그 값일 때 직접 쓸 수 있습니다."
-    >
-      <select className={inp} value={dep?.name ?? ''} onChange={(e) => choose(e.target.value)}>
-        <option value="">항상 같은 항목 (위 '고를 항목')</option>
-        {sources.map((x) => (
-          <option key={sourceOptionKey(x)} value={sourceOptionKey(x)}>
-            {x.label} 값에 따라
-          </option>
-        ))}
-        {dep && !src && <option value={dep.name}>{nameLabel(dep.name)} (칸 없음)</option>}
-      </select>
-      {dep && src && (
-        <div className="mt-1 space-y-1 rounded-lg bg-panel-alt px-2 py-1.5">
-          {src.options.map((when) => {
-            const key = dep.branches.find((b) => b.when === when)?.key;
-            return (
-              <label key={when} className="flex items-center gap-1.5 text-[11px]">
-                <span className="w-[72px] shrink-0 truncate font-semibold text-ink2" title={when}>
-                  {when}
-                </span>
-                <input
-                  className={inp}
-                  value={drafts[when] ?? textOf(when)}
-                  placeholder="(이 값이면 칸 안 씀)"
-                  onChange={(e) => setDrafts((d) => ({ ...d, [when]: e.target.value }))}
-                  onBlur={(e) => commit(when, e.target.value)}
-                  title={key ? `이 값일 때 칸 값을 '${key}' 이름으로도 남깁니다(기존 서식 결재선 규칙 조건)` : undefined}
-                />
-              </label>
-            );
-          })}
-        </div>
-      )}
-    </Row>
-  );
-}
-
-/**
- * 행 보이기 조건 — 고른 행을 '지출 항목이 식대일 때만'처럼 다른 칸 값에 따라 보이게(기존 서식 visibleIf).
- * 조건 칸은 칸 이름이 붙은 선택·여러 선택·체크 칸
- */
-function RowConditionPanel({ sheet, selection, onChange }: { sheet: Sheet; selection: SheetSelection; onChange: (next: Sheet) => void }) {
+function RowConditionPanel({
+  sheet,
+  selection,
+  onChange,
+  onOpenSource,
+}: {
+  sheet: Sheet;
+  selection: SheetSelection;
+  onChange: (next: Sheet) => void;
+  /** 조건의 기준 칸 설정('값에 따라 바뀌는 것') 열기 */
+  onOpenSource: (src: { r: number; c: number }) => void;
+}) {
   const { range, focus } = selection;
   const r1 = Math.min(range.r1, range.r2);
   const r2 = Math.max(range.r1, range.r2);
-  const rowLabel = r1 === r2 ? `${r1 + 1}행` : `${r1 + 1}~${r2 + 1}행`;
   const current = rowConditionOf(sheet, focus.r);
-  // 고른 행 안의 칸은 조건 칸이 될 수 없다(자기를 숨기면 다시 못 보임). 이름 없는 칸도 — 고르면 이름을 지어 붙인다
-  const sources = valueSources(sheet).filter((x) => x.r < r1 || x.r > r2);
-  // 고른 기준 칸(sourceOptionKey) — 이름 없는 칸은 값을 처음 고를 때(조건을 실제로 걸 때) 이름을 지어 붙인다
-  const [key, setKey] = useState('');
-  // 다른 행으로 옮기면 그 행 조건으로, 조건이 바뀌면(되돌리기 등) 그 칸으로 — 칸만 고르고 값을 아직 안 고른 상태는 지우지 않는다
-  useEffect(() => setKey(current?.name ?? ''), [focus.r]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => {
-    if (current?.name) setKey(current.name);
-  }, [current?.name]);
-  const src = sources.find((x) => sourceOptionKey(x) === key);
-  const name = src ? src.name : key;
-  const values = name && current?.name === name ? current.values : [];
-  // 기존 서식 조건에 걸린 값이 지금 항목에 없으면(직접입력 등) 그 값도 보여 준다 — 풀 수 있게
-  const shownOptions = src ? [...src.options, ...values.filter((v) => !src.options.includes(v))] : [];
-  const toggle = (opt: string, on: boolean) => {
-    if (!src) return;
-    const next = on ? [...values, opt] : values.filter((v) => v !== opt);
-    const named = ensureSourceName(sheet, src.r, src.c);
-    if (named.name !== key) setKey(named.name);
-    onChange(setRowCondition(named.sheet, r1, r2, next.length ? { name: named.name, values: next } : undefined));
-  };
-
+  const src = current && valueSources(sheet).find((x) => x.name === current.name);
   return (
     <div className="space-y-1">
-      <Help text={`다른 칸 값에 따라 ${rowLabel}을 보이거나 숨깁니다(예: 지출 항목이 '식대'일 때만 식대 분류 줄). 조건으로 쓸 선택·체크 입력 칸이 있어야 합니다.`}>
+      <Help text="다른 칸 값에 따라 이 줄을 보이거나 숨깁니다(예: 지출 항목이 '식대'일 때만 식대 분류 줄). 정하려면 기준이 되는 선택·체크 칸을 누르고, 위에 뜨는 '값에 따라 바뀌는 것'에서 값마다 [+ 행 고르기]를 누르세요.">
         <span className="text-[11px] font-bold text-ink2">보이기 조건</span>
       </Help>
-      {sources.length === 0 && !current ? (
-        <div className="text-[10.5px] text-ink3">항상 보임 — 조건으로 쓸 선택·체크 칸이 없습니다</div>
+      {!current ? (
+        <div className="text-[10.5px] text-ink3">항상 보임</div>
       ) : (
         <>
-          <select
-            className={inp}
-            value={key}
-            onChange={(e) => {
-              // 조건 칸을 바꾸면 고른 값은 새로 — 비우면 조건 없음(항상 보임)
-              setKey(e.target.value);
-              if (current) onChange(setRowCondition(sheet, r1, r2, undefined));
-            }}
-          >
-            <option value="">항상 보이기 (조건 없음)</option>
-            {sources.map((x) => (
-              <option key={sourceOptionKey(x)} value={sourceOptionKey(x)}>
-                {x.label} 칸 값에 따라
-              </option>
-            ))}
-            {current && !sources.some((x) => x.name === current.name) && <option value={current.name}>{nameLabel(current.name)} (칸 없음)</option>}
-          </select>
-          {key && src && (
-            <div className="space-y-0.5 rounded-lg bg-panel-alt px-2 py-1.5">
-              <div className="text-[10.5px] text-ink3">
-                <b className="text-ink2">{src.label}</b>이(가) 다음 중 하나일 때만 보입니다
-              </div>
-              <div className="flex flex-wrap gap-x-3 gap-y-0.5">
-                {shownOptions.map((opt) => (
-                  <label key={opt} className="flex cursor-pointer items-center gap-1 text-[11.5px] text-ink">
-                    <input type="checkbox" checked={values.includes(opt)} onChange={(e) => toggle(opt, e.target.checked)} className="h-3.5 w-3.5 accent-teal" />
-                    {opt === CHECK_MARK ? '체크했을 때' : opt}
-                  </label>
-                ))}
-              </div>
-              {values.length === 0 && <div className="text-[10.5px] text-amber-600">값을 하나 이상 고르면 조건이 걸립니다.</div>}
-            </div>
-          )}
-          {key && !src && <div className="text-[10.5px] text-rose-600">조건 칸 '{nameLabel(key)}'이(가) 시트에 없어 이 행은 항상 보입니다.</div>}
+          <div className="text-[11px] font-semibold text-indigo-600">
+            {src?.label ?? nameLabel(current.name)} = {current.values.map((v) => (v === CHECK_MARK ? '체크' : v)).join(' · ')}일 때만 보임
+          </div>
+          {!src && <div className="text-[10.5px] text-rose-600">조건 칸이 시트에 없어 지금은 항상 보입니다.</div>}
+          <div className="flex gap-1.5">
+            {src && (
+              <button type="button" onClick={() => onOpenSource(src)} className="rounded-lg border border-indigo-300 px-2 py-0.5 text-[11px] font-semibold text-indigo-600 hover:bg-indigo-50">
+                설정 열기
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => onChange(setRowCondition(sheet, r1, r2, undefined))}
+              className="rounded-lg border border-border px-2 py-0.5 text-[11px] font-semibold text-ink2 hover:text-rose-600"
+            >
+              조건 풀기
+            </button>
+          </div>
         </>
       )}
     </div>

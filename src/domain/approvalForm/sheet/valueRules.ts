@@ -211,13 +211,3 @@ export function setBranchOptions(s: Sheet, r: number, c: number, when: string, o
   if (!input?.depends) return s;
   return setApprovalProp(s, cellRange(r, c), APPROVAL_NS.input, withBranchOptions(input, when, options));
 }
-
-/** 미리보기 — 기준 칸 값이 value 일 때 숨는 행(이 기준 칸 조건이 걸렸는데 그 값이 아닌 행) */
-export function rowsHiddenWhen(s: Sheet, name: string, value: string): Set<number> {
-  const out = new Set<number>();
-  for (let r = 0; r < s.rows.length; r++) {
-    const cond = rowConditionOf(s, r);
-    if (cond?.name === name && !cond.values.includes(value)) out.add(r);
-  }
-  return out;
-}

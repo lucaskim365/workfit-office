@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { suggestFormCode } from '@/domain/approvalForm/formCode';
-import { ArrowLeft, Asterisk, EyeOff, Eye, FileSpreadsheet, Filter, GitBranch, History, Info, Lock, Save, Stamp, Tag, X } from 'lucide-react';
+import { ArrowLeft, Asterisk, ChevronRight, EyeOff, Eye, FileSpreadsheet, Filter, GitBranch, History, Info, Lock, Save, Stamp, Tag, X } from 'lucide-react';
 import { SheetDraftForm } from '@/modules/gw/approval/sheetForm/SheetDraftForm';
 import { useSheetHolidayWork } from '@/modules/gw/approval/sheetForm/useSheetHolidayWork';
 import { SheetDocView } from '@/modules/gw/approval/sheetForm/SheetDocView';
@@ -40,22 +40,13 @@ import {
   setApprovalCellValue,
   validateApprovalSheet,
 } from '@/domain/approvalForm/sheet/approvalSheet';
-import { rowsHiddenWhen } from '@/domain/approvalForm/sheet/valueRules';
 import { Help, SheetCellPanel } from './SheetCellPanel';
 import { requestSidebarCollapse } from '@/app/shell/collapseSidebar';
 import { PALETTE_HELP, PART_MIME, SheetPalette, applyPart } from './SheetPalette';
-import { INPUT_SHORT_LABELS, InputLook } from './InputLook';
+import { InputLook } from './InputLook';
 import { healRepeatSections, repeatIssues, repeatSections } from '@/domain/approvalForm/sheet/repeatRows';
 
-/** 편집기 칸 표시 방식 */
-type MarksMode = 'simple' | 'detail' | 'off';
-
-/**
- * 시트 서식 편집기(관리자) — 엑셀 불러오기, 틀 편집, 칸 속성, 버전 저장.
- * 서식 머리(이름·코드·폴더)는 approvalForms 에, 틀은 저장할 때마다 approvalFormVersions 에 새 버전으로 쌓는다.
- * 기안·결재 화면 연결은 다음 단계라 지금은 '사용 안 함'으로만 저장한다(기안 목록에 나오지 않음).
- */
-const inp = 'w-full rounded-lg border border-border-hi bg-panel px-2.5 py-1.5 text-[12px] text-ink outline-none focus:border-teal disabled:bg-panel-alt disabled:text-ink3';
+const inp ='w-full rounded-lg border border-border-hi bg-panel px-2.5 py-1.5 text-[12px] text-ink outline-none focus:border-teal disabled:bg-panel-alt disabled:text-ink3';
 
 interface Props {
   /** 새 서식이면 id 가 빈 문자열 */
@@ -79,6 +70,10 @@ interface Props {
   onSaved?: (formId: string, version: number) => void;
 }
 
+/**
+ * 시트 서식 편집기(관리자) — 엑셀 불러오기, 틀 편집, 칸 속성, 버전 저장.
+ * 서식 머리(이름·코드·폴더)는 approvalForms 에, 틀은 저장할 때마다 approvalFormVersions 에 새 버전으로 쌓는다.
+ */
 export function SheetFormDesigner(props: Props) {
   const { data: loaded, isLoading, error } = useFormVersionSheet(props.form.id || null, props.version);
   if (props.version !== null && isLoading) {
@@ -104,9 +99,8 @@ const fitToPage = (s: Sheet): Sheet => ({ ...s, colWidths: Object.fromEntries(s.
 const PAPER_PAD = 66;
 /** 앱에서 화면 위에 붙어 있는 높이 — 상단바(58px) + 탭 막대(36px). 편집기 도구 막대·옆 패널이 그 아래에 붙는다 */
 const APP_STICKY_TOP = 94;
-/** 편집기 옆 막대 폭 — 부품(2열)·부품(아이콘만)·설정 패널 */
+/** 편집기 옆 막대 폭 — 부품(2열)·설정 패널 */
 const PALETTE_W = 196;
-const PALETTE_ICONS_W = 56;
 const SIDE_W = 320;
 const SIDE_MIN_W = 280;
 
@@ -153,19 +147,18 @@ function Designer({
       return 'paper';
     }
   });
-  // 칸 표시 — 간단(못 고치는 칸만 옅은 빗금, 특별한 칸은 작은 아이콘) / 자세히(글자 꼬리표 전부) / 끔(엑셀처럼 깨끗하게)
-  const [markMode, setMarkMode] = useState<MarksMode>(() => {
+  // 칸 표시 — 켬(못 고치는 칸은 옅은 빗금, 특별한 칸은 작은 아이콘) / 끔(엑셀처럼 깨끗하게)
+  const [marksOn, setMarksOn] = useState(() => {
     try {
-      const v = localStorage.getItem('sheetDesigner.marks');
-      return v === 'detail' || v === 'off' ? v : 'simple';
+      return localStorage.getItem('sheetDesigner.marks') !== 'off';
     } catch {
-      return 'simple';
+      return true;
     }
   });
-  const changeMarks = (v: MarksMode) => {
-    setMarkMode(v);
+  const changeMarks = (on: boolean) => {
+    setMarksOn(on);
     try {
-      localStorage.setItem('sheetDesigner.marks', v);
+      localStorage.setItem('sheetDesigner.marks', on ? 'on' : 'off');
     } catch {
       /* 저장 못 해도 이번 화면은 바뀐다 */
     }
@@ -233,7 +226,7 @@ function Designer({
       setNote(`엑셀에서 불러옴: ${file.name}`);
       setMsg({
         kind: warnings.length ? 'info' : 'ok',
-        text: `'${file.name}'을 불러왔습니다 — ${fromXlsx.rows.length}행 × ${fromXlsx.cols.length}열. 이제 기안자가 쓸 칸을 골라 '입력 칸'으로 정해 주세요. ${keepFull ? '문서 머리(로고·결재란·문서 정보)와 맺음말은 엑셀 위·아래에 그대로 두었습니다 — 큰 제목 칸은 비웠으니 엑셀 제목을 쓰거나 칸을 정리하세요. ' : keepInfo ? '맨 위 문서 정보 표는 그대로 두었습니다(엑셀에 같은 칸이 있으면 한쪽을 지우세요). ' : '문서 머리(로고·결재란·문서 정보·맺음말)도 시트 안에 두려면 편집 도구의 [문서 머리 넣기]를 누르세요. '}${legacy ? '' : "(문서 머리의 큰 제목은 엑셀 제목과 겹치지 않게 껐습니다 — 아래 '문서 머리에 보일 항목'에서 바꿀 수 있음)"}`,
+        text: `'${file.name}'을 불러왔습니다(${fromXlsx.rows.length}행 × ${fromXlsx.cols.length}열). 기안자가 쓸 칸을 골라 부품을 넣어 주세요. ${keepFull ? '문서 머리·맺음말은 그대로 두고 큰 제목 칸만 비웠습니다.' : keepInfo ? '맨 위 문서 정보 표는 그대로 두었습니다.' : '문서 머리를 시트 안에 두려면 [문서 머리 넣기]를 누르세요.'}${!keepFull && !legacy ? ' 시트 밖 문서 머리의 큰 제목은 엑셀 제목과 겹치지 않게 껐습니다.' : ''}`,
         list: warnings,
       });
     } catch (err) {
@@ -320,36 +313,11 @@ function Designer({
   const sections = useMemo(() => repeatSections(sheet), [sheet]);
   // 행 보이기 조건 표시용 — 조건 칸 이름 → 칸 왼쪽 글자(지출 항목)
   const condLabels = useMemo(() => new Map(conditionSources(sheet).map((x) => [x.name, x.label])), [sheet]);
-  // '값에 따라 바뀌는 것' 미리보기 — 기준 칸 값이 이것일 때 숨는 행을 흐리게
-  const [rulePreview, setRulePreview] = useState<{ name: string; value: string } | null>(null);
-  const previewHidden = useMemo(() => (rulePreview ? rowsHiddenWhen(sheet, rulePreview.name, rulePreview.value) : null), [sheet, rulePreview]);
-  const badgeWithPreview = (r: number, c: number) => {
-    const inner = badge(r, c);
-    if (!previewHidden?.has(r)) return inner;
-    return (
-      <>
-        {inner}
-        <span aria-hidden title={`미리보기 — '${rulePreview?.value}'일 때 이 행은 숨습니다`} className="pointer-events-none absolute inset-0 z-[2] bg-slate-500/30 [background-image:repeating-linear-gradient(135deg,transparent_0_6px,rgba(255,255,255,.35)_6px_8px)]" />
-      </>
-    );
-  };
   const badge = (r: number, c: number) => {
-    if (markMode === 'off') return null;
+    if (!marksOn) return null;
     const p = approvalCellProps(sheet, r, c);
-    // 반복 구간 — 첫 열 왼쪽에 보라색 띠, 첫 행에 이름
+    // 반복 구간 — 첫 열 왼쪽에 보라색 띠
     const sec = c === 0 ? sections.find((x) => r >= x.first && r <= x.last) : undefined;
-    const repeatMark = sec && (
-      <>
-        <span aria-hidden className="pointer-events-none absolute inset-y-0 left-0 w-[3px] bg-violet-500" />
-        {r === sec.first && (
-          <span title={`반복 구간: ${sec.label} (${sec.first + 1}~${sec.last + 1}행) — 기안자가 행을 추가·삭제`} className="pointer-events-none absolute left-1 top-0.5 rounded-sm bg-violet-500 px-1 text-[8.5px] font-bold leading-[13px] text-white">
-            반복 · {sec.label}
-          </span>
-        )}
-      </>
-    );
-    const marks: { t: string; cls: string; title: string }[] = [];
-    if (p.input) marks.push({ t: `입력·${INPUT_SHORT_LABELS[p.input.type] ?? ''}`, cls: 'bg-amber-400/90 text-white', title: '입력 칸 — 기안 화면에서 이 종류의 입력 도구가 뜹니다' });
     // 비어 있는 입력 칸에는 기안 화면에서 뜰 입력 도구 모양을 흐리게
     const col = sheet.cols[c];
     const emptyInput = p.input && col !== undefined && !sheet.rows[r]?.[col] && sheet.formulas[`${r}:${col}`] === undefined;
@@ -381,44 +349,12 @@ function Designer({
           {`{${bindLabel(p.bind).replace(/^.+? · /, '')}}`}
         </span>
       ) : null;
-    const inputLook = autoLook ?? (emptyInput && p.input ? <InputLook input={p.input} quiet={markMode === 'simple'} /> : null);
-    if (markMode === 'simple') {
-      // 기안자가 쓰거나 고칠 수 있는 칸 — 잠그지 않은 입력 칸, 문서 항목(제목·보존연한·공개범위)
-      const writable = (!!p.input && !p.lock && !p.bind) || isDocFieldBind(p.bind);
-      // 못 고치는 칸 중 내용이 있는 칸만 표시(빈 여백 칸까지 칠하면 오히려 어지럽다)
-      const fixed = !writable && (!emptyCell || !!p.bind || !!p.seal || !!p.autoNo);
-      return simpleBadge(p, sec, inputLook, fixed);
-    }
-    if (p.name) marks.push({ t: nameLabel(p.name), cls: 'bg-teal text-white', title: '칸 이름' });
-    if (p.bind) {
-      const isDoc = p.bind.startsWith('doc.');
-      marks.push({
-        t: isDoc ? '문서' : p.bind.startsWith('draft.') ? '자동' : '프로젝트',
-        cls: isDoc ? 'bg-indigo-500 text-white' : 'bg-sky-500 text-white',
-        title: isDoc ? `문서 항목: ${bindLabel(p.bind)} — 기안자가 여기서 쓰고, 문서 자체에 저장` : `자동 채우기: ${bindLabel(p.bind)}`,
-      });
-    }
-    if (p.lock) marks.push({ t: '잠금', cls: 'bg-ink3 text-white', title: '기안자 수정 잠금' });
-    if (p.secret) marks.push({ t: '비공개', cls: 'bg-rose-500 text-white', title: '비공개' });
-    if (p.seal) marks.push({ t: '직인', cls: 'bg-red-600 text-white', title: '회사 직인 자리' });
-    if (p.required && p.input) marks.push({ t: '필수', cls: 'bg-rose-500 text-white', title: '필수 입력 — 비어 있으면 상신할 수 없음' });
-    if (p.autoNo) marks.push({ t: '자동번호', cls: 'bg-sky-500 text-white', title: '자동번호 — 상신할 때 번호를 매김' });
-    if (p.guide) marks.push({ t: '안내', cls: 'bg-ink3 text-white', title: '안내문 — 작성 화면에만 흐리게(결재·인쇄엔 안 나옴)' });
-    if (p.input?.depends) marks.push({ t: '종속', cls: 'bg-indigo-500 text-white', title: `종속 선택 — '${condLabels.get(p.input.depends.name) ?? nameLabel(p.input.depends.name)}' 값에 따라 고를 항목이 바뀝니다` });
-    if (!marks.length) return repeatMark || null;
-    return (
-      <>
-        {inputLook}
-        {repeatMark}
-        <span className="pointer-events-none absolute right-0.5 top-0.5 flex gap-0.5">
-          {marks.map((m) => (
-            <span key={m.t} title={m.title} className={`rounded-sm px-1 text-[8.5px] font-bold leading-[13px] ${m.cls}`}>
-              {m.t}
-            </span>
-          ))}
-        </span>
-      </>
-    );
+    const inputLook = autoLook ?? (emptyInput && p.input ? <InputLook input={p.input} /> : null);
+    // 기안자가 쓰거나 고칠 수 있는 칸 — 잠그지 않은 입력 칸, 문서 항목(제목·보존연한·공개범위)
+    const writable = (!!p.input && !p.lock && !p.bind) || isDocFieldBind(p.bind);
+    // 못 고치는 칸 중 내용이 있는 칸만 표시(빈 여백 칸까지 칠하면 오히려 어지럽다)
+    const fixed = !writable && (!emptyCell || !!p.bind || !!p.seal || !!p.autoNo);
+    return cellMarks(p, sec, inputLook, fixed);
   };
 
   /**
@@ -484,13 +420,13 @@ function Designer({
   };
 
   /**
-   * 간단 표시 — 칸 내용을 가리지 않게.
+   * 칸 표시 — 칸 내용을 가리지 않게.
    * 기안자가 못 고치는 칸(글자·수식·자동 채우기·잠근 칸): 옅은 빗금. 쓸 수 있는 칸은 서식 색 그대로. 빈 입력 칸엔 글 아닌 종류만 흐리게(금액·날짜 등).
-   * 특별한 칸(필수·잠금·비공개·직인·칸 이름·종속·안내): 오른쪽 위 작은 아이콘 — 마우스를 올리면 설명.
+   * 특별한 칸(필수·잠금·비공개·직인·칸 이름·종속·작성 요령): 오른쪽 위 작은 아이콘 — 마우스를 올리면 설명.
    * 자동 채우기·문서 항목은 '{기안자}' 같은 흐린 글자로 이미 보이므로 따로 표시하지 않는다.
    * 행 표시: 반복 구간은 보라 띠, 보이기 조건·거래처용 숨김은 시트 오른쪽 바깥(rowMarks)
    */
-  const simpleBadge = (
+  const cellMarks = (
     p: ReturnType<typeof approvalCellProps>,
     sec: ReturnType<typeof repeatSections>[number] | undefined,
     inputLook: React.ReactNode,
@@ -508,7 +444,7 @@ function Designer({
       const dep = p.input.depends.name;
       icons.push({ key: 'dep', icon: <GitBranch className={ic} />, cls: 'text-indigo-500', title: `종속 선택 — '${condLabels.get(dep) ?? nameLabel(dep)}' 값에 따라 고를 항목이 바뀝니다` });
     }
-    if (p.guide) icons.push({ key: 'guide', icon: <Info className={ic} />, cls: 'text-ink3', title: '안내문 — 작성 화면에만 흐리게(결재·인쇄엔 안 나옴)' });
+    if (p.guide) icons.push({ key: 'guide', icon: <Info className={ic} />, cls: 'text-ink3', title: '작성 요령 — 작성 화면에만 흐리게(결재·인쇄엔 안 나옴)' });
     const iconRow = (list: Mark[], pos: string) =>
       list.length ? (
         <span className={`pointer-events-none absolute ${pos} z-[1] flex gap-px rounded-sm bg-white/85 px-px`}>
@@ -556,7 +492,7 @@ function Designer({
     requestSidebarCollapse(true);
     return () => requestSidebarCollapse(false);
   }, [standalone]);
-  // 화면 폭에 따라 배치 — three: 부품(왼쪽)·문서·설정(오른쪽) / compact: 부품을 아이콘 막대로 / two: 부품도 오른쪽 패널 안에 / stack: 위아래로
+  // 화면 폭에 따라 배치 — three: 부품(왼쪽)·문서·설정(오른쪽) / two: 부품도 오른쪽 패널 안에 / stack: 위아래로
   // 쓸 수 있는 폭은 창 기준으로 잰다 — 앱 바탕이 내용 폭에 맞춰 늘어나므로(min-w-fit) 이 상자 폭을 재면 늘 '다 들어감'이 된다
   const [rootW, setRootW] = useState(0);
   useEffect(() => {
@@ -601,14 +537,8 @@ function Designer({
   const GAP = 12;
   // 새 탭(엑셀처럼) — 편집기가 남는 폭을 다 쓰고 안에서 스크롤하므로, 편집기 최소 폭만 있으면 된다
   const needEditor = standalone ? 720 : editorWidth;
-  const layout: 'three' | 'compact' | 'two' | 'stack' =
-    rootW === 0 || rootW >= needEditor + PALETTE_W + SIDE_W + GAP * 2
-      ? 'three'
-      : rootW >= needEditor + PALETTE_ICONS_W + SIDE_W + GAP * 2
-        ? 'compact'
-        : rootW >= needEditor + SIDE_MIN_W + GAP
-          ? 'two'
-          : 'stack';
+  const layout: 'three' | 'two' | 'stack' =
+    rootW === 0 || rootW >= needEditor + PALETTE_W + SIDE_W + GAP * 2 ? 'three' : rootW >= needEditor + SIDE_MIN_W + GAP ? 'two' : 'stack';
   // 새 탭 — 편집기가 남는 폭을 다 쓴다(높이는 앱 안과 같이: 문서는 아래로 펼치고 페이지가 스크롤, 도구 막대·열 머리·옆 막대는 위에 붙음)
   const fill = standalone && layout !== 'stack';
   // 화면에 붙는 옆 막대(부품·설정) — 앱 상단바·탭 막대 바로 아래, 화면 높이를 넘지 않게(넘치면 안에서만 스크롤). 화면 높이는 글자 크기 배율(body zoom)로 나눈다
@@ -766,9 +696,9 @@ function Designer({
         </div>
       )}
 
-      <InfoBlock collapsible={standalone} defaultOpen={isNew} linkLabel={LINK_TYPES.find((t) => t.code === link)?.feature ?? null}>
+      <InfoBlock collapsible={standalone} title={fullHeader ? '서식 정보' : '서식 정보 · 문서 머리 항목'} linkLabel={LINK_TYPES.find((t) => t.code === link)?.feature ?? null}>
       {/* 서식 정보 */}
-      <div className="grid grid-cols-2 gap-2.5 rounded-xl border border-border bg-panel p-3 md:grid-cols-[70px_1fr_1fr_1fr_1fr_1fr_1.4fr]">
+      <div className="grid grid-cols-2 gap-2.5 rounded-xl border border-border bg-panel p-3 md:grid-cols-[70px_1fr_1fr_1fr_1fr_1fr]">
         <Field label="아이콘">
           <input className={inp} value={form.icon} onChange={(e) => set({ icon: e.target.value })} placeholder="📄" />
         </Field>
@@ -831,19 +761,16 @@ function Designer({
             ))}
           </select>
         </Field>
-        <Field label="이번 저장 메모 (버전 기록에 남음)">
-          <input className={inp} value={note} onChange={(e) => setNote(e.target.value)} placeholder="예: 품목 표 열 추가" maxLength={255} />
-        </Field>
       </div>
 
-      {/* 문서 머리 항목 — 기존 서식과 같은 설정(hiddenHeaderItems). 시트 위·아래에 붙는 머리·맺음말 중 보일 것 */}
+      {/* 문서 머리 항목 — 기존 서식과 같은 설정(hiddenHeaderItems). 시트 위·아래에 붙는 머리·맺음말 중 보일 것.
+          결재란까지 시트 안에 있으면(새 서식·변환 서식의 기본) 문서 머리 전체가 시트 안이라 고를 것이 없다 */}
+      {!fullHeader && (
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-border bg-panel px-3 py-2 text-[11.5px]">
         <span className="font-semibold text-ink2" title="기안·결재·인쇄 화면에서 시트 위(로고·제목·문서 정보)와 아래(맺음말·서명)에 붙는 항목">
           문서 머리에 보일 항목
         </span>
-        {fullHeader ? (
-          <span className="text-ink3">문서 머리 전체(로고·큰 제목·결재란·문서 정보·맺음말)가 시트 안에 있습니다 — 위치·모양은 시트에서 바꿉니다.</span>
-        ) : HEADER_ITEMS.map((item) => {
+        {HEADER_ITEMS.map((item) => {
           const shown = !(form.hiddenHeaderItems ?? []).includes(item);
           // 시트 안에 같은 칸(기안자·문서번호 등)이 있으면 머리에서 저절로 빠진다
           const inSheet = covered.includes(item);
@@ -869,31 +796,27 @@ function Designer({
             </label>
           );
         })}
-        {!fullHeader && covered.includes('titleRow') && (
+        {covered.includes('titleRow') && (
           <span className="text-ink3 line-through decoration-ink3/50" title="시트 안에 제목 칸이 있어 문서 머리의 제목 줄은 저절로 빠집니다">
             제목 줄
           </span>
         )}
       </div>
+      )}
       </InfoBlock>
 
       {/* 편집기 + 옆 패널 */}
       {/* 편집기는 문서(A4 세로) 폭에 맞춘 폭만 — 넓은 화면에서 빈 공간이 생기지 않게 옆 패널을 바로 붙인다 */}
       <div className={`flex gap-3 ${layout === 'stack' ? 'flex-col' : fill ? 'items-start gap-2' : 'items-start'}`}>
-        {(layout === 'three' || layout === 'compact') && (
+        {layout === 'three' && (
           // 부품 — 편집기 왼쪽(끌어다 놓기 거리가 짧고, 오른쪽 설정 패널이 짧아진다)
-          <div
-            className={`shrink-0 overflow-y-auto rounded-xl border border-border bg-panel p-2 sticky`}
-            style={{ ...stickyStyle, width: layout === 'three' ? PALETTE_W : PALETTE_ICONS_W }}
-          >
-            {layout === 'three' && (
-              <div className="mb-1.5">
-                <Help text={PALETTE_HELP} size="h-3.5 w-3.5">
-                  <span className="text-[12.5px] font-extrabold text-ink">부품</span>
-                </Help>
-              </div>
-            )}
-            <SheetPalette sheet={sheet} selection={selection} onApply={putPart} variant={layout === 'three' ? 'side' : 'icons'} />
+          <div className="sticky shrink-0 overflow-y-auto rounded-xl border border-border bg-panel p-2" style={{ ...stickyStyle, width: PALETTE_W }}>
+            <div className="mb-1.5">
+              <Help text={PALETTE_HELP} size="h-3.5 w-3.5">
+                <span className="text-[12.5px] font-extrabold text-ink">부품</span>
+              </Help>
+            </div>
+            <SheetPalette sheet={sheet} selection={selection} onApply={putPart} variant="side" />
           </div>
         )}
         <div
@@ -928,12 +851,11 @@ function Designer({
             canDeleteRow={(s, r) => !isStructureLocked(s, 'row', r)}
             canDeleteCol={(s, c) => !isStructureLocked(s, 'col', c)}
             setValue={setApprovalCellValue}
-            renderBadge={badgeWithPreview}
+            renderBadge={badge}
             rowEnd={rowMarks}
             onSelect={setSelection}
             onNotice={(text) => setMsg({ kind: 'err', text })}
             guideWidth={SHEET_PAGE_WIDTH}
-            // 화면 높이에 맞춤 — 글자 크기 배율(body zoom)로 나눠야 실제 화면 높이(안 그러면 페이지 전체를 위아래로 스크롤해야 함)
             // 문서는 아래로 펼치고 페이지가 스크롤 — 도구 막대·열 머리는 화면 위에 붙어 따라온다
             height="auto"
             stickyTop={stickTop}
@@ -947,10 +869,10 @@ function Designer({
                   setSheet(insertDocHeader(sheet, { formTitle: true, closing: form.closing || undefined }));
                   setMsg({
                     kind: 'ok',
-                    text: '맨 위에 회사 로고·큰 제목/결재란·문서 정보 표를, 맨 아래에 맺음말·기안일·기안자 서명을 넣었습니다 — 시트 밖 문서 머리는 저절로 빠집니다. 큰 제목에는 격식 문서명(없으면 서식명)이 저절로 들어갑니다 — 엑셀 제목과 겹치면 한쪽을 지우세요. 색·위치는 서식에 맞게 바꾸세요(Ctrl+Z 로 되돌리기).',
+                    text: '문서 머리(로고·큰 제목·결재란·문서 정보)를 맨 위에, 맺음말·서명을 맨 아래에 넣었습니다. 큰 제목이 엑셀 제목과 겹치면 한쪽을 지우세요(Ctrl+Z 로 되돌리기).',
                   });
                 }}
-                title="문서 머리 전체를 시트 안으로 — 위: 회사 로고·큰 제목·결재란·문서 정보 표, 아래: 맺음말·기안일·기안자 서명(대외 문서에서는 숨김)"
+                title="문서 머리 전체를 시트 안으로 — 위: 회사 로고·큰 제목·결재란·문서 정보 표, 아래: 맺음말·기안일·기안자 서명(거래처용에서는 숨김)"
                 className="h-7 rounded-md border border-border bg-white px-2 text-[11.5px] font-semibold text-ink2 hover:border-teal hover:text-teal"
               >
                 문서 머리 넣기
@@ -967,20 +889,15 @@ function Designer({
                   </button>
                 ))}
               </div>
-              <div className="flex items-center rounded-md border border-border bg-white p-0.5 text-[11px] font-semibold" title="칸 표시 — 간단: 기안자가 못 고치는 칸만 옅은 빗금, 특별한 칸은 작은 아이콘 · 자세히: 모든 표시를 글자로 · 끔: 표시 없이 엑셀처럼">
-                <span className="px-1 text-ink3">표시</span>
-                {(
-                  [
-                    ['simple', '간단'],
-                    ['detail', '자세히'],
-                    ['off', '끔'],
-                  ] as const
-                ).map(([k, label]) => (
-                  <button key={k} type="button" onClick={() => changeMarks(k)} className={`rounded px-2 py-0.5 ${markMode === k ? 'bg-teal text-white' : 'text-ink3 hover:text-ink'}`}>
-                    {label}
-                  </button>
-                ))}
-              </div>
+              <button
+                type="button"
+                aria-pressed={marksOn}
+                onClick={() => changeMarks(!marksOn)}
+                title="칸 표시 — 기안자가 못 고치는 칸은 옅은 빗금, 특별한 칸(필수·잠금·직인 등)은 작은 아이콘. 끄면 표시 없이 엑셀처럼"
+                className={`h-7 rounded-md border px-2 text-[11.5px] font-semibold ${marksOn ? 'border-teal bg-teal text-white' : 'border-border bg-white text-ink3 hover:text-ink'}`}
+              >
+                칸 표시
+              </button>
               </>
             }
           />
@@ -990,11 +907,15 @@ function Designer({
                 A4 세로 폭보다 넓어(전체 {sheetWidth}px) 문서·인쇄에서는 약 {Math.round(pageScale * 100)}%로 줄여 한 쪽 폭에 맞춥니다 — 엑셀의 '한 페이지에 맞춤'과 같습니다. 글씨가 너무 작으면 열 너비를 줄여 주세요.
               </div>
             )}
-            <div>
-              {view === 'paper'
-                ? `문서 보기 — 기안·결재·인쇄 화면과 같은 모양입니다${fullHeader ? '' : "(시트 밖 문서 머리는 위 '문서 머리에 보일 항목'으로 켜고 끔)"}. 시트 왼쪽·위의 가는 띠를 누르면 행·열을 고르고, 띠 끝을 끌면 크기가 바뀝니다.`
-                : '세로 점선 = A4 세로 인쇄 폭.'}{' '}
-              칸 이름·프로젝트 값·비공개·직인이 든 행·열은 그 속성을 먼저 지워야 지울 수 있습니다. 보라색 띠 = 반복 구간(기안자가 행 추가·삭제).</div>
+            <Help
+              text={`${
+                view === 'paper'
+                  ? '문서 보기 — 기안·결재·인쇄 화면과 같은 모양입니다. 시트 왼쪽·위의 가는 띠를 누르면 행·열을 고르고, 띠 끝을 끌면 크기가 바뀝니다.'
+                  : '격자 보기 — 세로 점선이 A4 세로 인쇄 폭입니다.'
+              } 빗금 칸은 기안자가 못 고치는 칸, 보라색 띠는 반복 구간(기안자가 행 추가·삭제)입니다. 칸 이름·프로젝트 값·비공개·직인이 든 행·열은 그 속성을 먼저 지워야 지울 수 있습니다.`}
+            >
+              <span>편집 도움말</span>
+            </Help>
           </div>
         </div>
 
@@ -1033,11 +954,17 @@ function Designer({
                 <SheetPalette sheet={sheet} selection={selection} onApply={putPart} />
               </details>
               )}
-              <SheetCellPanel sheet={sheet} selection={selection} onChange={setSheet} link={link} onPreview={setRulePreview} />
+              <SheetCellPanel sheet={sheet} selection={selection} onChange={setSheet} link={link} />
             </>
           ) : side === 'settings' ? (
             <SheetFormSettings form={form} onChange={set} />
           ) : (
+            <>
+            {/* 다음 저장에 남길 메모 — 엑셀 불러오기·되살리기는 저절로 채운다 */}
+            <label className="mb-3 block">
+              <span className="mb-0.5 block text-[11px] font-bold text-ink2">이번 저장 메모</span>
+              <input className={inp} value={note} onChange={(e) => setNote(e.target.value)} placeholder="예: 품목 표 열 추가" maxLength={255} />
+            </label>
             <VersionHistory
               formId={isNew ? null : form.id}
               current={baseVersion}
@@ -1049,6 +976,7 @@ function Designer({
                 setSide('cell');
               }}
             />
+            </>
           )}
         </div>
       </div>
@@ -1058,26 +986,28 @@ function Designer({
   );
 }
 
-/** 서식 정보·문서 머리 항목 — 새 탭에서는 접어 두는 띠(새 서식은 펼쳐서), 앱 안에서는 그대로 */
+/** 서식 정보·문서 머리 항목 — 새 탭에서는 접을 수 있는 띠(처음엔 펼쳐서), 앱 안에서는 그대로 */
 function InfoBlock({
   collapsible,
-  defaultOpen,
+  title,
   linkLabel,
   children,
 }: {
   collapsible: boolean;
-  defaultOpen: boolean;
+  title: string;
   /** 접혀 있어도 보이게 — 고른 연동 기능(없으면 null) */
   linkLabel: string | null;
   children: React.ReactNode;
 }) {
   if (!collapsible) return <>{children}</>;
   return (
-    <details open={defaultOpen} className="group shrink-0 rounded-xl border border-border bg-panel [&[open]>summary]:border-b [&[open]>summary]:border-border">
+    <details open className="group shrink-0 rounded-xl border border-border bg-panel [&[open]>summary]:border-b [&[open]>summary]:border-border">
       <summary className="flex cursor-pointer select-none list-none items-center gap-2 px-3 py-1.5 text-[11.5px] font-bold text-ink2 hover:text-ink">
-        <span className="text-ink3 group-open:rotate-90">▸</span>
-        서식 정보 · 문서 머리 항목
-        <span className="font-normal text-ink3">(서식명·코드·격식 문서명·폴더·연동·저장 메모·대외 문서)</span>
+        {/* 접기·펼치기 화살표 — 잘 보이게 크게, 펼치면 아래를 향함 */}
+        <span className="grid h-6 w-6 shrink-0 place-items-center rounded-md border border-border bg-panel-alt text-ink2 transition-transform group-open:rotate-90">
+          <ChevronRight size={16} strokeWidth={2.5} />
+        </span>
+        {title}
         <span
           className={`ml-auto shrink-0 rounded-full px-2 py-px text-[10.5px] font-semibold ${linkLabel ? 'bg-teal-soft text-teal' : 'bg-panel-alt text-ink3'}`}
           title="이 서식으로 쓴 문서가 이어지는 기능 — 바꾸려면 펼쳐서 '연동 기능'"
@@ -1111,8 +1041,25 @@ function VersionHistory({
   onLoad: (s: Sheet, v: number) => void;
 }) {
   const { data: versions = [], isLoading } = useFormVersionList(formId);
-  const [picked, setPicked] = useState<number | null>(null);
-  const { data: pickedSheet, isFetching } = useFormVersionSheet(formId, picked);
+  // 누른 단추 — 그 버전의 틀을 읽는 대로 미리보기를 열거나 편집기로 가져온다
+  const [want, setWant] = useState<{ version: number; action: 'preview' | 'load' } | null>(null);
+  const { data: wanted, isError } = useFormVersionSheet(formId, want?.version ?? null);
+  const [failed, setFailed] = useState<number | null>(null);
+  useEffect(() => {
+    if (!want) return;
+    if (isError) {
+      setFailed(want.version);
+      setWant(null);
+    } else if (wanted) {
+      setWant(null);
+      if (want.action === 'preview') onPreview(wanted.sheet, want.version);
+      else onLoad(wanted.sheet, want.version);
+    }
+  }, [want, wanted, isError]); // eslint-disable-line react-hooks/exhaustive-deps
+  const ask = (version: number, action: 'preview' | 'load') => {
+    setFailed(null);
+    setWant({ version, action });
+  };
   const fmt = useMemo(() => new Intl.DateTimeFormat('ko-KR', { dateStyle: 'short', timeStyle: 'short' }), []);
 
   if (!formId) return <div className="text-[11.5px] text-ink3">처음 저장하면 v1 이 생깁니다. 이후 틀을 바꿔 저장할 때마다 버전이 하나씩 쌓입니다.</div>;
@@ -1126,7 +1073,7 @@ function VersionHistory({
       </div>
       <ul className="max-h-[calc(100vh-380px)] space-y-1.5 overflow-y-auto">
         {versions.map((v) => (
-          <li key={v.version} className={`rounded-lg border px-2.5 py-2 ${picked === v.version ? 'border-teal bg-teal-soft/40' : 'border-border'}`}>
+          <li key={v.version} className="rounded-lg border border-border px-2.5 py-2">
             <div className="flex items-center justify-between">
               <span className="font-mono text-[12px] font-bold text-ink">
                 v{v.version}
@@ -1137,23 +1084,22 @@ function VersionHistory({
             <div className="mt-0.5 truncate text-[11px] text-ink2">{v.createdByName ?? v.createdBy}</div>
             {v.note && <div className="mt-0.5 text-[11px] text-ink3">{v.note}</div>}
             <div className="mt-1.5 flex gap-1.5">
-              {picked === v.version && pickedSheet ? (
+              {want?.version === v.version ? (
+                <span className="py-0.5 text-[10.5px] text-ink3">읽는 중…</span>
+              ) : (
                 <>
-                  <button type="button" onClick={() => onPreview(pickedSheet.sheet, v.version)} className="rounded border border-border px-2 py-0.5 text-[10.5px] font-semibold text-ink2 hover:text-ink">
+                  <button type="button" onClick={() => ask(v.version, 'preview')} className="rounded border border-border px-2 py-0.5 text-[10.5px] font-semibold text-ink2 hover:text-ink">
                     미리보기
                   </button>
                   {v.version !== current && (
-                    <button type="button" onClick={() => onLoad(pickedSheet.sheet, v.version)} className="rounded border border-teal/40 px-2 py-0.5 text-[10.5px] font-semibold text-teal hover:bg-teal-soft">
+                    <button type="button" onClick={() => ask(v.version, 'load')} className="rounded border border-teal/40 px-2 py-0.5 text-[10.5px] font-semibold text-teal hover:bg-teal-soft">
                       이 버전으로 되살리기
                     </button>
                   )}
                 </>
-              ) : (
-                <button type="button" onClick={() => setPicked(v.version)} className="rounded border border-border px-2 py-0.5 text-[10.5px] font-semibold text-ink2 hover:text-ink">
-                  {picked === v.version && isFetching ? '읽는 중…' : '열기'}
-                </button>
               )}
             </div>
+            {failed === v.version && <div className="mt-1 text-[10.5px] text-rose-600">이 버전의 틀을 읽지 못했습니다. 다시 눌러 주세요.</div>}
           </li>
         ))}
       </ul>

@@ -10,7 +10,6 @@ import {
   ensureSourceName,
   makeDependent,
   removeRowsFor,
-  rowsHiddenWhen,
   rowsShownFor,
   rowsWithOtherCondition,
   setBranchOptions,
@@ -65,8 +64,6 @@ test('이 값일 때 보이는 행 — 더하기·빼기·묶어 보기, 다른 
   assert.deepEqual(rowsWithOtherCondition(s, 3, 4, '지출항목'), [4]);
   s = showRowsFor(s, 4, 4, '지출항목', '식대');
   assert.deepEqual(rowConditionOf(s, 4), { name: '지출항목', values: ['식대'] });
-  // 미리보기 — 회의비면 식대만 걸린 4행은 숨고 3행(회의비·식대)은 보임
-  assert.deepEqual([...rowsHiddenWhen(s, '지출항목', '회의비')], [4]);
 });
 
 test('종속 칸 — 만들기·갈래 항목·풀기, 기존 갈래 키는 지킨다', () => {
