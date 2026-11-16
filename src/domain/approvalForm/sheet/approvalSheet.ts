@@ -59,18 +59,18 @@ export interface CellInput {
   /** 종속 선택(select 만) — 다른 칸 값에 따라 고를 항목이 바뀐다(엑셀 종속 드롭다운, 기존 서식 '지출 항목별 분류') */
   depends?: SelectDepends;
   /**
-   * 안내 글자(플레이스홀더) — 비어 있는 칸 안에 흐리게(예: '14:00 (종일이면 비움)'). 작성 화면에만, 값이 아니라 저장·결재·인쇄엔 없다.
+   * 입력 예시(플레이스홀더) — 비어 있는 칸 안에 흐리게(예: '14:00 (종일이면 비움)'). 작성 화면에만, 값이 아니라 저장·결재·인쇄엔 없다.
    * 글로 쓰는 칸(PLACEHOLDER_INPUTS)만
    */
   placeholder?: string;
 }
 
-/** 안내 글자를 쓸 수 있는 입력 칸 — 글·숫자를 직접 쓰는 칸(날짜·선택·사람 칸은 고르는 화면이 따로 있다) */
+/** 입력 예시를 쓸 수 있는 입력 칸 — 글·숫자를 직접 쓰는 칸(날짜·선택·사람 칸은 고르는 화면이 따로 있다) */
 export const PLACEHOLDER_INPUTS: ReadonlySet<CellInputType> = new Set<CellInputType>(['text', 'multiline', 'number', 'currency']);
-/** 안내 글자 최대 길이 */
+/** 입력 예시 최대 길이 */
 export const PLACEHOLDER_MAX = 60;
 
-/** 이 칸의 안내 글자 — 쓸 수 없는 칸 종류거나 비었으면 undefined */
+/** 이 칸의 입력 예시 — 쓸 수 없는 칸 종류거나 비었으면 undefined */
 export function placeholderOf(input: CellInput | undefined): string | undefined {
   const p = input?.placeholder?.trim();
   return input && PLACEHOLDER_INPUTS.has(input.type) && p ? p.slice(0, PLACEHOLDER_MAX) : undefined;

@@ -395,7 +395,7 @@ test('휴일근무 연동 — 편집기가 잠금을 고정하는 칸 이름(loc
   }
 });
 
-test('안내 글자 — 글·숫자 칸만, 공백만이면 없음, 최대 길이', async () => {
+test('입력 예시 — 글·숫자 칸만, 공백만이면 없음, 최대 길이', async () => {
   const { placeholderOf, PLACEHOLDER_MAX } = await import('./approvalSheet');
   assert.equal(placeholderOf({ type: 'text', placeholder: ' 예: 14:00 ' }), '예: 14:00');
   assert.equal(placeholderOf({ type: 'number', placeholder: '시간' }), '시간');

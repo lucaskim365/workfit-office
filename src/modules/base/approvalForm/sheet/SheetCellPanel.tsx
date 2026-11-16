@@ -167,7 +167,7 @@ export function SheetCellPanel({
 
   const hasOptions = props.input?.type === 'select' || props.input?.type === 'multiSelect';
 
-  // 안내 글자(플레이스홀더) — 입력 중엔 글자 그대로 두고, 칸을 벗어날 때 넣는다(고를 항목과 같음)
+  // 입력 예시(플레이스홀더) — 입력 중엔 글자 그대로 두고, 칸을 벗어날 때 넣는다(고를 항목과 같음)
   const canPlaceholder = !!props.input && PLACEHOLDER_INPUTS.has(props.input.type);
   const placeholderText = props.input?.placeholder ?? '';
   const [placeholder, setPlaceholder] = useState(placeholderText);
@@ -349,7 +349,7 @@ export function SheetCellPanel({
       </div>
 
       {canPlaceholder && (
-        <Row label="안내 글자" hint="비어 있는 칸 안에 흐리게 보입니다(예: 14:00 (종일이면 비움)). 작성 화면에만 — 값으로 저장되지 않고 결재·인쇄엔 안 나옵니다.">
+        <Row label="입력 예시" hint="기안자가 이 칸에 무엇을 어떻게 쓰면 되는지 알려 주는 글입니다. 비어 있는 칸 안에 흐리게 보이고, 쓰기 시작하면 사라집니다. 작성 화면에만 — 값으로 저장되지 않고 결재·인쇄엔 안 나옵니다.">
           <input
             className={inp}
             value={placeholder}
@@ -357,7 +357,7 @@ export function SheetCellPanel({
             onChange={(e) => setPlaceholder(e.target.value)}
             onBlur={commitPlaceholder}
             onKeyDown={(e) => e.key === 'Enter' && (e.currentTarget as HTMLInputElement).blur()}
-            placeholder="예: 14:00 (종일이면 비움)"
+            placeholder="기안자에게 보일 예시나 쓰는 법"
           />
         </Row>
       )}

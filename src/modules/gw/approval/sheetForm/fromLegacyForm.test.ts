@@ -466,7 +466,7 @@ test('나란히 놓을 표 짝 — 같은 구역에서 잇단 반쪽 표 둘, �
   assert.equal(legacyTablePairs([t('a'), field({ key: 'x', label: 'x', type: '표', width: 'full' })]).size, 0, '전체 폭 표는 그대로');
 });
 
-test('기존 서식 → 시트 — 항목 안내 글자(placeholder)는 글·숫자 칸의 안내 글자로(외근 시각 "종일이면 비움")', () => {
+test('기존 서식 → 시트 — 항목 입력 예시(placeholder)는 글·숫자 칸의 입력 예시로(외근 시각 "종일이면 비움")', () => {
   const form = legacyForm('외근', [
     { key: 'startTime', label: '외근 시작 시각', type: '텍스트', width: 'half', placeholder: '예: 14:00 (종일이면 비움)' },
     { key: 'endTime', label: '외근 복귀 시각', type: '텍스트', width: 'half', placeholder: '' },
@@ -478,6 +478,6 @@ test('기존 서식 → 시트 — 항목 안내 글자(placeholder)는 글·숫
     return approvalCellProps(s, p.r, p.c + 1).input;
   };
   assert.equal(at('외근 시작 시각')?.placeholder, '예: 14:00 (종일이면 비움)');
-  assert.equal(at('외근 복귀 시각')?.placeholder, undefined, '빈 안내 글자는 안 넣음');
+  assert.equal(at('외근 복귀 시각')?.placeholder, undefined, '빈 입력 예시는 안 넣음');
   assert.equal(at('외근 구분')?.placeholder, undefined, '선택 칸엔 안 넣음(고르는 화면이 따로)');
 });

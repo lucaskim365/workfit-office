@@ -322,7 +322,7 @@ export function legacyFormToSheet(form: ApprovalForm): LegacyConversion {
     const input = INPUT_OF[f.type];
     if (input) {
       const options = input === 'select' || input === 'multiSelect' ? { options: f.options ?? [] } : {};
-      // 기존 항목의 안내 글자(예: 14:00 (종일이면 비움)) — 글·숫자 칸만
+      // 기존 항목의 입력 예시(예: 14:00 (종일이면 비움)) — 글·숫자 칸만
       const hint = PLACEHOLDER_INPUTS.has(input) && f.placeholder?.trim() ? { placeholder: f.placeholder.trim().slice(0, PLACEHOLDER_MAX) } : {};
       s = setApprovalProp(s, at, APPROVAL_NS.input, { type: input, ...options, ...hint });
       // 금액은 천 단위 쉼표·오른쪽 정렬(기존 양식처럼 35,000)

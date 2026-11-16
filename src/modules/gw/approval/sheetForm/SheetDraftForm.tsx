@@ -64,7 +64,7 @@ const INHERIT: CSSProperties = { font: 'inherit', color: 'inherit', textAlign: '
  * 글 입력 — 칸 폭을 넘으면 다음 줄로 넘기고 행이 늘어난다(칸에 글씨가 잘리지 않게).
  * singleLine: 한 줄 글 칸 — 보이는 줄바꿈은 되지만 Enter·붙여넣기 줄바꿈은 넣지 않는다
  */
-/** 안내 글자(플레이스홀더) — 흐리게, 인쇄엔 안 나옴 */
+/** 입력 예시(플레이스홀더) — 흐리게, 인쇄엔 안 나옴 */
 const PLACEHOLDER_CLS = 'placeholder:text-[#b4b4b4] print:placeholder:text-transparent';
 
 function AutoTextarea({ value, onChange, singleLine = false, placeholder }: { value: string; onChange: (v: string) => void; singleLine?: boolean; placeholder?: string }) {
@@ -119,7 +119,7 @@ function NumberInput({
         const text = e.target.value.trim();
         if (NUMBER_TYPING.test(text)) onChange(text.replace(/,/g, ''));
       }}
-      // 비어 있으면 흐린 안내 글자, 정하지 않았으면 0 — 숫자 칸임을 알 수 있게(인쇄엔 안 나옴)
+      // 비어 있으면 흐린 입력 예시, 정하지 않았으면 0 — 숫자 칸임을 알 수 있게(인쇄엔 안 나옴)
       placeholder={placeholder ?? '0'}
       title={invalid ? '숫자만 입력할 수 있습니다' : undefined}
       className={`${FIELD} placeholder:text-[#c8c8c8] print:placeholder:text-transparent ${invalid ? 'bg-rose-100 ring-1 ring-rose-400' : ''}`}
