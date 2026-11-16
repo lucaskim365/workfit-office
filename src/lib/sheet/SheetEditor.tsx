@@ -116,6 +116,19 @@ const HELPERS: Array<{ label: string; insert: string; title: string }> = [
   { label: '합계', insert: 'SUM(', title: '합계 — 이어서 범위를 끌어 고르세요' },
 ];
 
+/** 수식의 닫는 괄호가 모자라면 채운다(엑셀처럼) — [합계]로 SUM( 을 넣고 범위만 고른 채 Enter 해도 되게 */
+function closeParens(text: string): string {
+  if (!text.trimStart().startsWith('=')) return text;
+  let open = 0;
+  let quoted = false;
+  for (const ch of text) {
+    if (ch === '"') quoted = !quoted;
+    else if (!quoted && ch === '(') open += 1;
+    else if (!quoted && ch === ')') open = Math.max(0, open - 1);
+  }
+  return open > 0 ? text + ')'.repeat(open) : text;
+}
+
 function norm(a: Cell, b: Cell): CellRange {
   return { r1: Math.min(a.r, b.r), r2: Math.max(a.r, b.r), c1: Math.min(a.c, b.c), c2: Math.max(a.c, b.c) };
 }
@@ -287,7 +300,10 @@ export function SheetEditor({
     if (!extend) setAnchor(target);
     setFocus(target);
   };
-  const focusGrid = () => requestAnimationFrame(() => gridRef.current?.focus({ preventScroll: true }));
+  // 초점은 칸 입력 상자에 둔다(없으면 격자) — 고른 칸에서 바로 글자를 쳐도 한글 조합이 첫 글자부터 되게.
+  // 격자(div)에 초점이 있으면 입력기가 꺼져 있어 첫 글자가 영문·낱자로 들어온다. 터치 기기는 누를 때마다 자판이 뜨지 않게 격자에 둔다
+  const focusTarget = () => (typeof matchMedia === 'function' && matchMedia('(pointer: fine)').matches && cellInputRef.current) || gridRef.current;
+  const focusGrid = () => requestAnimationFrame(() => focusTarget()?.focus({ preventScroll: true }));
 
   // ── 편집 ───────────────────────────────────────────────
   const startEdit = (cell: Cell, initialText?: string, source: 'cell' | 'bar' = 'cell') => {
@@ -310,7 +326,9 @@ export function SheetEditor({
   const commitEdit = (move?: { dr: number; dc: number }) => {
     if (!editing) return;
     const cell = editing;
-    if (draft !== rawOf(cell.r, cell.c)) update((s) => setValue(s, cell.r, cell.c, draft));
+    // 틀을 그릴 때만 — 기안자가 쓰는 글자는 손대지 않는다
+    const text = design ? closeParens(draft) : draft;
+    if (text !== rawOf(cell.r, cell.c)) update((s) => setValue(s, cell.r, cell.c, text));
     setEditing(null);
     setPicked(null);
     pickRef.current = null;
@@ -318,15 +336,19 @@ export function SheetEditor({
     focusGrid();
   };
 
-  // 칸 편집 상자 — 고친 칸 자리에 띄운다(병합 칸은 병합 크기). 글에 맞춰 넓이·높이를 늘린다
+  // 칸 편집 상자 — 고친 칸 자리에 띄운다(병합 칸은 병합 크기). 글에 맞춰 넓이·높이를 늘린다.
+  // 고치지 않는 동안에도 고른 칸 자리에 안 보이게 두고 초점을 준다(focusGrid) — 글자를 치면 그 자리에서 바로 편집이 시작된다
   const [editBox, setEditBox] = useState<{ left: number; top: number; width: number; height: number; fontSize?: string; fontWeight?: number } | null>(null);
+  const boxCell = editing ? (editSource === 'cell' ? editing : null) : anchorOf(focus);
+  const boxR = boxCell?.r;
+  const boxC = boxCell?.c;
   useLayoutEffect(() => {
-    if (!editing || editSource !== 'cell') {
+    if (boxR === undefined || boxC === undefined) {
       setEditBox(null);
       return;
     }
     const grid = gridRef.current;
-    const td = grid?.querySelector<HTMLElement>(`[data-cell="${editing.r}:${editing.c}"]`);
+    const td = grid?.querySelector<HTMLElement>(`[data-cell="${boxR}:${boxC}"]`);
     if (!grid || !td) return;
     const g = grid.getBoundingClientRect();
     const t = td.getBoundingClientRect();
@@ -341,7 +363,7 @@ export function SheetEditor({
       fontSize: cs.fontSize,
       fontWeight: Number(cs.fontWeight) || undefined,
     });
-  }, [editing, editSource]);
+  }, [editing, editSource, boxR, boxC]);
   useLayoutEffect(() => {
     const el = cellInputRef.current;
     const grid = gridRef.current;
@@ -530,6 +552,8 @@ export function SheetEditor({
       e.preventDefault();
       toggle(key === 'b' ? 'bold' : key === 'i' ? 'italic' : 'underline');
     } else if (!ctrl && !e.altKey && e.key.length === 1) {
+      // 칸 입력 상자에 초점이 있으면 글자를 그대로 흘려 보낸다 — 상자의 onChange 가 편집을 시작한다(한글 조합이 첫 글자부터)
+      if (e.target === cellInputRef.current && editable(focusCell)) return;
       e.preventDefault();
       startEdit(focusCell, e.key);
     }
@@ -891,6 +915,10 @@ export function SheetEditor({
       <div
         ref={gridRef}
         tabIndex={0}
+        // 격자가 직접 초점을 받으면(칸을 눌렀을 때 등) 바로 칸 입력 상자로 넘긴다
+        onFocus={(e) => {
+          if (e.target === e.currentTarget && !editing) focusTarget()?.focus({ preventScroll: true });
+        }}
         onKeyDown={onGridKeyDown}
         onPaste={onGridPaste}
         // 펼침(auto) — 넘침 상자를 두지 않는다(페이지가 스크롤). 넘침 상자가 있으면 열 머리가 그 상자 기준으로만 붙어 페이지를 내리면 따라오지 않는다
@@ -1074,20 +1102,29 @@ export function SheetEditor({
           );
           return paper ? paper(table) : table;
         })()}
-        {editing && editSource === 'cell' && editBox && (
-          // 엑셀처럼 칸을 넘는 글은 오른쪽으로 넓어지고, 시트 끝에 닿으면 줄을 바꿔 아래로 늘어난다(다른 칸 위에 뜸)
+        {editBox && (
+          // 엑셀처럼 칸을 넘는 글은 오른쪽으로 넓어지고, 시트 끝에 닿으면 줄을 바꿔 아래로 늘어난다(다른 칸 위에 뜸).
+          // 고치지 않는 동안은 안 보이게 고른 칸 자리에서 초점만 갖는다
           <textarea
             ref={cellInputRef}
-            value={draft}
+            value={editing ? draft : ''}
             rows={1}
+            aria-label="칸 입력"
             onChange={(e) => {
+              if (!editing) {
+                // 고른 칸에서 바로 치기 시작 — 초점을 옮기지 않으므로 조합 중인 글자가 끊기지 않는다
+                if (!editable(focusCell)) return;
+                setEditing(focusCell);
+                setEditSource('cell');
+              }
               setDraft(e.target.value);
               caretRef.current = e.target.selectionStart ?? e.target.value.length;
               pickRef.current = null;
             }}
             onSelect={(e) => (caretRef.current = (e.target as HTMLTextAreaElement).selectionStart ?? 0)}
-            onKeyDown={onEditorKeyDown}
-            className="absolute z-[5] resize-none overflow-hidden bg-white px-1 text-[#222] shadow-md outline-2 outline-teal"
+            // 고치지 않는 동안의 글쇠(화살표·Delete·단축키)는 격자가 받는다(위로 전해짐)
+            onKeyDown={editing ? onEditorKeyDown : undefined}
+            className={`absolute z-[5] resize-none overflow-hidden px-1 ${editing ? 'bg-white text-[#222] shadow-md outline-2 outline-teal' : 'pointer-events-none opacity-0 outline-none'}`}
             style={{
               left: editBox.left,
               top: editBox.top,
