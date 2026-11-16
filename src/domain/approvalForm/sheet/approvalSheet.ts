@@ -362,7 +362,13 @@ export function extractValues(s: Sheet): SheetValues {
       const v = row[col];
       const c = s.cols.indexOf(col);
       // 입력·불러오기·수식 칸 + 이름 붙은 칸(시스템이 계산해 넣는 휴가 일수 등 — 입력 칸이 아니어도 값이 있다)
-      const keep = s.formulas[cellKey(r, col)] !== undefined || hasMeta(s, APPROVAL_NS.input, r, c) || hasMeta(s, APPROVAL_NS.bind, r, c) || hasMeta(s, APPROVAL_NS.name, r, c);
+      // + 자동번호 칸(상신 때 받은 번호 — 반려 뒤 고쳐서 다시 올려도 같은 번호를 쓰게)
+      const keep =
+        s.formulas[cellKey(r, col)] !== undefined ||
+        hasMeta(s, APPROVAL_NS.input, r, c) ||
+        hasMeta(s, APPROVAL_NS.bind, r, c) ||
+        hasMeta(s, APPROVAL_NS.name, r, c) ||
+        hasMeta(s, APPROVAL_NS.autoNo, r, c);
       if (v !== undefined && v !== '' && keep) {
         out[cellKey(r, col)] = v;
       }
@@ -382,6 +388,12 @@ export function applyValues(template: Sheet, values: SheetValues, opts: { recalc
     const r = Number(key.slice(0, i));
     const col = key.slice(i + 1);
     if (rows[r] && template.cols.includes(col)) rows[r][col] = v;
+  });
+  // 자동번호 칸은 문서가 받은 번호만 — 틀에 적어 둔 글자가 번호로 남아 새 번호를 못 받는 일이 없게
+  Object.keys(template.cellMeta[APPROVAL_NS.autoNo] ?? {}).forEach((key) => {
+    const i = key.indexOf(':');
+    const r = Number(key.slice(0, i));
+    if (rows[r]) rows[r][key.slice(i + 1)] = values[key] ?? '';
   });
   const sheet = { ...template, rows };
   return opts.recalc ? recalculate(sheet) : sheet;
@@ -1016,6 +1028,8 @@ export interface LinkName {
   range?: boolean;
   /** 사람 칸 — 글자 대신 사용자 ID(__refs)를 넣는다 */
   userId?: boolean;
+  /** 사람 칸이면 사용자 ID(여러 명은 쉼표로), 글자 칸이면 쓴 글자 그대로 — 동행자처럼 일정에 올릴 사람을 찾는 칸 */
+  userIdOrText?: boolean;
   /** 시스템이 계산해 넣는 칸(기안자 입력 아님) */
   computed?: boolean;
   /**
@@ -1102,7 +1116,7 @@ export const LINK_TYPES: LinkTypeDef[] = [
       { key: 'endTime', label: '종료 시각' },
       { key: 'purpose', label: '목적' },
       { key: 'transportation', label: '교통수단' },
-      { key: 'companions', label: '동행자' },
+      { key: 'companions', label: '동행자', userIdOrText: true, hint: '사람(여러 명) 칸으로 두면 동행자 일정에도 올라갑니다' },
       MEMO,
     ],
   },
@@ -1117,7 +1131,7 @@ export const LINK_TYPES: LinkTypeDef[] = [
         { key: 'destination', label: '출장지', required: true },
         { key: 'purpose', label: '목적' },
         { key: 'transportation', label: '교통수단' },
-        { key: 'companions', label: '동행자' },
+        { key: 'companions', label: '동행자', userIdOrText: true, hint: '사람(여러 명) 칸으로 두면 동행자 일정에도 올라갑니다' },
         ...(code === '해외출장' ? [{ key: 'overseasType', label: '출장 구분' }] : []),
         MEMO,
       ],
@@ -1206,11 +1220,18 @@ export function linkFieldValues(s: Sheet, link: string | null | undefined, refs:
     const i = key.indexOf(':');
     const v = String(computed.rows[Number(key.slice(0, i))]?.[key.slice(i + 1)] ?? '');
     if (n.userId) out[n.key] = refs[key] ?? '';
+    else if (n.userIdOrText) out[n.key] = refs[key] || v;
     else if (n.range && v.includes('~')) {
       const [a, b] = v.split('~').map((x) => x.trim());
       out[n.key] = a;
       if (b) out[`${n.key}__end`] = b;
     } else out[n.key] = v;
+  });
+  // 시트에 없는 끝 날짜·시스템 계산 값은 빈 값으로 내보낸다 — 기안 화면이 미리 넣어 둔 값(근태 화면에서 넘어온 날짜·1일)이나
+  // 앞서 고른 끝 날짜가 문서에 남아 일수·일정이 틀리지 않게
+  def.names.forEach((n) => {
+    if (n.range && !(`${n.key}__end` in out)) out[`${n.key}__end`] = '';
+    if (n.computed && !(n.key in out)) out[n.key] = '';
   });
   return out;
 }

@@ -35,6 +35,10 @@ test('시각이 없는 예전 문서는 근무 시간(시간) 칸으로', () => 
 test('휴일근로 판정 — 서식·근무 구분(없으면 주말)', () => {
   assert.equal(isHolidayWorkDoc(doc()), true);
   assert.equal(isHolidayWorkDoc(doc({ docType: '연장근로' })), true);
+  // 시트 서식 — 서식 코드가 달라도 연동 유형(__link)이 휴일근무면 휴일근로 문서
+  const sheetDoc = doc({ docType: '휴일근무_시트' });
+  assert.equal(isHolidayWorkDoc(sheetDoc), false);
+  assert.equal(isHolidayWorkDoc({ ...sheetDoc, fieldValues: { ...sheetDoc.fieldValues, __link: '휴일근무' } }), true);
   assert.equal(isHolidayWorkDoc(doc({}, { workKind: '연장' })), false);
   assert.equal(isHolidayWorkDoc(doc({}, { workKind: undefined, workDate: '2026-11-08' })), true); // 일요일
   assert.equal(isHolidayWorkDoc(doc({}, { workKind: undefined, workDate: '2026-11-10' })), false); // 화요일

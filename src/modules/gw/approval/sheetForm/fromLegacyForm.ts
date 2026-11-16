@@ -56,6 +56,8 @@ const INPUT_OF: Partial<Record<FormField['type'], CellInputType>> = {
   다중선택: 'multiSelect',
   체크: 'checkbox',
   사용자: 'user',
+  // 여러 사람(동행자 등) — 사람 칸이어야 사용자 ID 가 남아 동행자 일정에도 올라간다
+  다중사용자: 'users',
   부서: 'dept',
 };
 

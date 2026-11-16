@@ -225,8 +225,13 @@ test('연동 칸 — 기간 칸은 period·period__end 로 나누고, 사람 칸
     leaveType: '연차',
     period: '2026-11-10',
     period__end: '2026-11-12',
+    period__days: '', // 휴가 일수 칸이 없으면 빈 값 — 기안 화면이 미리 넣어 둔 1일이 남지 않게
     substituteId: 'U029',
   });
+  // 끝 날짜를 안 고른 기간('시작 ~ ')은 끝 날짜를 빈 값으로 — 앞서 고른 끝 날짜가 문서에 남지 않게
+  const half = setCellValue(s, 1, 1, '2026-11-20 ~ ');
+  assert.equal(linkFieldValues(half, '휴가').period, '2026-11-20');
+  assert.equal(linkFieldValues(half, '휴가').period__end, '');
   assert.deepEqual(linkFieldValues(s, null), {}); // 대체 서식이 없으면 아무것도 안 넣음
 });
 
@@ -404,4 +409,33 @@ test('입력 예시 — 글·숫자 칸만, 공백만이면 없음, 최대 길�
   assert.equal(placeholderOf({ type: 'select', options: ['a'], placeholder: '고르기' }), undefined);
   assert.equal(placeholderOf({ type: 'text', placeholder: 'x'.repeat(100) })?.length, PLACEHOLDER_MAX);
   assert.equal(placeholderOf(undefined), undefined);
+});
+
+test('자동번호 칸 — 받은 번호는 값으로 남고(고쳐서 다시 올려도 같은 번호), 틀에 적은 글자는 번호로 치지 않는다', () => {
+  let tpl = createSheet(2, 2);
+  tpl = setCellValue(tpl, 0, 0, '발주번호');
+  tpl = setCellValue(tpl, 0, 1, '(자동)'); // 관리자가 틀에 적어 둔 글자
+  tpl = setCellMeta(tpl, 'autoNo', 0, 1, { prefix: 'PO' });
+  const key = cellKey(0, tpl.cols[1]);
+  // 새 기안 — 번호가 아직 없다
+  const fresh = applyValues(tpl, {}, { recalc: true });
+  assert.equal(extractValues(fresh)[key], undefined, '틀 글자는 값이 아니다');
+  // 상신해서 번호를 받은 뒤 반려 → 편집 화면에서 다시 값을 뽑아도 번호가 남는다
+  const issued = applyValues(tpl, { [key]: 'PO-2026-0001' }, { recalc: true });
+  assert.equal(extractValues(issued)[key], 'PO-2026-0001');
+});
+
+test('연동 칸 — 동행자는 사람 칸이면 사용자 ID(여러 명은 쉼표), 글자 칸이면 쓴 글자', () => {
+  let s = createSheet(2, 2);
+  s = setCellMeta(s, APPROVAL_NS.input, 0, 1, { type: 'date' });
+  s = setCellName(s, 0, 1, 'period');
+  s = setCellMeta(s, APPROVAL_NS.input, 1, 1, { type: 'users' });
+  s = setCellName(s, 1, 1, 'companions');
+  s = setCellValue(s, 0, 1, '2026-11-20');
+  s = setCellValue(s, 1, 1, '김하나 (영업), 이두리 (영업)');
+  const key = cellKey(1, s.cols[1]);
+  const linked = linkFieldValues(s, '국내출장', { [key]: 'U001,U002' });
+  assert.equal(linked.companions, 'U001,U002');
+  assert.equal(linked.period__end, '', '날짜 칸 하나면 끝 날짜는 빈 값');
+  assert.equal(linkFieldValues(s, '국내출장').companions, '김하나 (영업), 이두리 (영업)', 'ID 가 없으면(글자 칸) 글자 그대로');
 });

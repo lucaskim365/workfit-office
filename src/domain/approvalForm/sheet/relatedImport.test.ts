@@ -3,7 +3,7 @@ import test from 'node:test';
 import { cellKey, createSheet, setCellMeta, setCellValue, type Sheet } from '@/lib/sheet/core';
 import { APPROVAL_NS, applyValues, setCellName } from './approvalSheet';
 import { expandRepeats, repeatSections, setRepeatSection } from './repeatRows';
-import { collectNamed, importNamed, namedFromLegacy, readNamed } from './relatedImport';
+import { collectNamed, importNamed, namedFromLegacy, readNamed, secretNames, withoutNames } from './relatedImport';
 
 /**
  * 0행: 거래처(B1 입력, 이름 '거래처')
@@ -75,4 +75,19 @@ test('옛 서식 문서 — 라벨을 이름으로, 한 칸짜리 필드만', ()
 test('저장된 이름 값 읽기', () => {
   assert.deepEqual(readNamed('{"a":"1","b":["x",2]}'), { a: '1', b: ['x', '2'] });
   assert.deepEqual(readNamed('깨짐'), {});
+});
+
+test('비공개 칸 — 이름 값에서 빼고 가져온다(시트 칸·옛 서식 항목 모두)', () => {
+  let s = createSheet(2, 2);
+  s = setCellName(s, 0, 1, '거래처');
+  s = setCellName(s, 1, 1, '단가');
+  s = setCellMeta(s, APPROVAL_NS.secret, 1, 1, true);
+  assert.deepEqual(secretNames(s), ['단가']);
+  assert.deepEqual(withoutNames({ 거래처: '가나상사', 단가: '1200' }, secretNames(s)), { 거래처: '가나상사' });
+  // 옛 서식 — 비공개 항목은 뺀다
+  const fields = [
+    { key: 'a', label: '거래처', type: '텍스트' },
+    { key: 'b', label: '단가', type: '금액', isSecret: true },
+  ];
+  assert.deepEqual(namedFromLegacy(fields, { a: '가나상사', b: 1200 }), { 거래처: '가나상사' });
 });

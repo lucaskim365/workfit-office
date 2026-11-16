@@ -35,10 +35,11 @@ import { DraftSubmitConfirmDialog } from './components/DraftSubmitConfirmDialog'
 import { ApprovalDraftDocumentSheet } from './components/ApprovalDraftDocumentSheet';
 import { SheetDraftForm, type RelatedSource } from './sheetForm/SheetDraftForm';
 import { isSheetDoc } from './sheetForm/SheetDocView';
-import { SHEET_NAMED_KEY, namedFromLegacy, readNamed } from '@/domain/approvalForm/sheet/relatedImport';
+import { SHEET_NAMED_KEY, namedFromLegacy, readNamed, secretNames, withoutNames } from '@/domain/approvalForm/sheet/relatedImport';
+import { SHEET_OWN_KEY, readOwnSheet } from '@/domain/approvalForm/sheet/ownSheet';
 import { korDateText, SHEET_VERSION_KEY } from '@/domain/approvalForm/sheet/approvalSheet';
 import { LINK_KEY } from '@/domain/approvalDoc/linkType';
-import { useFormVersionSheet, useSheetFormVersions, useSheetSwitches } from '@/features/gw/useApprovalFormVersions';
+import { fetchFormVersionSheet, useFormVersionSheet, useSheetFormVersions, useSheetSwitches } from '@/features/gw/useApprovalFormVersions';
 import { liveSheetVersion } from '@/domain/approvalForm/sheetSwitch';
 import { parseVersionKey } from '@/domain/approvalForm/sheetVersion';
 import { ApprovalDocumentView } from './ApprovalDocumentView';
@@ -1039,16 +1040,25 @@ function ApprovalDraftInner({
       relatedDocs.map((rd) => ({
         id: rd.docId,
         label: `${rd.docNo} ${rd.title}`,
-        load: () => {
+        load: async () => {
           const d = findDoc(rd.docId);
           if (!d) return null;
-          if (isSheetDoc(d.fieldValues)) return readNamed(d.fieldValues[SHEET_NAMED_KEY]);
+          // 비공개 칸 값은 그 문서를 쓴 사람과 결재한 사람만 가져온다(문서 보기에서 가려지는 사람은 가져올 수도 없게)
+          const mine = d.drafterId === me.id || d.steps.some((s) => s.approverId === me.id && s.kind !== '참조');
+          if (isSheetDoc(d.fieldValues)) {
+            const named = readNamed(d.fieldValues[SHEET_NAMED_KEY]);
+            if (mine) return named;
+            // 원본 문서의 틀(문서가 고친 틀, 없으면 쓴 버전)에서 비공개 칸을 찾아 뺀다 — 틀을 못 읽으면 가져오지 않는다
+            const ver = parseVersionKey(String(d.fieldValues[SHEET_VERSION_KEY] ?? ''));
+            const tpl = readOwnSheet(d.fieldValues[SHEET_OWN_KEY]) ?? (ver ? await fetchFormVersionSheet(ver.formId, ver.version) : null);
+            return tpl ? withoutNames(named, secretNames(tpl)) : null;
+          }
           const f = allForms.find((x) => x.code === d.docType);
-          return f ? namedFromLegacy(f.fields, d.fieldValues) : null;
+          return f ? namedFromLegacy(mine ? f.fields.map((x) => ({ ...x, isSecret: false })) : f.fields, d.fieldValues) : null;
         },
       })),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [relatedDocs, allForms]
+    [relatedDocs, allForms, me.id]
   );
   // 휴일근로 신청서 자동 입력 — 서식에 출근 시각 칸이 있을 때만
   // 기존 양식 휴일근무의 자동 채우기 — 시트로 쓰는 문서는 해당 없음(기존 서식에 시트를 붙여도 항목 목록은 남아 있음)
@@ -1231,7 +1241,20 @@ function ApprovalDraftInner({
       body: values[bodyKey] ? String(values[bodyKey]).trim() : '',
       form: leave,
       // 직인 문구는 상신 시점 값으로 남긴다 — 나중에 서식 문구가 바뀌어도 낸 문서의 명의는 그대로
-      fieldValues: withSealTexts(sheetVersion === null ? form?.fields : [], isOvertimeAutoFill && overtimeFill ? markOvertimeTimes(values, overtimeFill) : values),
+      fieldValues: withSealTexts(
+        sheetVersion === null ? form?.fields : [],
+        isOvertimeAutoFill && overtimeFill
+          ? markOvertimeTimes(values, overtimeFill)
+          : isSheetHolidayWork && sheetHoliday.fill
+            ? // 시트 휴일근무 — 근무 구분(휴일·연장)과 근태 기록의 시각을 문서에 남긴다(시각 칸이 없는 서식도 대체휴무가 지급되게)
+              {
+                ...values,
+                workKind: sheetHoliday.fill.workKind,
+                workStart: values['workStart'] || sheetHoliday.fill.workStart,
+                workEnd: values['workEnd'] || sheetHoliday.fill.workEnd,
+              }
+            : values
+      ),
       attachments,
       recipients,
       relatedDocs,
@@ -1298,7 +1321,8 @@ function ApprovalDraftInner({
 
     if (linkCode === '휴가' || form?.code === '휴가') {
       const pStart = values['period'];
-      const pEnd = values['period__end'];
+      // 시트 서식은 휴가 기간을 날짜 칸 하나로 둘 수 있다 — 끝 날짜가 없으면 그 하루
+      const pEnd = values['period__end'] || (sheetVersion !== null ? pStart : '');
       const lType = String(values['leaveType'] || '연차').trim();
       const isPart = isHalfDayLeave(lType) || isQuarterDayLeave(lType);
       const isSubLeave = lType.includes('대체휴무') || lType === 'SUBSTITUTE';

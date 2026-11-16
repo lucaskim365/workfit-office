@@ -502,7 +502,8 @@ export interface RelatedSource {
   id: string;
   /** 단추에 보일 이름(문서번호·제목) */
   label: string;
-  load: () => NamedValues | null;
+  /** 가져올 이름 값 — 원본 문서의 틀을 읽어야 해서 기다린다. 못 읽으면 null */
+  load: () => Promise<NamedValues | null>;
 }
 
 export function SheetDraftForm({
@@ -634,9 +635,9 @@ export function SheetDraftForm({
   };
 
   /** 관련 문서의 이름 붙은 칸 값을 같은 이름 칸으로 복사 */
-  const importFrom = (src: RelatedSource) => {
+  const importFrom = async (src: RelatedSource) => {
     if (!tplSheet) return;
-    const named = src.load();
+    const named = await src.load().catch(() => null);
     if (!named) return alert(`'${src.label}' 문서를 읽지 못했습니다.`);
     const res = importNamed(tplSheet, extras, readSheetValues(rawValues), refs, named);
     if (!res.filled.length) return alert(`'${src.label}'에는 이 서식과 같은 이름의 칸이 없습니다.`);

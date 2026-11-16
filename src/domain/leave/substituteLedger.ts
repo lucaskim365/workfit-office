@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { clockOf } from '@/domain/commute/overtimeDraft';
 import { HOLIDAY_WORK_DOC_TYPES } from '@/domain/approvalDoc/holidayWorkDuplicate';
+import { docLinkType } from '@/domain/approvalDoc/linkType';
 
 /**
  * 대체휴무 원장 — 결재 완료된 휴일근로를 분 × 1.5 로 지급(GRANT), 그 문서가 취소완료되면 같은 분을 차감(REVOKE).
@@ -50,7 +51,8 @@ const workDateOf = (doc: DocLike) => {
 
 /** 휴일근로 문서 — 서식이 휴일근로이고 근무 구분이 휴일(값이 없으면 근무일이 주말). */
 export function isHolidayWorkDoc(doc: DocLike): boolean {
-  if (!HOLIDAY_WORK_DOC_TYPES.includes(doc.docType)) return false;
+  // 시트 서식은 서식 코드가 달라도 연동 유형(__link)이 휴일근무면 휴일근로 문서다
+  if (!HOLIDAY_WORK_DOC_TYPES.includes(docLinkType(doc))) return false;
   const kind = String(doc.fieldValues?.workKind ?? '').trim();
   if (kind) return kind === '휴일';
   const date = workDateOf(doc);

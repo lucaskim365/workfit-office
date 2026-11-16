@@ -48,6 +48,9 @@ export function useFormVersionList(formId: string | null) {
 }
 
 /** 버전 틀 한 벌 — 저장된 버전은 바뀌지 않으므로 다시 읽지 않는다 */
+/** 서식 버전의 틀을 한 번 읽는다(훅을 쓸 수 없는 곳 — 단추를 눌렀을 때 등) */
+export const fetchFormVersionSheet = async (formId: string, version: number) => (await approvalFormVersionRepo.get(formId, version))?.sheet ?? null;
+
 export function useFormVersionSheet(formId: string | null, version: number | null) {
   return useQuery({
     queryKey: [KEY, 'sheet', formId, version],

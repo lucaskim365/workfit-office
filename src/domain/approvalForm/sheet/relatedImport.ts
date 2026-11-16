@@ -43,6 +43,21 @@ export function collectNamed(sheet: Sheet): NamedValues {
   return out;
 }
 
+/** 비공개 칸에 붙은 이름들 — 다른 문서로 값을 가져올 때는 뺀다(문서 보기에서 가려지는 값) */
+export function secretNames(sheet: Sheet): string[] {
+  const secret = sheet.cellMeta[APPROVAL_NS.secret] ?? {};
+  return Object.entries(sheet.cellMeta[APPROVAL_NS.name] ?? {})
+    .filter(([key, name]) => typeof name === 'string' && !!name && secret[key] === true)
+    .map(([, name]) => name as string);
+}
+
+/** 이름 값에서 주어진 이름들을 뺀다 */
+export function withoutNames(named: NamedValues, names: string[]): NamedValues {
+  if (!names.length) return named;
+  const drop = new Set(names);
+  return Object.fromEntries(Object.entries(named).filter(([k]) => !drop.has(k)));
+}
+
 /** fieldValues.__named(JSON 글자) → 이름 값. 없거나 깨졌으면 빈 값 */
 export function readNamed(raw: unknown): NamedValues {
   if (typeof raw !== 'string' || !raw) return {};
@@ -60,16 +75,16 @@ export function readNamed(raw: unknown): NamedValues {
   }
 }
 
-/** 옛 서식 문서 → 이름 값. 라벨을 이름으로, 한 칸짜리 필드만(표·직인·안내문 등은 뺌) */
+/** 옛 서식 문서 → 이름 값. 라벨을 이름으로, 한 칸짜리 필드만(표·직인·안내문 등은 뺌). 비공개 항목은 뺀다 */
 export function namedFromLegacy(
-  fields: Array<{ key: string; label: string; type: string }>,
+  fields: Array<{ key: string; label: string; type: string; isSecret?: boolean }>,
   fieldValues: Record<string, unknown>
 ): NamedValues {
   const SIMPLE = new Set(['텍스트', '장문', '숫자', '금액', '날짜', '선택', '다중선택', '부서']);
   const out: NamedValues = {};
   fields.forEach((f) => {
     const label = f.label.trim();
-    if (!label) return;
+    if (!label || f.isSecret) return;
     if (f.type === '기간') {
       const a = fieldValues[f.key];
       const b = fieldValues[`${f.key}__end`];
