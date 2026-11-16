@@ -36,7 +36,7 @@ import { ApprovalDraftDocumentSheet } from './components/ApprovalDraftDocumentSh
 import { SheetDraftForm, type RelatedSource } from './sheetForm/SheetDraftForm';
 import { isSheetDoc } from './sheetForm/SheetDocView';
 import { SHEET_NAMED_KEY, namedFromLegacy, readNamed } from '@/domain/approvalForm/sheet/relatedImport';
-import { korDateText, SHEET_VERSION_KEY, linkSystemValues } from '@/domain/approvalForm/sheet/approvalSheet';
+import { korDateText, SHEET_VERSION_KEY } from '@/domain/approvalForm/sheet/approvalSheet';
 import { LINK_KEY } from '@/domain/approvalDoc/linkType';
 import { useFormVersionSheet, useSheetFormVersions, useSheetSwitches } from '@/features/gw/useApprovalFormVersions';
 import { liveSheetVersion } from '@/domain/approvalForm/sheetSwitch';
@@ -56,7 +56,8 @@ import { applyMasterToCurrent, hasMasterUpdate, serializeSheet } from './formFie
 import { TAB_HEARTBEAT_MS, draftAutosaveKeys, findOrphanNewDraft, getDraftTabId, markTabAlive, tabAliveKey } from './draftAutosaveKeys';
 import { isEditableStatus } from '@/domain/approvalDoc/engine';
 import { OvertimeAutoFill } from './components/OvertimeAutoFill';
-import { clockOf, HOLIDAY_WORK_LOCKED_KEYS, markOvertimeTimes, OVERTIME_AUTOFILL_FIELD, type OvertimeFill } from '@/domain/commute/overtimeDraft';
+import { useSheetHolidayWork } from './sheetForm/useSheetHolidayWork';
+import { clockOf, markOvertimeTimes, OVERTIME_AUTOFILL_FIELD, type OvertimeFill } from '@/domain/commute/overtimeDraft';
 import { isRestDay } from '@/shared/ui/form/datePickerGrid';
 import { nowLocalIso } from '@/shared/lib/datetime';
 import { formatMinutes, substituteUseMinutes } from '@/domain/leave/substituteLedger';
@@ -1026,20 +1027,10 @@ function ApprovalDraftInner({
   }, [form, sheetTpl, sheetVersion]);
   // 연동 유형 — 시트 서식이 대신하는 기존 서식 코드(휴가·외근·출장·휴일근무). 기존 서식은 서식 코드 그대로
   const linkCode = typeof values[LINK_KEY] === 'string' && values[LINK_KEY] ? String(values[LINK_KEY]) : code;
-  /** 시트 휴가원 — 휴가 일수 칸은 시스템이 계산(기존 휴가원과 같은 calculateLeaveDays) */
-  // 시트 휴일근무 — 근무 일자의 근태 기록(아래 OvertimeAutoFill 이 받아 옴)으로 출근·퇴근 시각·근무 시간 칸을 채운다
-  const [sheetHolidayWork, setSheetHolidayWork] = useState<{ date: string; fill: OvertimeFill | null; hours: number | null }>({ date: '', fill: null, hours: null });
-  const sheetSystemValues = (link: string, linked: Record<string, string>) => {
-    if (link === '휴일근무') {
-      const ok = sheetHolidayWork.fill && sheetHolidayWork.date === linked.workDate;
-      return {
-        workStart: ok ? sheetHolidayWork.fill!.workStart : '',
-        workEnd: ok ? sheetHolidayWork.fill!.workEnd : '',
-        workHours: ok && sheetHolidayWork.hours !== null ? String(sheetHolidayWork.hours) : '',
-      };
-    }
-    return linkSystemValues(link, linked, holidayList);
-  };
+  /** 시트로 쓰는 휴일근무 신청서 — 같은 규칙(사후 신청·근태 기록으로만 시각)을 시트 칸에 */
+  const isSheetHolidayWork = sheetVersion !== null && linkCode === '휴일근무';
+  // 시트 연동 칸의 시스템 값 — 휴가 일수, 휴일근무 출근·퇴근 시각·근무 시간(근태 기록, 고칠 수 없음). 편집기 미리보기와 같은 훅
+  const sheetHoliday = useSheetHolidayWork({ active: isSheetHolidayWork, workDate: String(values['workDate'] ?? ''), holidays: holidayList });
   // 관련 문서 값 가져오기 — 관련 문서로 고른 문서의 이름 붙은 칸 값(시트 문서) 또는 필드 라벨 값(옛 서식 문서)
   const findDoc = useCachedApprovalLookup();
   const { data: allForms = [] } = useApprovalForms();
@@ -1062,10 +1053,10 @@ function ApprovalDraftInner({
   // 휴일근로 신청서 자동 입력 — 서식에 출근 시각 칸이 있을 때만
   // 기존 양식 휴일근무의 자동 채우기 — 시트로 쓰는 문서는 해당 없음(기존 서식에 시트를 붙여도 항목 목록은 남아 있음)
   const isOvertimeAutoFill = sheetVersion === null && !!form?.fields.some((f) => f.key === OVERTIME_AUTOFILL_FIELD);
-  /** 시트로 쓰는 휴일근무 신청서 — 같은 규칙(사후 신청·근태 기록으로만 시각)을 시트 칸에 */
-  const isSheetHolidayWork = sheetVersion !== null && linkCode === '휴일근무';
   const isHolidayWorkDoc = isOvertimeAutoFill || isSheetHolidayWork;
-  const [overtimeFill, setOvertimeFill] = useState<OvertimeFill | null>(null);
+  const [legacyOvertimeFill, setOvertimeFill] = useState<OvertimeFill | null>(null);
+  /** 근태 기록에서 받아 온 휴일근무 시각 — 기존 양식은 OvertimeAutoFill, 시트는 useSheetHolidayWork 가 받아 온다 */
+  const overtimeFill = isSheetHolidayWork ? sheetHoliday.fill : legacyOvertimeFill;
   const bodyKey = documentBodyKeyOf(form?.fields);
   const amountField = form ? amountFieldOf(form) : undefined;
 
@@ -1299,7 +1290,7 @@ function ApprovalDraftInner({
         overtimeFill.marks.workEnd ||
         // 시트 서식엔 시각 칸이 없을 수도 있다 — 근태 기록(overtimeFill)으로 판단
         (isSheetHolidayWork
-          ? !overtimeFill.workStart || !overtimeFill.workEnd || sheetHolidayWork.date !== String(values['workDate'] ?? '')
+          ? !overtimeFill.workStart || !overtimeFill.workEnd || sheetHoliday.filledDate !== String(values['workDate'] ?? '')
           : !clockOf(values['workStart']) || !clockOf(values['workEnd'])))
     ) {
       return '이 날 근태 기록에 출근·퇴근 시각이 없어 신청할 수 없습니다. 기록이 빠졌으면 근태 정정을 먼저 해 주세요.';
@@ -1740,20 +1731,7 @@ function ApprovalDraftInner({
           {isOvertimeAutoFill && /^\d{4}-\d{2}-\d{2}$/.test(String(values['workDate'] ?? '')) && (
             <OvertimeAutoFill workDate={String(values['workDate'])} values={values} setVals={setVals} onFill={setOvertimeFill} />
           )}
-          {isSheetHolidayWork && /^\d{4}-\d{2}-\d{2}$/.test(String(values['workDate'] ?? '')) && (
-            <OvertimeAutoFill
-              key={String(values['workDate'])}
-              workDate={String(values['workDate'])}
-              values={values}
-              setVals={setVals}
-              apply={false}
-              onFill={(fill) => {
-                setOvertimeFill(fill);
-                setSheetHolidayWork((p) => ({ date: String(values['workDate']), fill, hours: p.date === String(values['workDate']) ? p.hours : null }));
-              }}
-              onHours={(hours) => setSheetHolidayWork((p) => (p.hours === hours ? p : { ...p, hours }))}
-            />
-          )}
+          {sheetHoliday.banner}
           <ApprovalDraftDocumentSheet
             form={docForm}
             titleMode={editDoc ? editDoc.titleMode : TITLE_MODE_JOB_TITLE}
@@ -1814,10 +1792,10 @@ function ApprovalDraftInner({
                   onIssues={(cells) => (sheetIssuesRef.current = cells)}
                   onRequired={(labels) => (sheetRequiredRef.current = labels)}
                   relatedSources={relatedSources}
-                  systemValues={sheetSystemValues}
+                  systemValues={sheetHoliday.systemValues}
                   // 휴일근무 — 출근·퇴근 시각·근무 시간은 근태 기록에서만(고칠 수 없음), 받아 오면 칸에 다시 넣는다
-                  lockedNames={isSheetHolidayWork ? HOLIDAY_WORK_LOCKED_KEYS : undefined}
-                  systemKey={isSheetHolidayWork ? `${sheetHolidayWork.date}|${sheetHolidayWork.fill?.workStart ?? ''}|${sheetHolidayWork.fill?.workEnd ?? ''}|${sheetHolidayWork.hours ?? ''}` : undefined}
+                  lockedNames={sheetHoliday.lockedNames}
+                  systemKey={sheetHoliday.systemKey}
                   // 문서 항목 칸(제목·보존연한·공개범위) — 문서 머리와 같은 값을 시트 칸에서 쓴다
                   docFields={{ title, preservationPeriod, visibility }}
                   onDocField={(p) => {

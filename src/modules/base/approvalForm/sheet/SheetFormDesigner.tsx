@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { suggestFormCode } from '@/domain/approvalForm/formCode';
 import { ArrowLeft, Asterisk, EyeOff, Eye, FileSpreadsheet, Filter, GitBranch, History, Info, Lock, Save, Stamp, Tag, X } from 'lucide-react';
 import { SheetDraftForm } from '@/modules/gw/approval/sheetForm/SheetDraftForm';
+import { useSheetHolidayWork } from '@/modules/gw/approval/sheetForm/useSheetHolidayWork';
 import { SheetDocView } from '@/modules/gw/approval/sheetForm/SheetDocView';
 import { legacyFormToSheet } from '@/modules/gw/approval/sheetForm/fromLegacyForm';
 import type { DocFields } from '@/modules/gw/approval/sheetForm/SheetDraftForm';
@@ -27,7 +28,6 @@ import {
   mergeDropsContent,
   LINK_TYPES,
   linkIssues,
-  linkSystemValues,
   korDateText,
   type SheetSlots,
   VISIBILITY_LABEL,
@@ -1186,6 +1186,8 @@ function PreviewModal({ form, sheet, title, link, onClose }: { form: ApprovalFor
     date: korDateText(new Date()),
     formTitle: form.docTitle || form.name,
   };
+  // 휴일근무 연동 — 기안 화면과 같이 근무 일자의 내 근태 기록으로 출근·퇴근 시각·근무 시간을 채우고 그 칸은 잠근다
+  const holidayWork = useSheetHolidayWork({ active: link === '휴일근무', workDate: String(values.workDate ?? ''), holidays });
   const draftBody = (slots: SheetSlots) => (
     <SheetDraftForm
       slots={slots}
@@ -1193,7 +1195,9 @@ function PreviewModal({ form, sheet, title, link, onClose }: { form: ApprovalFor
       version={1}
       template={sheet}
       link={link}
-      systemValues={(l, linked) => linkSystemValues(l, linked, holidays)}
+      systemValues={holidayWork.systemValues}
+      lockedNames={holidayWork.lockedNames}
+      systemKey={holidayWork.systemKey}
       draftInfo={{ ...info, docNo: '(작성 완료 시 자동 발번)', completedDate: '' }}
       docFields={docFields}
       onDocField={(p) => setDocFields((d) => ({ ...d, ...p }))}
@@ -1266,6 +1270,7 @@ function PreviewModal({ form, sheet, title, link, onClose }: { form: ApprovalFor
           </div>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto p-4 pt-3">
+        {tab === 'draft' && holidayWork.banner}
         <div className="bg-[#878d90] p-4">
           {user ? (
             tab === 'external' ? (
