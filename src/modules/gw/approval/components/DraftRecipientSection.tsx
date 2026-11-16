@@ -69,8 +69,13 @@ export function SelectorDialog({
     const isDeptSelected = selected.some((s) => s.id === dept.id);
     const isUserSelected = selected.some((s) => s.id === user.id);
 
+    const userItem = { id: user.id, name: `${user.name} · ${user.dept}`, type: 'user' as const };
     if (isDeptSelected) {
-      if (singleSelect) return;
+      // 한 명만 고르는 창 — 부서 대신 이 사람 하나로
+      if (singleSelect) {
+        setSelected([userItem]);
+        return;
+      }
       // 부서가 체크된 상태에서 사원 체크 풀면 -> 부서 해제하고 남은 부서원 전원을 사원별 선택으로 풀기
       setSelected((prev) => {
         const base = prev.filter((s) => s.id !== dept.id);
@@ -80,16 +85,12 @@ export function SelectorDialog({
         return [...base, ...siblings];
       });
     } else {
+      // 한 명만 고르는 창 — 이미 고른 사람을 다시 누르면 풀고, 아니면 이 사람으로 바꾼다
       if (singleSelect) {
-        setSelected([{ id: user.id, name: `${user.name} · ${user.dept}`, type: 'user' as const }]);
+        setSelected(isUserSelected ? [] : [userItem]);
         return;
       }
-      setSelected((prev) => {
-        const next = isUserSelected
-          ? prev.filter((s) => s.id !== user.id)
-          : [...prev, { id: user.id, name: `${user.name} · ${user.dept}`, type: 'user' as const }];
-        return next;
-      });
+      setSelected((prev) => (isUserSelected ? prev.filter((s) => s.id !== user.id) : [...prev, userItem]));
     }
   };
 
@@ -118,10 +119,10 @@ export function SelectorDialog({
 
     return (
       <div key={d.id} className="space-y-1">
-        {/* 부서 노드 */}
-        <div
+        {/* 부서 노드 — 줄 어디를 눌러도 체크(label) */}
+        <label
           style={{ paddingLeft: `${depth * 14}px` }}
-          className="flex items-center justify-between rounded-lg hover:bg-panel-alt px-1 py-0.5"
+          className="flex cursor-pointer items-center justify-between rounded-lg hover:bg-panel-alt px-1 py-0.5"
         >
           <div className="flex items-center gap-1.5 text-[11.5px] font-bold text-ink select-none flex-1 py-1">
             <Folder size={12} className="text-amber-500 shrink-0" />
@@ -133,18 +134,18 @@ export function SelectorDialog({
             onChange={() => handleToggleDept(d)}
             className="rounded border-border text-teal focus:ring-teal h-3.5 w-3.5 mr-1 cursor-pointer"
           />
-        </div>
+        </label>
 
         {/* 부서 하위 사원 목록 (항상 펼침상태) */}
         {!deptOnly && hasUsers && (
           <div className="space-y-0.5 mt-0.5">
             {deptUsers.map((u: any) => (
-              <div
+              <label
                 key={u.id}
                 style={{ paddingLeft: `${(depth + 1) * 14 + 12}px` }}
-                className="flex items-center justify-between rounded-lg hover:bg-panel-alt px-1 py-0.5"
+                className="flex cursor-pointer items-center justify-between rounded-lg hover:bg-panel-alt px-1 py-0.5"
               >
-                <div className="flex-1 py-1 text-left text-[11.5px] font-medium text-ink2 truncate flex items-center gap-1.5">
+                <div className="flex-1 py-1 text-left text-[11.5px] font-medium text-ink2 truncate flex items-center gap-1.5 select-none">
                   <User size={12} className="text-teal shrink-0" />
                   <span>{u.name}</span>
                   <span className="ml-1 text-ink3 text-[10px]">{u.position}</span>
@@ -155,7 +156,7 @@ export function SelectorDialog({
                   onChange={() => handleToggleUser(u, d)}
                   className="rounded border-border text-teal focus:ring-teal h-3.5 w-3.5 mr-1 cursor-pointer"
                 />
-              </div>
+              </label>
             ))}
           </div>
         )}
