@@ -583,7 +583,7 @@ function Designer({
           <button
             type="button"
             onClick={close}
-            className="flex items-center gap-1.5 rounded-lg border border-border bg-panel-alt px-3 py-1.5 text-[12px] font-bold text-ink2 hover:text-ink cursor-pointer"
+            className="flex shrink-0 items-center whitespace-nowrap gap-1.5 rounded-lg border border-border bg-panel-alt px-3 py-1.5 text-[12px] font-bold text-ink2 hover:text-ink cursor-pointer"
           >
             {standalone ? <X className="h-3.5 w-3.5" /> : <ArrowLeft className="h-3.5 w-3.5" />}
             <span>{standalone ? '탭 닫기' : '서식 목록'}</span>
@@ -602,7 +602,8 @@ function Designer({
             </span>
           </div>
         </div>
-        <div data-tour="actions" className="flex items-center gap-2">
+        {/* 좁은 화면에서는 단추 글자가 세로로 꺾이지 않게 한 줄로 두고 줄을 바꾼다 */}
+        <div data-tour="actions" className="flex flex-wrap items-center justify-end gap-2 [&_button]:whitespace-nowrap [&_label]:whitespace-nowrap">
           <div className="relative">
             <button
               type="button"
@@ -755,7 +756,7 @@ function Designer({
 
       <InfoBlock collapsible={standalone} title={fullHeader ? '서식 정보' : '서식 정보 · 문서 머리 항목'} linkLabel={LINK_TYPES.find((t) => t.code === link)?.feature ?? null}>
       {/* 서식 정보 */}
-      <div data-tour="info" className="grid grid-cols-2 gap-2.5 rounded-xl border border-border bg-panel p-3 md:grid-cols-[70px_1fr_1fr_1fr_1fr_1fr]">
+      <div data-tour="info" className="grid grid-cols-2 gap-2.5 rounded-xl border border-border bg-panel p-3 sm:grid-cols-3 xl:grid-cols-[70px_1fr_1fr_1fr_1fr_1fr]">
         <Field label="아이콘">
           <input className={inp} value={form.icon} onChange={(e) => set({ icon: e.target.value })} placeholder="📄" />
         </Field>
