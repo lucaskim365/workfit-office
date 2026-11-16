@@ -1184,8 +1184,9 @@ function ApprovalDraftInner({
 
   const isResubmit = !!editDoc && editDoc.status !== '임시저장';
 
-  /** 시트 문서 값에서 이 문서가 받지 않은 자동번호를 뺀다 */
-  const ownNumbers = (v: typeof values) => keepOwnAutoNumbers(readOwnSheet(v[SHEET_OWN_KEY]) ?? sheetTpl?.sheet, v, editDoc?.fieldValues);
+  /** 시트 문서 값의 자동번호를 이 문서가 받은 것으로 맞춘다(남의 번호는 빼고, 받은 번호는 되살림) */
+  const ownNumbers = (v: typeof values) =>
+    keepOwnAutoNumbers(readOwnSheet(v[SHEET_OWN_KEY]) ?? sheetTpl?.sheet, v, editDoc?.fieldValues, readOwnSheet(editDoc?.fieldValues?.[SHEET_OWN_KEY]) ?? sheetTpl?.sheet);
 
   const buildInput = (): ApprovalDraftInput => {
     let leave: LeaveForm | null = null;

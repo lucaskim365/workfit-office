@@ -36,26 +36,38 @@ export function docAutoNumberCells(template: Sheet | null | undefined, fieldValu
 }
 
 /**
- * 이 문서가 받은 번호만 남긴다 — 자동번호 칸 값 중 저장된 문서(own)에 없던 번호는 지운다.
- * 보관해 둔 작성 내용을 새 기안에 불러오면 다른 문서가 받은 번호가 함께 넘어와 번호가 겹치기 때문.
- * own 이 없으면(새 기안) 자동번호 칸은 모두 비운다. 바꿀 것이 없으면 받은 값을 그대로 돌려준다
+ * 자동번호 칸을 이 문서가 받은 번호로 맞춘다 — 저장된 문서(own)가 받은 번호는 되살리고, 그 밖의 번호(다른 문서의 것)는 지운다.
+ * 보관해 둔 작성 내용을 불러오면 값이 통째로 바뀌어, 다른 문서의 번호가 넘어오거나(번호 겹침) 자기 번호가 사라진다(재상신 때 새 번호).
+ * - 번호 칸의 차례는 문서마다 같으므로(보호 칸) 차례대로 짝짓는다. own 의 번호 자리는 own 이 쓰던 틀(ownTemplate — 표 모양을 고친 문서는 그 틀)로 찾는다
+ * - own 에서 번호 자리를 못 찾으면(틀을 못 읽음 등) 값으로 견준다 — own 의 칸 값에 있는 번호면 자기 것으로 본다
+ * - own 이 없으면(새 기안) 자동번호 칸은 모두 비운다. 바꿀 것이 없으면 받은 값을 그대로 돌려준다
  */
-export function keepOwnAutoNumbers<T extends Record<string, unknown>>(template: Sheet | null | undefined, fieldValues: T, own: Record<string, unknown> | null | undefined): T {
+export function keepOwnAutoNumbers<T extends Record<string, unknown>>(
+  template: Sheet | null | undefined,
+  fieldValues: T,
+  own: Record<string, unknown> | null | undefined,
+  ownTemplate: Sheet | null | undefined = template,
+): T {
   const cells = docAutoNumberCells(template, fieldValues);
   if (!cells.length) return fieldValues;
-  // 저장된 문서의 칸 값 전체와 견준다 — 번호 칸의 '자리'로 찾으면 표 모양을 고치거나 줄 수가 바뀐 문서에서 자기 번호를 못 찾는다
-  const mine = new Set(Object.values(readSheetValues(own?.[SHEET_VALUES_KEY])).filter(Boolean));
+  const ownValues = readSheetValues(own?.[SHEET_VALUES_KEY]);
+  // 저장된 문서가 번호 칸마다 받은 번호(차례대로) — 아직 안 받았으면 빈 값
+  const received = docAutoNumberCells(ownTemplate, own ?? {}).map((x) => ownValues[x.key] ?? '');
+  const anyOwn = new Set(Object.values(ownValues).filter(Boolean));
   const values = { ...readSheetValues(fieldValues[SHEET_VALUES_KEY]) };
   let changed = false;
-  cells.forEach((x) => {
-    if (values[x.key] && !mine.has(values[x.key])) {
-      delete values[x.key];
-      changed = true;
-    }
+  cells.forEach((x, i) => {
+    const cur = values[x.key] ?? '';
+    const mine = received[i] || (received.every((v) => !v) && anyOwn.has(cur) ? cur : '');
+    if (cur === mine) return;
+    if (mine) values[x.key] = mine;
+    else delete values[x.key];
+    changed = true;
   });
   if (!changed) return fieldValues;
   const next: Record<string, unknown> = { ...fieldValues, [SHEET_VALUES_KEY]: JSON.stringify(values) };
-  // 번호를 문서번호로 보이게 하던 값도 함께 — 남의 문서번호가 목록에 보이지 않게(상신 때 새 번호로 다시 채워진다)
-  if (next[DOC_NO_VALUE_KEY] && next[DOC_NO_VALUE_KEY] !== own?.[DOC_NO_VALUE_KEY]) delete next[DOC_NO_VALUE_KEY];
+  // 번호를 문서번호로 보이게 하던 값도 이 문서 것으로 — 남의 문서번호가 목록에 보이지 않게(없으면 상신 때 새 번호로 채워진다)
+  if (own?.[DOC_NO_VALUE_KEY]) next[DOC_NO_VALUE_KEY] = own[DOC_NO_VALUE_KEY];
+  else delete next[DOC_NO_VALUE_KEY];
   return next as T;
 }

@@ -326,16 +326,18 @@ export function SheetEditor({
   // 한글 등 조합 입력 — 조합 중에 편집을 끝내면(Enter·Tab·다른 칸 누르기) 입력기가 조합을 확정하며 글자를 한 번 더 보낸다.
   // 칸 입력 상자는 편집이 끝나도 남아 있으므로, 그 글자가 다음 칸에서 새 편집을 열지 않게 조합을 먼저 끝내고 잠깐 무시한다
   const composingRef = useRef(false);
-  const swallowUntilRef = useRef(0);
+  /** 조합을 끝낸 뒤 뒤따라오는 글자를 무시하는 중 — 다음 글쇠를 누르면 푼다(진짜로 친 글자는 글쇠 누름이 먼저 온다) */
+  const swallowRef = useRef(false);
   const endComposition = () => {
     if (!composingRef.current) return;
     composingRef.current = false;
-    // 사람이 다음 글자를 치기엔 너무 짧은 틈만 — 빠르게 이어 치는 다음 칸 첫 글자는 버리지 않는다
-    swallowUntilRef.current = performance.now() + 40;
-    // 초점을 뗐다가 바로 돌려주면 입력기가 조합을 그 자리에서 확정한다(초점이 없는 틈에 친 글쇠가 사라지지 않게 곧바로 되돌린다)
-    const el = cellInputRef.current;
+    swallowRef.current = true;
+    // 초점을 떼면 입력기가 조합을 그 자리에서 확정한다. 칸 입력 상자는 곧바로 초점을 돌려준다(초점 없는 틈에 친 글쇠가 사라지지 않게).
+    // 수식 입력줄은 떼기만 한다 — 편집이 끝나면 focusGrid 가 초점을 칸 입력 상자로 옮긴다
+    const bar = editSource === 'bar';
+    const el = bar ? barInputRef.current : cellInputRef.current;
     el?.blur();
-    el?.focus({ preventScroll: true });
+    if (!bar) el?.focus({ preventScroll: true });
   };
 
   const commitEdit = (move?: { dr: number; dc: number }) => {
@@ -902,6 +904,8 @@ export function SheetEditor({
           ref={barInputRef}
           value={barValue}
           readOnly={!editable(focusCell)}
+          onCompositionStart={() => (composingRef.current = true)}
+          onCompositionEnd={() => (composingRef.current = false)}
           onFocus={() => {
             if (!editing && editable(focusCell)) startEdit(focusCell, undefined, 'bar');
             else setEditSource('bar');
@@ -936,6 +940,8 @@ export function SheetEditor({
         onFocus={(e) => {
           if (e.target === e.currentTarget && !editing) focusTarget()?.focus({ preventScroll: true });
         }}
+        // 새 글쇠를 누르면 조합 뒤 글자 무시를 푼다(한글은 조합 시작 글쇠가 먼저 온다)
+        onKeyDownCapture={() => (swallowRef.current = false)}
         onKeyDown={onGridKeyDown}
         onPaste={onGridPaste}
         // 펼침(auto) — 넘침 상자를 두지 않는다(페이지가 스크롤). 넘침 상자가 있으면 열 머리가 그 상자 기준으로만 붙어 페이지를 내리면 따라오지 않는다
@@ -1132,7 +1138,7 @@ export function SheetEditor({
             onChange={(e) => {
               if (!editing) {
                 // 방금 끝낸 편집의 조합 글자가 뒤늦게 온 것 — 새 편집을 열지 않는다
-                if (performance.now() < swallowUntilRef.current) return;
+                if (swallowRef.current) return;
                 // 고른 칸에서 바로 치기 시작 — 초점을 옮기지 않으므로 조합 중인 글자가 끊기지 않는다
                 if (!editable(focusCell)) return;
                 setEditing(focusCell);

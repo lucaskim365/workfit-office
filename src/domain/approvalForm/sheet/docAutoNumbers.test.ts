@@ -50,11 +50,16 @@ test('이 문서가 받은 번호만 남긴다 — 다른 문서의 번호가 �
   // 반려·회수한 문서를 고쳐 다시 올리는 경우 — 자기 번호 그대로(같은 값을 돌려준다)
   const mine = withNo('PO-0001');
   assert.equal(keepOwnAutoNumbers(s, mine, withNo('PO-0001')), mine);
-  // 임시저장 문서에 다른 문서의 보관본을 불러온 경우 — 지운다
-  assert.deepEqual(JSON.parse(keepOwnAutoNumbers(s, withNo('PO-0009'), withNo('PO-0001'))[SHEET_VALUES_KEY]), { [memoKey]: '메모' });
+  // 번호를 받은 문서(반려·회수)를 고치다 다른 문서의 보관본을 불러온 경우 — 남의 번호 대신 자기 번호로 되살린다
+  assert.deepEqual(JSON.parse(keepOwnAutoNumbers(s, withNo('PO-0009'), withNo('PO-0001'))[SHEET_VALUES_KEY]), { [noKey]: 'PO-0001', [memoKey]: '메모' });
+  // 번호 없는 보관본(새 기안 때 저장한 것)을 불러온 경우에도 자기 번호를 되살린다
+  const noNumber = { [SHEET_VALUES_KEY]: JSON.stringify({ [memoKey]: '보관본 메모' }) };
+  assert.deepEqual(JSON.parse(keepOwnAutoNumbers(s, noNumber, withNo('PO-0001'))[SHEET_VALUES_KEY]), { [memoKey]: '보관본 메모', [noKey]: 'PO-0001' });
+  // 아직 번호를 안 받은 임시저장 문서에 번호 든 보관본을 불러온 경우 — 지운다
+  assert.deepEqual(JSON.parse(keepOwnAutoNumbers(s, withNo('PO-0009'), noNumber)[SHEET_VALUES_KEY]), { [memoKey]: '메모' });
 });
 
-test('이 문서가 받은 번호 — 표 모양을 고쳐 번호 칸 자리가 달라져도 자기 번호는 남고, 남의 문서번호 표시는 지운다', () => {
+test('이 문서가 받은 번호 — 표 모양을 고쳐 번호 칸 자리가 달라져도 자기 번호는 남고, 보이는 문서번호는 이 문서 것으로 되돌린다', () => {
   let s = createSheet(3, 2);
   s = setCellMeta(s, APPROVAL_NS.autoNo, 2, 1, DEFAULT_AUTO_NUMBER); // 지금 틀: 번호 칸이 3행(위에 행을 넣은 뒤)
   const now = cellKey(2, s.cols[1]);
@@ -64,5 +69,5 @@ test('이 문서가 받은 번호 — 표 모양을 고쳐 번호 칸 자리가 
   assert.equal(keepOwnAutoNumbers(s, cur, own), cur, '자리가 달라도 같은 번호면 그대로');
   const foreign = keepOwnAutoNumbers(s, { [SHEET_VALUES_KEY]: JSON.stringify({ [now]: 'PO-0009' }), __docNo: 'PO-0009' }, own) as Record<string, unknown>;
   assert.deepEqual(JSON.parse(String(foreign[SHEET_VALUES_KEY])), {});
-  assert.equal(foreign.__docNo, undefined);
+  assert.equal(foreign.__docNo, 'PO-0001', '보이는 문서번호는 이 문서 것으로');
 });
