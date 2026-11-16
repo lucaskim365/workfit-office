@@ -33,3 +33,23 @@ export function docAutoNumberCells(template: Sheet | null | undefined, fieldValu
     // 지운 줄에 있던 칸(반복 구간 안 자동번호 — 드묾)은 빼고
     .filter((x, i) => !hidden.has(x.r) && !inRemovedRow(cells[i].r))
 }
+
+/**
+ * 이 문서가 받은 번호만 남긴다 — 자동번호 칸 값 중 저장된 문서(own)에 없던 번호는 지운다.
+ * 보관해 둔 작성 내용을 새 기안에 불러오면 다른 문서가 받은 번호가 함께 넘어와 번호가 겹치기 때문.
+ * own 이 없으면(새 기안) 자동번호 칸은 모두 비운다. 바꿀 것이 없으면 받은 값을 그대로 돌려준다
+ */
+export function keepOwnAutoNumbers<T extends Record<string, unknown>>(template: Sheet | null | undefined, fieldValues: T, own: Record<string, unknown> | null | undefined): T {
+  const cells = docAutoNumberCells(template, fieldValues);
+  if (!cells.length) return fieldValues;
+  const mine = new Set(docAutoNumberCells(template, own ?? {}).map((x) => readSheetValues(own?.[SHEET_VALUES_KEY])[x.key]).filter(Boolean));
+  const values = { ...readSheetValues(fieldValues[SHEET_VALUES_KEY]) };
+  let changed = false;
+  cells.forEach((x) => {
+    if (values[x.key] && !mine.has(values[x.key])) {
+      delete values[x.key];
+      changed = true;
+    }
+  });
+  return changed ? { ...fieldValues, [SHEET_VALUES_KEY]: JSON.stringify(values) } : fieldValues;
+}

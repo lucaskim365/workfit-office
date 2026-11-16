@@ -323,8 +323,21 @@ export function SheetEditor({
     });
   };
 
+  // 한글 등 조합 입력 — 조합 중에 편집을 끝내면(Enter·Tab·다른 칸 누르기) 입력기가 조합을 확정하며 글자를 한 번 더 보낸다.
+  // 칸 입력 상자는 편집이 끝나도 남아 있으므로, 그 글자가 다음 칸에서 새 편집을 열지 않게 조합을 먼저 끝내고 잠깐 무시한다
+  const composingRef = useRef(false);
+  const swallowUntilRef = useRef(0);
+  const endComposition = () => {
+    if (!composingRef.current) return;
+    composingRef.current = false;
+    swallowUntilRef.current = performance.now() + 150;
+    // 초점을 잠깐 떼면 입력기가 조합을 그 자리에서 확정한다(초점은 focusGrid 가 다시 준다)
+    cellInputRef.current?.blur();
+  };
+
   const commitEdit = (move?: { dr: number; dc: number }) => {
     if (!editing) return;
+    endComposition();
     const cell = editing;
     // 틀을 그릴 때만 — 기안자가 쓰는 글자는 손대지 않는다
     const text = design ? closeParens(draft) : draft;
@@ -380,6 +393,7 @@ export function SheetEditor({
   }, [draft, editBox]);
 
   const cancelEdit = () => {
+    endComposition();
     setEditing(null);
     setPicked(null);
     pickRef.current = null;
@@ -1110,8 +1124,12 @@ export function SheetEditor({
             value={editing ? draft : ''}
             rows={1}
             aria-label="칸 입력"
+            onCompositionStart={() => (composingRef.current = true)}
+            onCompositionEnd={() => (composingRef.current = false)}
             onChange={(e) => {
               if (!editing) {
+                // 방금 끝낸 편집의 조합 글자가 뒤늦게 온 것 — 새 편집을 열지 않는다
+                if (performance.now() < swallowUntilRef.current) return;
                 // 고른 칸에서 바로 치기 시작 — 초점을 옮기지 않으므로 조합 중인 글자가 끊기지 않는다
                 if (!editable(focusCell)) return;
                 setEditing(focusCell);

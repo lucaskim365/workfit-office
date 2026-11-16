@@ -4,7 +4,7 @@ import { cellKey, createSheet, setCellMeta, type Sheet } from '@/lib/sheet/core'
 import { DEFAULT_AUTO_NUMBER } from '@/domain/approvalForm/autoNumber';
 import { APPROVAL_NS, SHEET_VALUES_KEY, setCellName, setRowCondition } from './approvalSheet';
 import { SHEET_ROWS_KEY, repeatSections, setRepeatSection } from './repeatRows';
-import { docAutoNumberCells } from './docAutoNumbers';
+import { docAutoNumberCells, keepOwnAutoNumbers } from './docAutoNumbers';
 
 /** 0행 구분(선택) / 1행 수입 번호(구분=수입일 때만) / 2행 품목(반복 구간) / 3행 관리번호 */
 function form(): Sheet {
@@ -35,4 +35,21 @@ test('상신 번호 칸 — 반복 구간에 더한 줄만큼 아래 칸 자리�
   const cells = docAutoNumberCells(s, vals(s, '국내', 2));
   assert.equal(cells[0].key, cellKey(5, s.cols[1]));
   assert.deepEqual(docAutoNumberCells(null, {}), []);
+});
+
+test('이 문서가 받은 번호만 남긴다 — 다른 문서의 번호가 섞여 들어오면 지우고, 자기 번호는 그대로', () => {
+  let s = createSheet(2, 2);
+  s = setCellMeta(s, APPROVAL_NS.autoNo, 0, 1, DEFAULT_AUTO_NUMBER);
+  s = setCellMeta(s, APPROVAL_NS.input, 1, 1, { type: 'text' });
+  const noKey = cellKey(0, s.cols[1]);
+  const memoKey = cellKey(1, s.cols[1]);
+  const withNo = (no: string) => ({ [SHEET_VALUES_KEY]: JSON.stringify({ [noKey]: no, [memoKey]: '메모' }) });
+  // 새 기안에 보관본을 불러온 경우 — 번호는 지우고 쓴 값은 남긴다
+  const fresh = keepOwnAutoNumbers(s, withNo('PO-0001'), null);
+  assert.deepEqual(JSON.parse(fresh[SHEET_VALUES_KEY]), { [memoKey]: '메모' });
+  // 반려·회수한 문서를 고쳐 다시 올리는 경우 — 자기 번호 그대로(같은 값을 돌려준다)
+  const mine = withNo('PO-0001');
+  assert.equal(keepOwnAutoNumbers(s, mine, withNo('PO-0001')), mine);
+  // 임시저장 문서에 다른 문서의 보관본을 불러온 경우 — 지운다
+  assert.deepEqual(JSON.parse(keepOwnAutoNumbers(s, withNo('PO-0009'), withNo('PO-0001'))[SHEET_VALUES_KEY]), { [memoKey]: '메모' });
 });

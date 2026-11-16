@@ -38,6 +38,7 @@ import { sheetDraftTouched } from '@/domain/approvalForm/sheet/draftTouched';
 import { isSheetDoc } from './sheetForm/SheetDocView';
 import { SHEET_NAMED_KEY, namedFromLegacy, readNamed, secretNames, withoutNames } from '@/domain/approvalForm/sheet/relatedImport';
 import { SHEET_OWN_KEY, readOwnSheet } from '@/domain/approvalForm/sheet/ownSheet';
+import { keepOwnAutoNumbers } from '@/domain/approvalForm/sheet/docAutoNumbers';
 import { korDateText, SHEET_VERSION_KEY } from '@/domain/approvalForm/sheet/approvalSheet';
 import { LINK_KEY } from '@/domain/approvalDoc/linkType';
 import { fetchFormVersionSheet, useFormVersionSheet, useSheetFormVersions, useSheetSwitches } from '@/features/gw/useApprovalFormVersions';
@@ -1259,10 +1260,14 @@ function ApprovalDraftInner({
               {
                 ...values,
                 workKind: sheetHoliday.fill.workKind,
-                workStart: values['workStart'] || sheetHoliday.fill.workStart,
-                workEnd: values['workEnd'] || sheetHoliday.fill.workEnd,
+                // 늘 근태 기록 값 — 문서에 남아 있던 시각(날짜를 바꾸기 전 것)을 쓰지 않는다
+                workStart: sheetHoliday.fill.workStart,
+                workEnd: sheetHoliday.fill.workEnd,
               }
-            : values
+            : // 시트 문서 — 자동번호는 이 문서가 받은 것만(보관본을 불러와 다른 문서의 번호가 넘어오지 않게)
+              sheetVersion !== null
+              ? keepOwnAutoNumbers(readOwnSheet(values[SHEET_OWN_KEY]) ?? sheetTpl?.sheet, values, editDoc?.fieldValues)
+              : values
       ),
       attachments,
       recipients,

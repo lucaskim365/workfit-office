@@ -635,15 +635,23 @@ export function SheetDraftForm({
   };
 
   /** 관련 문서의 이름 붙은 칸 값을 같은 이름 칸으로 복사 */
+  // 원본 문서를 읽는 동안에도 기안자가 계속 쓸 수 있다 — 읽고 난 뒤에는 그때의 값에 얹는다
+  const latest = useRef({ tplSheet, extras, rawValues, refs });
+  latest.current = { tplSheet, extras, rawValues, refs };
+  const importing = useRef(false);
   const importFrom = async (src: RelatedSource) => {
-    if (!tplSheet) return;
+    if (!tplSheet || importing.current) return;
+    importing.current = true;
     const named = await src.load().catch(() => null);
+    importing.current = false;
     if (!named) return alert(`'${src.label}' 문서를 읽지 못했습니다.`);
-    const res = importNamed(tplSheet, extras, readSheetValues(rawValues), refs, named);
+    const { tplSheet: tpl, extras: ex, rawValues: raw, refs: rf } = latest.current;
+    if (!tpl) return;
+    const res = importNamed(tpl, ex, readSheetValues(raw), rf, named);
     if (!res.filled.length) return alert(`'${src.label}'에는 이 서식과 같은 이름의 칸이 없습니다.`);
     if (!confirm(`'${src.label}'에서 ${res.filled.join(', ')} 값을 가져옵니다.
 이미 쓴 값은 가져온 값으로 바뀝니다.`)) return;
-    emit(sheetWith(tplSheet, res), res.extras, res.refs);
+    emit(sheetWith(tpl, res), res.extras, res.refs);
   };
   const canImport = !!tplSheet && hasImportableNames(tplSheet) && relatedSources.length > 0;
 

@@ -179,6 +179,7 @@ export function SheetEditorTour({ steps = SHEET_EDITOR_TOUR, onStep, onClose }: 
       if (e.key === 'Escape') onClose();
       else if (e.key === 'ArrowRight') (e.preventDefault(), last ? onClose() : setI(i + 1));
       else if (e.key === 'ArrowLeft') (e.preventDefault(), setI(Math.max(0, i - 1)));
+      else if (e.key === 'Enter' && !cardRef.current?.contains(document.activeElement)) (e.preventDefault(), last ? onClose() : setI(i + 1));
       else if (e.key === 'Tab') {
         e.preventDefault();
         const buttons = [...(cardRef.current?.querySelectorAll<HTMLButtonElement>('button') ?? [])];

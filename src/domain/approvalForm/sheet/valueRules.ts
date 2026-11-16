@@ -240,6 +240,7 @@ export function valueRuleIssues(s: Sheet): string[] {
     const where = `${cellCaption(s, r, c)}(${cellAddress(r, c)})`;
     const src = sources.find((x) => x.name === dep.name);
     if (!src) return void out.push(`${where}: 고를 항목의 기준 칸 '${dep.name}'이(가) 없거나 선택 칸이 아닙니다. 기안 화면에서 항목이 뜻대로 나오지 않습니다.`);
+    if (openEnded(src)) return;
     const dead = dep.branches.filter((b) => b.options.length && !src.options.includes(b.when)).map((b) => b.when);
     if (dead.length) out.push(`${where}: '${src.label}'의 고를 항목에 없는 값(${dead.join('·')})에 적어 둔 항목은 쓰이지 않습니다.`);
   });
