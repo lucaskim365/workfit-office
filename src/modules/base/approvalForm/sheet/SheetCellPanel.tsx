@@ -25,13 +25,14 @@ import {
   clearDependent,
   dependentCheck,
   ensureSourceName,
+  hasValueRules,
   makeDependent,
   rowsWithOtherCondition,
   showRowsFor,
   valueSourceAt,
   valueSources,
 } from '@/domain/approvalForm/sheet/valueRules';
-import { ValueRulesPanel, type ValuePick } from './ValueRulesPanel';
+import { BranchInput, ValueRulesPanel, type ValuePick } from './ValueRulesPanel';
 import { PART_SECTIONS, applyPart } from './SheetPalette';
 import { ChevronRight, CircleHelp } from 'lucide-react';
 import { clearRepeatSection, renameRepeatSection, repeatSectionAt, setRepeatSection } from '@/domain/approvalForm/sheet/repeatRows';
@@ -202,7 +203,9 @@ export function SheetCellPanel({
   const kindNote =
     kindValue === UNKNOWN_KIND
       ? '지금은 없는 자동 채우기 항목입니다 — 다른 종류를 고르거나 글자 칸으로 빼세요.'
-      : (KIND_PARTS.get(kindValue)?.hint ??
+      : props.input?.depends
+        ? '고를 항목이 다른 칸 값에 따라 바뀌는 선택 칸입니다 — 항목은 아래에서 기준 칸 값마다 적습니다.'
+        : (KIND_PARTS.get(kindValue)?.hint ??
         (isFormula
           ? '수식 칸 — 계산한 값이 보입니다. 수식 칸은 기안자가 쓰는 칸으로 바꿀 수 없습니다.'
           : '쓴 글자가 그대로 보입니다. 기안자가 쓰게 하려면 위에서 종류를 고르거나 왼쪽 부품을 누르세요.'));
@@ -242,13 +245,15 @@ export function SheetCellPanel({
 
   // ── 값에 따라 바뀌는 것(기준 칸 중심 설정) ──
   // 고르기는 '선택을 모아 두었다가 [넣기]' — 누르는 순간 넣으면 끌어서 여러 행 고르기·화살표 이동과 구분이 안 된다.
-  // 기준 칸 설정은 그 칸을 골랐을 때, 행·칸을 고르는 동안(pick), 그리고 다른 칸을 누르기 전까지(hold — 넣은 직후·'설정 열기'로 연 때) 보인다
+  // 기준 칸 설정은 걸린 것이 있는 칸을 골랐을 때, 행·칸을 고르는 동안(pick), 그리고 다른 칸을 누르기 전까지(hold — 넣은 직후·'설정 열기'로 연 때) 보인다.
+  // 아직 걸린 것이 없는 선택·체크 칸은 한 줄 단추로 접어 둔다 — 값이 많은 칸(종속 칸 등)에서 칸 속성이 아래로 밀리지 않게
   const [pick, setPick] = useState<{ what: ValuePick; src: { r: number; c: number }; from: string } | null>(null);
   const [hold, setHold] = useState<{ src: { r: number; c: number }; at: string } | null>(null);
   const selKey = `${range.r1}:${range.c1}:${range.r2}:${range.c2}:${focus.r}:${focus.c}`;
   const isSource = (p: { r: number; c: number } | null | undefined) => (p && valueSourceAt(sheet, p.r, p.c) ? p : null);
   const focusSource = multi ? null : isSource(focus);
-  const ruleSource = isSource(pick?.src) ?? (hold?.at === selKey ? isSource(hold.src) : null) ?? focusSource;
+  const focusSrc = focusSource ? valueSourceAt(sheet, focusSource.r, focusSource.c) : null;
+  const ruleSource = isSource(pick?.src) ?? (hold?.at === selKey ? isSource(hold.src) : null) ?? (focusSrc && hasValueRules(sheet, focusSrc) ? focusSource : null);
   /** 다른 칸에서 그 기준 칸 설정을 연다 — 다른 칸을 누르면 닫힌다 */
   const openSource = (src: { r: number; c: number }) => setHold({ src: { r: src.r, c: src.c }, at: selKey });
   // 고르던 기준 칸이 더는 기준 칸이 아니면(입력 종류를 바꿈 등) 고르기를 푼다
@@ -298,14 +303,14 @@ export function SheetCellPanel({
           onPick={startPick}
         />
       )}
-      {/* 종속 칸도 선택 칸이라 자기 설정(위)이 뜬다 — 그 기준 칸 설정으로 가는 길은 따로 둔다 */}
-      {dependsSource && !(ruleSource?.r === dependsSource.r && ruleSource?.c === dependsSource.c) && (
+      {focusSource && !ruleSource && (
         <button
           type="button"
-          onClick={() => openSource(dependsSource)}
+          onClick={() => openSource(focusSource)}
+          title="이 칸에서 고른 값에 따라 보일 행이나, 다른 칸에서 고를 항목을 바꿉니다"
           className="w-full rounded-lg border border-dashed border-indigo-300 px-2 py-1.5 text-left text-[11px] font-semibold text-indigo-600 hover:bg-indigo-50"
         >
-          이 칸의 항목은 '{dependsSource.label}' 값에 따라 바뀝니다 — 그 설정 열기
+          + 이 칸 값에 따라 행·항목 바꾸기
         </button>
       )}
       {dependsOn && !dependsSource && (
@@ -359,6 +364,34 @@ export function SheetCellPanel({
       {hasOptions && !props.input?.depends && (
         <Row label="고를 항목" hint="한 줄에 하나씩 적습니다">
           <textarea className={`${inp} min-h-[84px] resize-y`} value={options} onChange={(e) => setOptions(e.target.value)} onBlur={commitOptions} />
+        </Row>
+      )}
+      {/* 종속 칸 — 다른 화면으로 가지 않고 제자리에서 기준 칸 값마다 항목을 고친다(기준 칸 설정의 같은 입력과 같은 값) */}
+      {props.input?.depends && dependsSource && !multi && (
+        <Row
+          label={`고를 항목 — '${dependsSource.label}' 값마다`}
+          hint="기준 칸 값마다 고를 항목을 한 줄에 하나씩 적습니다. 비워 둔 값을 고르면 이 칸은 쓸 수 없는 칸(—)이 됩니다. 항목에 '직접입력'을 넣으면 그 값일 때 직접 쓸 수 있습니다."
+        >
+          <div className="space-y-1 rounded-lg bg-panel-alt px-2 py-1.5">
+            {dependsSource.options.map((when) => (
+              <label key={when} className="flex items-start gap-1.5 text-[11px]">
+                <span className="w-[72px] shrink-0 truncate pt-1 font-semibold text-ink2" title={when}>
+                  {when}
+                </span>
+                <BranchInput sheet={sheet} dep={{ r: focus.r, c: focus.c, input: props.input! }} when={when} onChange={onChange} />
+              </label>
+            ))}
+            <div className="flex justify-end">
+              <button
+                type="button"
+                title="값마다 다른 항목을 그만두고, 모든 항목을 한 목록으로 합칩니다"
+                onClick={() => onChange(clearDependent(sheet, focus.r, focus.c))}
+                className="text-[10.5px] font-semibold text-ink3 hover:text-rose-600"
+              >
+                종속 풀기
+              </button>
+            </div>
+          </div>
         </Row>
       )}
       {props.input?.type === 'select' && !props.input.depends && (

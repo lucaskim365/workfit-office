@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react';
-import { AlignLeft, Archive, CalendarCheck, Landmark, ListOrdered, ImageIcon, Signature, Table2, Banknote, Building2, Calendar, CalendarRange, Eye, FileDigit, Hash, Heading, List, ListChecks, SquareCheck, Type, User, UserRound, Users, CalendarDays } from 'lucide-react';
+import { AlignLeft, Archive, Eraser, CalendarCheck, Landmark, ListOrdered, ImageIcon, Signature, Table2, Banknote, Building2, Calendar, CalendarRange, Eye, FileDigit, Hash, Heading, List, ListChecks, SquareCheck, Type, User, UserRound, Users, CalendarDays } from 'lucide-react';
 import type { CellRange, Sheet, SheetSelection } from '@/lib/sheet';
 import {
   APPROVAL_NS,
@@ -176,6 +176,38 @@ export function applyPart(s: Sheet, range: CellRange, id: string, toggle = false
   return part.apply(s, range);
 }
 
+/** 고른 칸에 부품(입력 칸·저절로 채워지는 칸·자동번호)이 하나라도 있나 */
+export const hasPart = (s: Sheet, range: CellRange) =>
+  cellsOf(s, range).some(({ r, c }) => {
+    const p = approvalCellProps(s, r, c);
+    return !!(p.input || p.bind || p.autoNo);
+  });
+
+/** 고른 칸의 부품을 모두 뺀다 — 글자·서식, 칸 속성의 체크(직인·작성 요령 등)는 그대로 */
+export const clearParts = (s: Sheet, range: CellRange) =>
+  [APPROVAL_NS.input, APPROVAL_NS.bind, APPROVAL_NS.autoNo].reduce((acc, ns) => setApprovalProp(acc, range, ns, undefined), s);
+
+/** '부품' 제목 옆 [빼기] — 고른 칸(여러 칸도)의 부품을 한 번에 뺀다. 뺄 부품이 없으면 흐리게 */
+export function PartRemoveButton({ sheet, selection, onChange }: { sheet: Sheet; selection: SheetSelection; onChange: (next: Sheet) => void }) {
+  const can = hasPart(sheet, selection.range);
+  return (
+    <button
+      type="button"
+      disabled={!can}
+      title={can ? '고른 칸의 부품을 뺍니다(글자·서식은 그대로)' : '고른 칸에 뺄 부품이 없습니다'}
+      onClick={(e) => {
+        // 접는 제목(summary) 안에 있어도 접히지 않게
+        e.preventDefault();
+        onChange(clearParts(sheet, selection.range));
+      }}
+      className="flex items-center gap-0.5 rounded-md border border-border px-1.5 py-[2px] text-[10.5px] font-semibold text-ink2 hover:border-rose-300 hover:text-rose-600 disabled:cursor-default disabled:opacity-40 disabled:hover:border-border disabled:hover:text-ink2"
+    >
+      <Eraser className="h-3 w-3" />
+      빼기
+    </button>
+  );
+}
+
 export function SheetPalette({
   sheet,
   selection,
@@ -235,7 +267,7 @@ export function SheetPalette({
 }
 
 /** 부품 쓰는 법 — 편집기 왼쪽 막대는 '부품' 옆 (?)에, 옆 패널 안은 한 줄로 */
-export const PALETTE_HELP = '칸을 고르고 누르거나, 칸으로 끌어다 놓으세요. 넣은 부품(하늘색)을 다시 누르면 뺍니다. 부품 이름에 마우스를 올리면 설명이 나옵니다.';
+export const PALETTE_HELP = '칸을 고르고 누르거나, 칸으로 끌어다 놓으세요. 넣은 부품(하늘색)은 다시 누르거나 [빼기]로 뺍니다. 부품 이름에 마우스를 올리면 설명이 나옵니다.';
 
 /** 좁은 부품 칸에 맞춘 짧은 이름(전체 이름은 마우스를 올리면) */
 const SHORT_LABEL: Record<string, string> = {

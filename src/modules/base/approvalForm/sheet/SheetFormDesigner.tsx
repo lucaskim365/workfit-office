@@ -42,7 +42,7 @@ import {
 } from '@/domain/approvalForm/sheet/approvalSheet';
 import { Help, SheetCellPanel } from './SheetCellPanel';
 import { requestSidebarCollapse } from '@/app/shell/collapseSidebar';
-import { PALETTE_HELP, PART_MIME, SheetPalette, applyPart } from './SheetPalette';
+import { PALETTE_HELP, PART_MIME, PartRemoveButton, SheetPalette, applyPart } from './SheetPalette';
 import { InputLook } from './InputLook';
 import { healRepeatSections, repeatIssues, repeatSections } from '@/domain/approvalForm/sheet/repeatRows';
 
@@ -811,10 +811,11 @@ function Designer({
         {layout === 'three' && (
           // 부품 — 편집기 왼쪽(끌어다 놓기 거리가 짧고, 오른쪽 설정 패널이 짧아진다)
           <div className="sticky shrink-0 overflow-y-auto rounded-xl border border-border bg-panel p-2" style={{ ...stickyStyle, width: PALETTE_W }}>
-            <div className="mb-1.5">
+            <div className="mb-1.5 flex items-center justify-between">
               <Help text={PALETTE_HELP} size="h-3.5 w-3.5">
                 <span className="text-[12.5px] font-extrabold text-ink">부품</span>
               </Help>
+              <PartRemoveButton sheet={sheet} selection={selection} onChange={setSheet} />
             </div>
             <SheetPalette sheet={sheet} selection={selection} onApply={putPart} variant="side" />
           </div>
@@ -946,8 +947,9 @@ function Designer({
             <>
               {(layout === 'two' || layout === 'stack') && (
               <details open className="group mb-3 border-b border-border pb-3">
-                <summary className="mb-1 flex cursor-pointer list-none items-center justify-between text-[12.5px] font-extrabold text-ink">
-                  부품
+                <summary className="mb-1 flex cursor-pointer list-none items-center gap-2 text-[12.5px] font-extrabold text-ink">
+                  <span className="mr-auto">부품</span>
+                  <PartRemoveButton sheet={sheet} selection={selection} onChange={setSheet} />
                   <span className="text-[10.5px] font-semibold text-ink3 group-open:hidden">펼치기 ▾</span>
                   <span className="hidden text-[10.5px] font-semibold text-ink3 group-open:inline">접기 ▴</span>
                 </summary>

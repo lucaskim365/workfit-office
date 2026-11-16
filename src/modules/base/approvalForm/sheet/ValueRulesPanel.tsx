@@ -9,6 +9,7 @@ import { CHECK_MARK, cellAddress } from '@/domain/approvalForm/sheet/approvalShe
 import {
   clearDependent,
   dependentCells,
+  type DependentCell,
   ensureSourceName,
   removeRowsFor,
   rowsShownFor,
@@ -22,6 +23,33 @@ export type ValuePick = { kind: 'rows'; value: string } | { kind: 'dependent' };
 const inp = 'w-full rounded-md border border-border-hi bg-panel px-1.5 py-1 text-[11.5px] text-ink outline-none focus:border-teal';
 const valueText = (v: string) => (v === CHECK_MARK ? '체크했을 때' : v);
 const rowsText = (g: { r1: number; r2: number }) => (g.r1 === g.r2 ? `${g.r1 + 1}행` : `${g.r1 + 1}~${g.r2 + 1}행`);
+
+/**
+ * 종속 칸의 한 갈래(기준 값 when) 항목 입력 — 기준 칸의 '고를 항목'처럼 한 줄에 하나씩 적고, 칸을 벗어날 때 넣는다.
+ * 기준 칸 설정(여기)과 종속 칸의 칸 속성(SheetCellPanel)이 같이 쓴다
+ */
+export function BranchInput({ sheet, dep, when, onChange }: { sheet: Sheet; dep: Pick<DependentCell, 'r' | 'c' | 'input'>; when: string; onChange: (next: Sheet) => void }) {
+  const text = (dep.input.depends?.branches.find((b) => b.when === when)?.options ?? []).join('\n');
+  // 입력 중 글자(줄바꿈 그대로) — 시트 값이 바뀌면(되돌리기 등) 버린다
+  const [draft, setDraft] = useState<string | null>(null);
+  useEffect(() => setDraft(null), [text, dep.r, dep.c, when]);
+  return (
+    <textarea
+      className={`${inp} resize-none leading-snug`}
+      // 항목 수만큼만 키운다 — 값이 많은 기준 칸에서도 패널이 길어지지 않게
+      rows={Math.max(1, (draft ?? text).split('\n').length)}
+      value={draft ?? text}
+      placeholder="(이 값이면 칸 안 씀)"
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={() => {
+        setDraft(null);
+        // 글자가 그대로면 시트를 바꾸지 않는다 — 눌렀다 나가기만 해도 쓰던 항목이 지워지지 않게
+        if (draft === null || draft === text) return;
+        onChange(setBranchOptions(sheet, dep.r, dep.c, when, draft.split('\n').map((o) => o.trim()).filter(Boolean)));
+      }}
+    />
+  );
+}
 
 export function ValueRulesPanel({
   sheet,
@@ -45,21 +73,10 @@ export function ValueRulesPanel({
   const src = valueSourceAt(sheet, source.r, source.c);
   const name = src?.name;
   const deps = name ? dependentCells(sheet, name) : [];
-  // 갈래 항목 입력 중 글자(쉼표 그대로) — 칸을 벗어날 때 넣고 지운다
-  const [drafts, setDrafts] = useState<Record<string, string>>({});
-  useEffect(() => setDrafts({}), [source.r, source.c, deps.length]);
 
   if (!src) return null;
   // 체크 칸은 값이 하나라 종속 기준이 되지 않는다(칸 속성의 '항목을 다른 칸 값에 따라'와 같게)
   const canDepend = src.kind !== 'checkbox';
-  const branchText = (dep: (typeof deps)[number], when: string) => (dep.input.depends?.branches.find((b) => b.when === when)?.options ?? []).join(', ');
-  // 글자가 그대로면 시트를 바꾸지 않는다 — 눌렀다 나가기만 해도 쓰던 항목이 지워지지 않게
-  const commitBranch = (dep: (typeof deps)[number], when: string, key: string, text: string) => {
-    setDrafts(({ [key]: _done, ...rest }) => rest);
-    if (text === branchText(dep, when)) return;
-    const list = text.split(/[,\n]/).map((o) => o.trim()).filter(Boolean);
-    onChange(setBranchOptions(sheet, dep.r, dep.c, when, list));
-  };
 
   return (
     <div className="space-y-2 rounded-xl border border-indigo-200 bg-indigo-50/40 p-2.5">
@@ -131,17 +148,11 @@ export function ValueRulesPanel({
                 {deps.map((d) => {
                   const key = `${d.r}:${d.c}:${v}`;
                   return (
-                    <label key={key} className="flex items-center gap-1.5 text-[10.5px]">
-                      <span className="w-[64px] shrink-0 truncate text-ink3" title={`${d.label} 고를 항목(쉼표로)`}>
+                    <label key={key} className="flex items-start gap-1.5 text-[10.5px]">
+                      <span className="w-[64px] shrink-0 truncate pt-1 text-ink3" title={`${d.label} 고를 항목(한 줄에 하나씩)`}>
                         {d.label} 항목
                       </span>
-                      <input
-                        className={inp}
-                        value={drafts[key] ?? branchText(d, v)}
-                        placeholder="(이 값이면 칸 안 씀)"
-                        onChange={(e) => setDrafts((x) => ({ ...x, [key]: e.target.value }))}
-                        onBlur={(e) => commitBranch(d, v, key, e.target.value)}
-                      />
+                      <BranchInput sheet={sheet} dep={d} when={v} onChange={onChange} />
                     </label>
                   );
                 })}

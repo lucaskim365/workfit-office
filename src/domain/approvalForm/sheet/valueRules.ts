@@ -163,6 +163,13 @@ export function dependentCells(s: Sheet, name: string): DependentCell[] {
   return out.sort((a, b) => a.r - b.r || a.c - b.c);
 }
 
+/** 이 기준 칸에 걸린 것이 있나 — 값에 따라 보이는 행이나 항목이 바뀌는 칸 */
+export function hasValueRules(s: Sheet, src: ValueSource): boolean {
+  const name = src.name;
+  if (!name) return false;
+  return dependentCells(s, name).length > 0 || src.options.some((v) => rowsShownFor(s, name, v).length > 0);
+}
+
 /**
  * 종속 칸으로 고를 수 있나 — 막히면 이유, 바꾸기 전에 물어볼 것이 있으면 ask.
  * 이름표(글자만 있는 칸)·수식 칸·기준 칸 자신은 안 되고, 선택 칸이 아닌 입력 칸·다른 기준 칸의 종속 칸은 묻는다
