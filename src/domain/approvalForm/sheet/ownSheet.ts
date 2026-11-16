@@ -198,6 +198,7 @@ function personCellGroups(s: Sheet): Map<string, { col: string; rows: number[] }
  * 고친 뒤 사람 칸 ID — 행을 넣거나 지워 사람 칸 자리가 옮겨져도 ID 가 따라간다(업무 대행자·동행자 연동이 이 ID 를 읽는다).
  * 열 키는 열을 넣어도 바뀌지 않고 행 차례도 그대로라, 같은 열에서 같은 글자(이름)인 사람 칸을 위에서부터 차례로 짝짓는다.
  * 짝이 분명하지 않으면(그 이름의 칸 수가 달라짐) ID 가 모두 같은 사람일 때만 남기고, 아니면 뺀다(다른 사람 ID 가 붙지 않게).
+ * 같은 열에 같은 글자(이름·부서까지 같은 동명이인)가 둘 이상이고 그중 하나를 지우고 다른 칸에 다시 쓰면 위에서부터 짝지어 바뀔 수 있다(드묾).
  * 병합으로 다른 열로 옮겨진 사람 칸, 사람 칸이 아닌 칸의 ID 는 같은 자리에 같은 글자가 남았을 때만 그대로 둔다
  */
 export function keepRefsAfterEdit(refs: Record<string, string>, before: Sheet, after: Sheet): Record<string, string> {
@@ -214,7 +215,8 @@ export function keepRefsAfterEdit(refs: Record<string, string>, before: Sheet, a
       a.rows.forEach((r, i) => {
         if (ids[i]) out[cellKey(r, a.col)] = ids[i];
       });
-    } else if (a.rows.length < b.rows.length && ids[0] && ids.every((x) => x === ids[0])) {
+    } else if (ids[0] && ids.every((x) => x === ids[0])) {
+      // 칸 수가 달라졌어도(지우거나 같은 사람을 다른 칸에 옮겨 적음) 모두 한 사람이면 그 사람
       a.rows.forEach((r) => (out[cellKey(r, a.col)] = ids[0]));
     }
   });

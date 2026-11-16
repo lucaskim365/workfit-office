@@ -1030,7 +1030,7 @@ function ApprovalDraftInner({
   // 시트 서식의 비어 있는 필수 칸 이름표 — 상신 때만 막는다(임시 저장은 됨)
   const sheetRequiredRef = useRef<string[]>([]);
   // 시트에 든 문서 정보 칸(기안자·제목 등)은 문서 머리에서 뺀다 — 같은 틀을 SheetDraftForm 도 읽는다(같은 조회, 한 번만 받음)
-  const { data: sheetTpl } = useFormVersionSheet(form && sheetVersion !== null ? form.id : null, sheetVersion);
+  const { data: sheetTpl, isFetching: sheetTplLoading } = useFormVersionSheet(form && sheetVersion !== null ? form.id : null, sheetVersion);
   // 시트로 쓰는 문서는 기존 양식 항목을 그리지 않는다 — 기존 서식에 시트를 붙여도 항목 목록(옛 문서용)은 남아 있으므로
   const docForm = useMemo(() => {
     const f = withBodyHeader(form, sheetHeaderItems(sheetTpl?.sheet));
@@ -1185,8 +1185,13 @@ function ApprovalDraftInner({
   const isResubmit = !!editDoc && editDoc.status !== '임시저장';
 
   /** 시트 문서 값의 자동번호를 이 문서가 받은 것으로 맞춘다(남의 번호는 빼고, 받은 번호는 되살림) */
-  const ownNumbers = (v: typeof values) =>
-    keepOwnAutoNumbers(readOwnSheet(v[SHEET_OWN_KEY]) ?? sheetTpl?.sheet, v, editDoc?.fieldValues, readOwnSheet(editDoc?.fieldValues?.[SHEET_OWN_KEY]) ?? sheetTpl?.sheet);
+  const ownNumbers = (v: typeof values) => {
+    const own = editDoc?.fieldValues;
+    // 저장된 문서가 쓰던 틀 — 표 모양을 고쳤으면 그 틀, 아니면 지금과 같은 서식 버전일 때만 지금 틀(보관본을 불러와 버전이 달라졌으면 모름)
+    const sameVersion = !!own && String(own[SHEET_VERSION_KEY] ?? '') === String(v[SHEET_VERSION_KEY] ?? '');
+    const ownTpl = readOwnSheet(own?.[SHEET_OWN_KEY]) ?? (sameVersion ? sheetTpl?.sheet : null);
+    return keepOwnAutoNumbers(readOwnSheet(v[SHEET_OWN_KEY]) ?? sheetTpl?.sheet, v, own, ownTpl);
+  };
 
   const buildInput = (): ApprovalDraftInput => {
     let leave: LeaveForm | null = null;
@@ -1296,7 +1301,11 @@ function ApprovalDraftInner({
   const validate = (forSubmit: boolean): string | null => {
     if (!title.trim()) return '제목을 입력하세요.';
     // 시트 틀을 아직 못 읽었으면 필수·숫자 검사 목록이 비어 있다 — 검사 없이 상신되지 않게 막는다
-    if (forSubmit && sheetVersion !== null && !sheetTpl?.sheet) return '서식을 불러오는 중입니다. 잠시 뒤 다시 눌러 주세요.';
+    if (forSubmit && sheetVersion !== null && !sheetTpl?.sheet && !readOwnSheet(values[SHEET_OWN_KEY])) {
+      return sheetTplLoading
+        ? '서식을 불러오는 중입니다. 잠시 뒤 다시 눌러 주세요.'
+        : `이 문서가 쓴 서식 틀(v${sheetVersion})을 찾지 못해 상신할 수 없습니다. 관리자에게 알려 주세요.`;
+    }
     if (forSubmit && sheetVersion !== null && sheetRequiredRef.current.length > 0) {
       return `필수 칸을 채워 주세요: ${sheetRequiredRef.current.slice(0, 5).join(', ')}${sheetRequiredRef.current.length > 5 ? ' 외' : ''}`;
     }

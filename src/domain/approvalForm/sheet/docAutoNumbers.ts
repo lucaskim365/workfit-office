@@ -38,27 +38,29 @@ export function docAutoNumberCells(template: Sheet | null | undefined, fieldValu
 /**
  * 자동번호 칸을 이 문서가 받은 번호로 맞춘다 — 저장된 문서(own)가 받은 번호는 되살리고, 그 밖의 번호(다른 문서의 것)는 지운다.
  * 보관해 둔 작성 내용을 불러오면 값이 통째로 바뀌어, 다른 문서의 번호가 넘어오거나(번호 겹침) 자기 번호가 사라진다(재상신 때 새 번호).
- * - 번호 칸의 차례는 문서마다 같으므로(보호 칸) 차례대로 짝짓는다. own 의 번호 자리는 own 이 쓰던 틀(ownTemplate — 표 모양을 고친 문서는 그 틀)로 찾는다
- * - own 에서 번호 자리를 못 찾으면(틀을 못 읽음 등) 값으로 견준다 — own 의 칸 값에 있는 번호면 자기 것으로 본다
+ * - 번호 칸은 순번 채널(channelKey — 서식 틀의 번호 칸 차례, 조건으로 숨은 칸과 상관없음)로 짝짓는다.
+ *   own 의 번호 자리는 own 이 쓰던 틀(ownTemplate — 표 모양을 고친 문서는 그 틀, 아니면 own 이 쓴 서식 버전의 틀)로 찾는다
+ * - own 의 틀을 모르면(ownTemplate 없음 — 다른 버전 보관본을 불러온 경우 등) 값으로 견준다: own 의 칸 값에 있는 번호면 자기 것으로 본다
  * - own 이 없으면(새 기안) 자동번호 칸은 모두 비운다. 바꿀 것이 없으면 받은 값을 그대로 돌려준다
  */
 export function keepOwnAutoNumbers<T extends Record<string, unknown>>(
   template: Sheet | null | undefined,
   fieldValues: T,
   own: Record<string, unknown> | null | undefined,
-  ownTemplate: Sheet | null | undefined = template,
+  ownTemplate: Sheet | null | undefined,
 ): T {
   const cells = docAutoNumberCells(template, fieldValues);
   if (!cells.length) return fieldValues;
   const ownValues = readSheetValues(own?.[SHEET_VALUES_KEY]);
-  // 저장된 문서가 번호 칸마다 받은 번호(차례대로) — 아직 안 받았으면 빈 값
-  const received = docAutoNumberCells(ownTemplate, own ?? {}).map((x) => ownValues[x.key] ?? '');
+  // 저장된 문서가 번호 칸마다 받은 번호(순번 채널별) — 아직 안 받았으면 없음
+  const received = new Map<string, string>();
+  docAutoNumberCells(ownTemplate, own ?? {}).forEach((x) => ownValues[x.key] && received.set(x.channelKey, ownValues[x.key]));
   const anyOwn = new Set(Object.values(ownValues).filter(Boolean));
   const values = { ...readSheetValues(fieldValues[SHEET_VALUES_KEY]) };
   let changed = false;
-  cells.forEach((x, i) => {
+  cells.forEach((x) => {
     const cur = values[x.key] ?? '';
-    const mine = received[i] || (received.every((v) => !v) && anyOwn.has(cur) ? cur : '');
+    const mine = received.get(x.channelKey) || (!ownTemplate && anyOwn.has(cur) ? cur : '');
     if (cur === mine) return;
     if (mine) values[x.key] = mine;
     else delete values[x.key];

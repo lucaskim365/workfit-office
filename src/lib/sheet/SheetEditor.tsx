@@ -942,6 +942,7 @@ export function SheetEditor({
         }}
         // 새 글쇠를 누르면 조합 뒤 글자 무시를 푼다(한글은 조합 시작 글쇠가 먼저 온다)
         onKeyDownCapture={() => (swallowRef.current = false)}
+        onPointerDownCapture={() => (swallowRef.current = false)}
         onKeyDown={onGridKeyDown}
         onPaste={onGridPaste}
         // 펼침(auto) — 넘침 상자를 두지 않는다(페이지가 스크롤). 넘침 상자가 있으면 열 머리가 그 상자 기준으로만 붙어 페이지를 내리면 따라오지 않는다

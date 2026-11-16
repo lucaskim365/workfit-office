@@ -45,18 +45,18 @@ test('이 문서가 받은 번호만 남긴다 — 다른 문서의 번호가 �
   const memoKey = cellKey(1, s.cols[1]);
   const withNo = (no: string) => ({ [SHEET_VALUES_KEY]: JSON.stringify({ [noKey]: no, [memoKey]: '메모' }) });
   // 새 기안에 보관본을 불러온 경우 — 번호는 지우고 쓴 값은 남긴다
-  const fresh = keepOwnAutoNumbers(s, withNo('PO-0001'), null);
+  const fresh = keepOwnAutoNumbers(s, withNo('PO-0001'), null, null);
   assert.deepEqual(JSON.parse(fresh[SHEET_VALUES_KEY]), { [memoKey]: '메모' });
   // 반려·회수한 문서를 고쳐 다시 올리는 경우 — 자기 번호 그대로(같은 값을 돌려준다)
   const mine = withNo('PO-0001');
-  assert.equal(keepOwnAutoNumbers(s, mine, withNo('PO-0001')), mine);
+  assert.equal(keepOwnAutoNumbers(s, mine, withNo('PO-0001'), s), mine);
   // 번호를 받은 문서(반려·회수)를 고치다 다른 문서의 보관본을 불러온 경우 — 남의 번호 대신 자기 번호로 되살린다
-  assert.deepEqual(JSON.parse(keepOwnAutoNumbers(s, withNo('PO-0009'), withNo('PO-0001'))[SHEET_VALUES_KEY]), { [noKey]: 'PO-0001', [memoKey]: '메모' });
+  assert.deepEqual(JSON.parse(keepOwnAutoNumbers(s, withNo('PO-0009'), withNo('PO-0001'), s)[SHEET_VALUES_KEY]), { [noKey]: 'PO-0001', [memoKey]: '메모' });
   // 번호 없는 보관본(새 기안 때 저장한 것)을 불러온 경우에도 자기 번호를 되살린다
   const noNumber = { [SHEET_VALUES_KEY]: JSON.stringify({ [memoKey]: '보관본 메모' }) };
-  assert.deepEqual(JSON.parse(keepOwnAutoNumbers(s, noNumber, withNo('PO-0001'))[SHEET_VALUES_KEY]), { [memoKey]: '보관본 메모', [noKey]: 'PO-0001' });
+  assert.deepEqual(JSON.parse(keepOwnAutoNumbers(s, noNumber, withNo('PO-0001'), s)[SHEET_VALUES_KEY]), { [memoKey]: '보관본 메모', [noKey]: 'PO-0001' });
   // 아직 번호를 안 받은 임시저장 문서에 번호 든 보관본을 불러온 경우 — 지운다
-  assert.deepEqual(JSON.parse(keepOwnAutoNumbers(s, withNo('PO-0009'), noNumber)[SHEET_VALUES_KEY]), { [memoKey]: '메모' });
+  assert.deepEqual(JSON.parse(keepOwnAutoNumbers(s, withNo('PO-0009'), noNumber, s)[SHEET_VALUES_KEY]), { [memoKey]: '메모' });
 });
 
 test('이 문서가 받은 번호 — 표 모양을 고쳐 번호 칸 자리가 달라져도 자기 번호는 남고, 보이는 문서번호는 이 문서 것으로 되돌린다', () => {
@@ -66,8 +66,24 @@ test('이 문서가 받은 번호 — 표 모양을 고쳐 번호 칸 자리가 
   const before = cellKey(1, s.cols[1]); // 저장된 문서에서는 2행에 있었다
   const own = { [SHEET_VALUES_KEY]: JSON.stringify({ [before]: 'PO-0001' }), __docNo: 'PO-0001' };
   const cur = { [SHEET_VALUES_KEY]: JSON.stringify({ [now]: 'PO-0001' }), __docNo: 'PO-0001' };
-  assert.equal(keepOwnAutoNumbers(s, cur, own), cur, '자리가 달라도 같은 번호면 그대로');
-  const foreign = keepOwnAutoNumbers(s, { [SHEET_VALUES_KEY]: JSON.stringify({ [now]: 'PO-0009' }), __docNo: 'PO-0009' }, own) as Record<string, unknown>;
+  assert.equal(keepOwnAutoNumbers(s, cur, own, null), cur, '저장된 문서의 틀을 모르면 값으로 견준다 — 자리가 달라도 같은 번호면 그대로');
+  const foreign = keepOwnAutoNumbers(s, { [SHEET_VALUES_KEY]: JSON.stringify({ [now]: 'PO-0009' }), __docNo: 'PO-0009' }, own, null) as Record<string, unknown>;
   assert.deepEqual(JSON.parse(String(foreign[SHEET_VALUES_KEY])), {});
   assert.equal(foreign.__docNo, 'PO-0001', '보이는 문서번호는 이 문서 것으로');
+});
+
+test('이 문서가 받은 번호 — 조건으로 숨은 번호 칸이 있어도 같은 번호 칸끼리 짝짓는다(순번 채널)', () => {
+  const s = form();
+  const impKey = cellKey(1, s.cols[1]);
+  const noKey = cellKey(3, s.cols[1]);
+  const doc = (kind: string, nos: Record<string, string>) => ({ [SHEET_VALUES_KEY]: JSON.stringify({ [cellKey(0, s.cols[1])]: kind, ...nos }), [SHEET_ROWS_KEY]: '{}' });
+  // 수입으로 IMP·NO 를 받은 문서를 국내로 바꿔 다시 올린다 — NO 칸은 자기 번호(NO-0001), IMP 번호가 들어가지 않는다
+  const own = doc('수입', { [impKey]: 'IMP-0001', [noKey]: 'NO-0001' });
+  const back = keepOwnAutoNumbers(s, doc('국내', { [noKey]: 'IMP-0001' }), own, s);
+  assert.equal(JSON.parse(String(back[SHEET_VALUES_KEY]))[noKey], 'NO-0001');
+  // 국내로 NO 만 받은 문서를 수입으로 바꾸면 — NO 칸은 그대로, IMP 칸은 비어 상신 때 새로 받는다
+  const own2 = doc('국내', { [noKey]: 'NO-0001' });
+  const out2 = JSON.parse(String(keepOwnAutoNumbers(s, doc('수입', { [impKey]: 'NO-0001', [noKey]: 'NO-0001' }), own2, s)[SHEET_VALUES_KEY]));
+  assert.equal(out2[noKey], 'NO-0001');
+  assert.equal(out2[impKey], undefined);
 });

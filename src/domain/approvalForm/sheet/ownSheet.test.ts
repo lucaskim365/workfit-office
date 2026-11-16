@@ -132,3 +132,12 @@ test('기안자 열 넣기 — 모든 열을 같은 비율로 줄여 시트 전�
   assert.equal(next.colWidths[next.cols[2]], next.colWidths[next.cols[1]]);
   assert.ok(next.colWidths[next.cols[0]] < 96 && next.colWidths[next.cols[0]] > 60);
 });
+
+test('사람 칸 ID — 같은 사람을 다른 사람 칸에 옮겨 적으면 그 칸에도 같은 ID(한 사람일 때만)', () => {
+  let s = people();
+  const a = s.cols[0];
+  s = setCellValue(s, 0, 0, '홍길동 (개발팀)');
+  const refs = { [`0:${a}`]: 'U1' };
+  const copied = setCellValue(s, 3, 0, '홍길동 (개발팀)');
+  assert.deepEqual(keepRefsAfterEdit(refs, s, copied), { [`0:${a}`]: 'U1', [`3:${a}`]: 'U1' });
+});
