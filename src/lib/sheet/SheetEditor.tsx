@@ -695,7 +695,7 @@ export function SheetEditor({
       {/* 펼침(auto) — 도구 막대·수식 입력줄을 한 덩어리로 화면 위에 붙인다(페이지를 내려도 따라옴) */}
       <div ref={barRef} className={autoHeight ? 'sticky z-20 rounded-t-lg bg-white shadow-[0_1px_0_0_var(--color-border,#e5e7eb)]' : 'contents'} style={autoHeight ? { top: stickyTop } : undefined}>
       {design && (
-        <div className="flex shrink-0 flex-wrap items-center gap-1 rounded-t-lg border-b border-border bg-panel-alt/40 px-2 py-1.5">
+        <div data-tour="toolbar" className="flex shrink-0 flex-wrap items-center gap-1 rounded-t-lg border-b border-border bg-panel-alt/40 px-2 py-1.5">
           <button type="button" className={btn()} onClick={undo} disabled={undoStack.current.length === 0} title="되돌리기 (Ctrl+Z)">
             ↶
           </button>

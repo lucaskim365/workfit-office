@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { suggestFormCode } from '@/domain/approvalForm/formCode';
-import { ArrowLeft, Asterisk, ChevronRight, EyeOff, Eye, FileSpreadsheet, Filter, GitBranch, History, Info, Lock, Save, Stamp, Tag, X } from 'lucide-react';
+import { ArrowLeft, Asterisk, BookOpen, ChevronRight, CircleHelp, EyeOff, Eye, FileSpreadsheet, Filter, GitBranch, History, Info, Lock, Save, Stamp, Tag, X } from 'lucide-react';
 import { SheetDraftForm } from '@/modules/gw/approval/sheetForm/SheetDraftForm';
 import { useSheetHolidayWork } from '@/modules/gw/approval/sheetForm/useSheetHolidayWork';
 import { SheetDocView } from '@/modules/gw/approval/sheetForm/SheetDocView';
@@ -44,6 +44,8 @@ import { Help, SheetCellPanel } from './SheetCellPanel';
 import { requestSidebarCollapse } from '@/app/shell/collapseSidebar';
 import { PALETTE_HELP, PART_MIME, PartRemoveButton, SheetPalette, applyPart } from './SheetPalette';
 import { InputLook } from './InputLook';
+import { SheetEditorTour } from './SheetEditorTour';
+import { SheetEditorGuide } from './SheetEditorGuide';
 import { healRepeatSections, repeatIssues, repeatSections } from '@/domain/approvalForm/sheet/repeatRows';
 
 const inp ='w-full rounded-lg border border-border-hi bg-panel px-2.5 py-1.5 text-[12px] text-ink outline-none focus:border-teal disabled:bg-panel-alt disabled:text-ink3';
@@ -139,6 +141,14 @@ function Designer({
   // 서식별 최신 버전 — 지운 서식의 버전 기록도 남아 있다(버전은 지우지 않음)
   const { latest: versionHeads } = useSheetFormVersions();
   const [preview, setPreview] = useState<{ sheet: Sheet; title: string } | null>(null);
+  // 도움말 — menu: 고르는 중 · tour: 화면 둘러보기(하나씩 비추며 설명) · guide: 가이드북(기능별 설정 순서)
+  const [help, setHelp] = useState<'menu' | 'tour' | 'guide' | null>(null);
+  // 둘러보기가 옆 패널 탭을 바꾸므로, 닫으면 보던 탭으로 되돌린다
+  const sideBeforeTour = useRef(side);
+  const startTour = () => {
+    sideBeforeTour.current = side;
+    setHelp('tour');
+  };
   // 편집 화면 — 문서(종이 위에서 실제 문서 모양 그대로) / 격자(엑셀처럼 A·B·C 머리)
   const [view, setView] = useState<'paper' | 'grid'>(() => {
     try {
@@ -578,7 +588,40 @@ function Designer({
             </span>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div data-tour="actions" className="flex items-center gap-2">
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setHelp(help === 'menu' ? null : 'menu')}
+              aria-expanded={help === 'menu'}
+              className="flex items-center gap-1.5 rounded-lg border border-border bg-panel-alt px-3 py-1.5 text-[12px] font-semibold text-ink2 hover:text-ink cursor-pointer"
+            >
+              <CircleHelp className="h-3.5 w-3.5 text-teal" />
+              <span>도움말</span>
+            </button>
+            {help === 'menu' && (
+              <>
+                {/* 바깥을 누르면 닫힌다 */}
+                <div className="fixed inset-0 z-30" onClick={() => setHelp(null)} />
+                <div className="absolute left-0 top-full z-40 mt-1 w-[230px] rounded-lg border border-border bg-panel p-1 shadow-lg">
+                  {(
+                    [
+                      ['화면 둘러보기', '화면을 하나씩 짚어 가며 쓰는 법을 알려 줍니다', CircleHelp, startTour],
+                      ['가이드북', '종속 선택·반복 구간 등 기능별 설정 순서', BookOpen, () => setHelp('guide')],
+                    ] as const
+                  ).map(([label, desc, Icon, run]) => (
+                    <button key={label} type="button" onClick={run} className="flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left hover:bg-panel-alt">
+                      <Icon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-teal" />
+                      <span>
+                        <span className="block text-[12px] font-bold text-ink">{label}</span>
+                        <span className="block text-[10.5px] leading-snug text-ink3">{desc}</span>
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
           {legacy && (
             <>
               {onOpenLegacy && (
@@ -698,7 +741,7 @@ function Designer({
 
       <InfoBlock collapsible={standalone} title={fullHeader ? '서식 정보' : '서식 정보 · 문서 머리 항목'} linkLabel={LINK_TYPES.find((t) => t.code === link)?.feature ?? null}>
       {/* 서식 정보 */}
-      <div className="grid grid-cols-2 gap-2.5 rounded-xl border border-border bg-panel p-3 md:grid-cols-[70px_1fr_1fr_1fr_1fr_1fr]">
+      <div data-tour="info" className="grid grid-cols-2 gap-2.5 rounded-xl border border-border bg-panel p-3 md:grid-cols-[70px_1fr_1fr_1fr_1fr_1fr]">
         <Field label="아이콘">
           <input className={inp} value={form.icon} onChange={(e) => set({ icon: e.target.value })} placeholder="📄" />
         </Field>
@@ -810,7 +853,7 @@ function Designer({
       <div className={`flex gap-3 ${layout === 'stack' ? 'flex-col' : fill ? 'items-start gap-2' : 'items-start'}`}>
         {layout === 'three' && (
           // 부품 — 편집기 왼쪽(끌어다 놓기 거리가 짧고, 오른쪽 설정 패널이 짧아진다)
-          <div className="sticky shrink-0 overflow-y-auto rounded-xl border border-border bg-panel p-2" style={{ ...stickyStyle, width: PALETTE_W }}>
+          <div data-tour="palette" className="sticky shrink-0 overflow-y-auto rounded-xl border border-border bg-panel p-2" style={{ ...stickyStyle, width: PALETTE_W }}>
             <div className="mb-1.5 flex items-center justify-between">
               <Help text={PALETTE_HELP} size="h-3.5 w-3.5">
                 <span className="text-[12.5px] font-extrabold text-ink">부품</span>
@@ -821,6 +864,7 @@ function Designer({
           </div>
         )}
         <div
+          data-tour="sheet"
           className={`min-w-0 rounded-xl border border-border bg-panel p-2 ${layout === 'stack' ? 'w-full' : fill ? 'flex-1' : 'flex-none'}`}
           style={layout === 'stack' || fill ? undefined : { width: editorWidth, maxWidth: '100%' }}
           onDragOver={(e) => {
@@ -902,26 +946,17 @@ function Designer({
               </>
             }
           />
-          <div className="space-y-0.5 px-1 pt-1.5 text-[10.5px] text-ink3">
-            {pageScale < 1 && (
-              <div className="font-semibold text-amber-700 dark:text-amber-400">
-                A4 세로 폭보다 넓어(전체 {sheetWidth}px) 문서·인쇄에서는 약 {Math.round(pageScale * 100)}%로 줄여 한 쪽 폭에 맞춥니다 — 엑셀의 '한 페이지에 맞춤'과 같습니다. 글씨가 너무 작으면 열 너비를 줄여 주세요.
-              </div>
-            )}
-            <Help
-              text={`${
-                view === 'paper'
-                  ? '문서 보기 — 기안·결재·인쇄 화면과 같은 모양입니다. 시트 왼쪽·위의 가는 띠를 누르면 행·열을 고르고, 띠 끝을 끌면 크기가 바뀝니다.'
-                  : '격자 보기 — 세로 점선이 A4 세로 인쇄 폭입니다.'
-              } 빗금 칸은 기안자가 못 고치는 칸, 보라색 띠는 반복 구간(기안자가 행 추가·삭제)입니다. 칸 이름·프로젝트 값·비공개·직인이 든 행·열은 그 속성을 먼저 지워야 지울 수 있습니다.`}
-            >
-              <span>편집 도움말</span>
-            </Help>
-          </div>
+          {/* 쓰는 법 설명은 위 [도움말]에 — 여기는 인쇄 폭 경고만 */}
+          {pageScale < 1 && (
+            <div className="px-1 pt-1.5 text-[10.5px] font-semibold text-amber-700 dark:text-amber-400">
+              A4 세로 폭보다 넓어(전체 {sheetWidth}px) 문서·인쇄에서는 약 {Math.round(pageScale * 100)}%로 줄여 한 쪽 폭에 맞춥니다 — 엑셀의 '한 페이지에 맞춤'과 같습니다. 글씨가 너무 작으면 열 너비를 줄여 주세요.
+            </div>
+          )}
         </div>
 
         {/* 화면에 붙어 있고 안에서만 스크롤 — 시트를 내려 봐도 패널은 그 자리에. 높이는 글자 크기 배율(body zoom)로 나눠야 화면 높이와 맞는다 */}
         <div
+          data-tour="side"
           className={`rounded-xl border border-border bg-panel p-3 ${layout === 'stack' ? 'w-full' : 'sticky min-w-0 shrink overflow-y-auto'}`}
           style={layout === 'stack' ? undefined : { ...stickyStyle, width: SIDE_W, minWidth: SIDE_MIN_W }}
         >
@@ -946,7 +981,7 @@ function Designer({
           {side === 'cell' ? (
             <>
               {(layout === 'two' || layout === 'stack') && (
-              <details open className="group mb-3 border-b border-border pb-3">
+              <details open data-tour="palette" className="group mb-3 border-b border-border pb-3">
                 <summary className="mb-1 flex cursor-pointer list-none items-center gap-2 text-[12.5px] font-extrabold text-ink">
                   <span className="mr-auto">부품</span>
                   <PartRemoveButton sheet={sheet} selection={selection} onChange={setSheet} />
@@ -983,6 +1018,8 @@ function Designer({
         </div>
       </div>
 
+      {help === 'guide' && <SheetEditorGuide onClose={() => setHelp(null)} onTour={startTour} />}
+      {help === 'tour' && <SheetEditorTour onStep={(s) => s.side && setSide(s.side)} onClose={() => (setHelp(null), setSide(sideBeforeTour.current))} />}
       {preview && <PreviewModal form={form} sheet={preview.sheet} title={preview.title} link={link} onClose={() => setPreview(null)} />}
     </div>
   );
