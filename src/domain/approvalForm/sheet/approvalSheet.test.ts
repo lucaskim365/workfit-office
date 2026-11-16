@@ -241,6 +241,7 @@ test('대체 서식 검사 — 꼭 있어야 할 연동 칸', () => {
   s = setCellName(s, 0, 0, 'leaveType');
   s = setCellMeta(s, APPROVAL_NS.input, 0, 0, { type: 'select', options: ['연차'] });
   s = setCellName(s, 1, 0, 'period');
+  s = setCellMeta(s, APPROVAL_NS.input, 1, 0, { type: 'dateRange' });
   assert.deepEqual(linkIssues(s, '휴가'), []);
   assert.deepEqual(linkIssues(s, null), []);
   assert.equal(nameLabel('period'), '휴가 기간');
@@ -288,11 +289,46 @@ test('휴가원 대체 — 휴가 종류 칸은 선택 칸, 항목은 휴가 정
   let s = createSheet(2, 2);
   s = setCellName(s, 0, 1, 'leaveType');
   s = setCellName(s, 1, 1, 'period');
+  s = setCellMeta(s, APPROVAL_NS.input, 1, 1, { type: 'date' });
   assert.ok(linkIssues(s, '휴가').some((m) => m.includes('선택 칸')));
   s = setCellMeta(s, APPROVAL_NS.input, 0, 1, { type: 'select', options: ['연차', '반차(오전)'] });
   assert.ok(linkIssues(s, '휴가').some((m) => m.includes('반차(오전)')));
   s = setCellMeta(s, APPROVAL_NS.input, 0, 1, { type: 'select', options: ['연차', '오전반차', '반반차'] });
   assert.deepEqual(linkIssues(s, '휴가'), []);
+});
+
+test('연동 검사 — 기간 이름은 날짜 칸·기간 칸(수식 칸은 그대로), 목록이 아닌 이름은 반복 구간 밖', () => {
+  let s = createSheet(3, 2);
+  s = setCellName(s, 0, 0, 'period');
+  s = setCellName(s, 0, 1, 'destination');
+  const dateMsg = (x: Sheet) => linkIssues(x, '외근').filter((m) => m.includes('날짜 칸이나 기간 칸'));
+  // 입력 칸이 아니거나 글자 칸이면 막는다
+  assert.equal(dateMsg(s).length, 1);
+  assert.ok(dateMsg(s)[0].includes('외근 일자'));
+  assert.equal(dateMsg(setCellMeta(s, APPROVAL_NS.input, 0, 0, { type: 'text' })).length, 1);
+  // 날짜 칸·기간 칸·수식 칸은 된다
+  assert.deepEqual(linkIssues(setCellMeta(s, APPROVAL_NS.input, 0, 0, { type: 'date' }), '외근'), []);
+  assert.deepEqual(linkIssues(setCellMeta(s, APPROVAL_NS.input, 0, 0, { type: 'dateRange' }), '외근'), []);
+  assert.deepEqual(linkIssues(setCellValue(s, 0, 0, '=B3'), '외근'), []);
+
+  // 목록이 아닌 연동 이름이 반복 구간 안에 있으면 막는다(연동 이름이 아닌 칸은 상관없음)
+  s = setCellMeta(s, APPROVAL_NS.input, 0, 0, { type: 'date' });
+  s = setCellName(s, 1, 0, 'purpose');
+  s = setCellName(s, 1, 1, '품명');
+  assert.deepEqual(linkIssues(s, '외근'), []);
+  s = setRowMeta(s, APPROVAL_NS.repeat, 1, { id: 'rows', label: '표' });
+  const out = linkIssues(s, '외근');
+  assert.equal(out.length, 1);
+  assert.ok(out[0].includes('목적') && out[0].includes('반복 구간 밖에 두세요'));
+
+  // 발주는 예외 — 매입 결제 대장이 이름 값을 줄마다 읽는다(발주 내역을 품목 구간 안에 둔 서식이 실제로 있다)
+  let po = createSheet(3, 3);
+  po = setCellName(po, 0, 0, 'poClient');
+  po = setCellName(po, 0, 1, 'poVendor');
+  po = setCellName(po, 0, 2, 'poSupply');
+  po = setCellName(po, 1, 0, 'poSummary');
+  po = setRowMeta(po, APPROVAL_NS.repeat, 1, { id: 'items', label: '품목' });
+  assert.deepEqual(linkIssues(po, '발주'), []);
 });
 
 test('시스템 계산 칸 — 휴가 일수(주말 제외, 반차 0.5)', () => {

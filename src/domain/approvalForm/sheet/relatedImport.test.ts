@@ -71,6 +71,45 @@ test('가져오기 — 기안자 수정 잠금 칸은 건너뛴다(한 칸·반�
   assert.equal(res.values[cellKey(1, a)], '태블릿');
 });
 
+test('가져오기 — 칸 종류에 안 맞는 값은 건너뛴다(날짜·기간·숫자·금액 칸)', () => {
+  let tpl = createSheet(5, 1);
+  const [a] = tpl.cols;
+  const types = ['date', 'dateRange', 'number', 'currency', 'text'] as const;
+  const names = ['납기', '기간', '수량', '금액', '비고'];
+  types.forEach((type, r) => {
+    tpl = setCellMeta(tpl, APPROVAL_NS.input, r, 0, { type });
+    tpl = setCellName(tpl, r, 0, names[r]);
+  });
+  const before = { [cellKey(0, a)]: '2026-01-01' };
+  // 모양이 안 맞는 값 — 글자 칸만 채워지고 나머지는 그대로
+  const bad = importNamed(tpl, {}, before, {}, { 납기: '다음 주', 기간: '11월 한 달', 수량: '열 개', 금액: '협의', 비고: '아무 글자' });
+  assert.deepEqual(bad.filled, ['비고']);
+  assert.deepEqual(bad.values, { ...before, [cellKey(4, a)]: '아무 글자' });
+  // 날짜 칸에 기간 값도 안 된다
+  assert.deepEqual(importNamed(tpl, {}, {}, {}, { 납기: '2026-11-01 ~ 2026-11-30' }).filled, []);
+  // 모양이 맞는 값은 들어간다 — 기간 칸은 '시작 ~ 끝'·시작일만 모두
+  const good = importNamed(tpl, {}, {}, {}, { 납기: '2026-11-20', 기간: '2026-11-01 ~ 2026-11-30', 수량: '1,200', 금액: '35000' });
+  assert.deepEqual(good.filled, ['납기', '기간', '수량', '금액']);
+  assert.equal(good.values[cellKey(1, a)], '2026-11-01 ~ 2026-11-30');
+  assert.deepEqual(importNamed(tpl, {}, {}, {}, { 기간: '2026-11-01' }).filled, ['기간']);
+  assert.deepEqual(importNamed(tpl, {}, {}, {}, { 기간: '2026-11-01 ~ 내년' }).filled, []);
+});
+
+test('가져오기 — 반복 구간 열에 안 맞는 값이 섞이면 그 열은 건너뛰고 행도 늘리지 않는다', () => {
+  const tpl = poForm();
+  const [a, b] = tpl.cols;
+  const before = { [cellKey(1, b)]: '5' };
+  const res = importNamed(tpl, {}, before, {}, { 수량: ['14', '여러 개', '1'] });
+  assert.deepEqual(res.filled, []);
+  assert.deepEqual(res.extras, {});
+  assert.deepEqual(res.values, before);
+  // 다른 열은 그대로 가져온다
+  const mixed = importNamed(tpl, {}, before, {}, { 품명: ['태블릿'], 수량: ['많이'] });
+  assert.deepEqual(mixed.filled, ['품명']);
+  assert.equal(mixed.values[cellKey(1, a)], '태블릿');
+  assert.equal(mixed.values[cellKey(1, b)], '5');
+});
+
 test('옛 서식 문서 — 라벨을 이름으로, 한 칸짜리 필드만', () => {
   const fields = [
     { key: 'vendor', label: '거래처', type: '텍스트' },

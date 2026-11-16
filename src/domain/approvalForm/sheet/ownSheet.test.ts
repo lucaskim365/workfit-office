@@ -58,6 +58,41 @@ test('사람 칸 ID — 같은 자리에 같은 이름이 남은 칸만 그대�
   assert.deepEqual(keepRefsAfterEdit(refs, s, insertRow(s, 0)), {});
 });
 
+/** 4×2 — A열 1·2·4행이 사람 칸 */
+function people(): Sheet {
+  let s = createSheet(4, 2);
+  for (const r of [0, 1, 3]) s = setCellMeta(s, APPROVAL_NS.input, r, 0, { type: 'user' });
+  return s;
+}
+
+test('사람 칸 ID — 행·열을 넣거나 지워 자리가 옮겨져도 ID 가 따라간다', () => {
+  let s = people();
+  const a = s.cols[0];
+  s = setCellValue(s, 0, 0, '홍길동 (개발팀)');
+  s = setCellValue(s, 1, 0, '김철수 (영업팀)');
+  const refs = { [`0:${a}`]: 'U1', [`1:${a}`]: 'U2' };
+  // 맨 위에 행, 맨 앞에 열을 넣음 — 열 키는 그대로, 행만 한 줄씩 밀림
+  assert.deepEqual(keepRefsAfterEdit(refs, s, insertCol(insertRow(s, 0), 0)), { [`1:${a}`]: 'U1', [`2:${a}`]: 'U2' });
+  // 첫 사람 칸 줄을 지움 — 남은 사람만
+  assert.deepEqual(keepRefsAfterEdit(refs, s, deleteRow(s, 0)), { [`0:${a}`]: 'U2' });
+  // 이름을 다른 글자로 바꾼 칸은 ID 를 뺀다
+  assert.deepEqual(keepRefsAfterEdit(refs, s, setCellValue(s, 0, 0, '다른 사람')), { [`1:${a}`]: 'U2' });
+});
+
+test('사람 칸 ID — 같은 이름 칸 수가 달라지면 같은 사람일 때만 남긴다(동명이인 ID 가 바뀌어 붙지 않게)', () => {
+  let s = people();
+  const a = s.cols[0];
+  s = setCellValue(s, 0, 0, '홍길동 (개발팀)');
+  s = setCellValue(s, 3, 0, '홍길동 (개발팀)');
+  // 같은 이름·다른 사람 — 차례가 그대로면 따라가고, 한 줄이 지워지면 어느 쪽인지 몰라 뺀다
+  const twins = { [`0:${a}`]: 'U1', [`3:${a}`]: 'U9' };
+  assert.deepEqual(keepRefsAfterEdit(twins, s, insertRow(s, 2)), { [`0:${a}`]: 'U1', [`4:${a}`]: 'U9' });
+  assert.deepEqual(keepRefsAfterEdit(twins, s, deleteRow(s, 0)), {});
+  // 같은 사람이면 남긴다
+  const same = { [`0:${a}`]: 'U1', [`3:${a}`]: 'U1' };
+  assert.deepEqual(keepRefsAfterEdit(same, s, deleteRow(s, 0)), { [`2:${a}`]: 'U1' });
+});
+
 test('기안자 열 넣기 — 문서 머리 행(기안 정보 칸)에 생긴 새 칸은 왼쪽 칸에 합쳐 모양이 그대로', async () => {
   const { draftInsertCol } = await import('./ownSheet');
   let s = createSheet(2, 3);

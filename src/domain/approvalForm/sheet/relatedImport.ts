@@ -8,8 +8,8 @@
  * - 옛 서식 문서는 필드 이름(라벨)을 칸 이름처럼 쓴다(글·숫자·날짜 같은 한 칸짜리 필드만)
  * 가져온 값은 이 문서에 복사되어 저장된다 — 원본 문서가 나중에 바뀌어도 이 문서는 그대로
  */
-import { cellKey, type Sheet } from '@/lib/sheet/core';
-import { APPROVAL_NS, applyValues, type SheetValues } from './approvalSheet';
+import { cellKey, parseNumber, type Sheet } from '@/lib/sheet/core';
+import { APPROVAL_NS, applyValues, type CellInput, type SheetValues } from './approvalSheet';
 import { addRepeatRow, expandRepeats, repeatSections, type RowExtras } from './repeatRows';
 
 /** 이름 → 값(한 칸) 또는 값 목록(반복 구간 열) */
@@ -113,9 +113,28 @@ const fillable = (s: Sheet, key: string) =>
   s.cellMeta[APPROVAL_NS.lock]?.[key] !== true &&
   (s.cellMeta[APPROVAL_NS.input]?.[key] !== undefined || s.cellMeta[APPROVAL_NS.bind]?.[key] !== undefined);
 
+const DATE_TEXT = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * 이 칸 종류에 넣어도 되는 값인가 — 날짜 칸은 날짜 모양(YYYY-MM-DD), 기간 칸은 '시작 ~ 끝'(끝은 없어도 됨),
+ * 숫자·금액 칸은 숫자로 읽히는 글자만. 빈 값은 늘 된다(칸을 비움).
+ * 맞지 않는 값을 넣으면 작성 화면에는 빈 칸으로 보이는데 값은 저장되므로 넣지 않는다
+ */
+function fitsCell(s: Sheet, key: string, v: string): boolean {
+  if (!v) return true;
+  const type = (s.cellMeta[APPROVAL_NS.input]?.[key] as CellInput | undefined)?.type;
+  if (type === 'date') return DATE_TEXT.test(v);
+  if (type === 'dateRange') {
+    const parts = v.split('~').map((x) => x.trim());
+    return parts.length <= 2 && DATE_TEXT.test(parts[0]) && (!parts[1] || DATE_TEXT.test(parts[1]));
+  }
+  if (type === 'number' || type === 'currency') return parseNumber(v) !== null;
+  return true;
+}
+
 /**
  * 원본 이름 값을 이 문서로 — 같은 이름 칸을 채운다. 반복 구간 열은 줄 수만큼 행을 늘려 위에서부터 채우고 남는 줄은 비운다.
- * 한 칸에 목록이 오면 ', '로 잇는다.
+ * 한 칸에 목록이 오면 ', '로 잇는다. 칸 종류에 맞지 않는 값(날짜 칸에 글자 등)은 건너뛴다 — 반복 구간 열은 한 줄이라도 안 맞으면 그 열 전체.
  */
 export function importNamed(template: Sheet, extras: RowExtras, values: SheetValues, refs: SheetValues, source: NamedValues): ImportResult {
   let ex = extras;
@@ -135,6 +154,9 @@ export function importNamed(template: Sheet, extras: RowExtras, values: SheetVal
     let sec = repeatSections(sheet).find((x) => r >= x.first && r <= x.last);
     if (sec) {
       const list = trimTail(Array.isArray(src) ? src : [src]);
+      // 칸 종류에 안 맞는 값이 섞인 열은 건너뛴다(행도 늘리지 않는다)
+      const firstKey = cellKey(sec.first, col);
+      if (list.some((v) => !fitsCell(sheet, firstKey, v))) continue;
       // 줄이 모자라면 늘린다(값·사람 칸 ID 를 같이 옮김)
       while (sec.last - sec.first + 1 < list.length) {
         const before = ex;
@@ -165,7 +187,8 @@ export function importNamed(template: Sheet, extras: RowExtras, values: SheetVal
     } else {
       if (!fillable(sheet, key)) continue;
       const v = Array.isArray(src) ? src.filter(Boolean).join(', ') : src;
-      vals = { ...vals, [key]: v };
+      if (!fitsCell(sheet, key, v)) continue;
+      vals ={ ...vals, [key]: v };
       rf = { ...rf };
       delete rf[key];
       filled.push(name);

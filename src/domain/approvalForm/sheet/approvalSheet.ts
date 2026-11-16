@@ -1235,6 +1235,8 @@ export function linkIssues(s: Sheet, link: string | null | undefined): string[] 
     const wrong = (input?.options ?? []).filter((o) => !known.has(o));
     if (wrong.length) errors.push(`'휴가 종류' 칸의 항목 ${wrong.join(', ')}은(는) 휴가 종류에 없습니다. 쓸 수 있는 이름: ${[...known].join(', ')}`);
   }
+  // 기간 이름(휴가 기간·외근 일자·출장 기간)은 날짜를 고르는 칸이어야 연동이 날짜로 읽는다
+  def.names.filter((n) => n.range).forEach((n) => errors.push(...rangeCellIssues(s, n)));
   // 목록 이름(줄마다 값)은 반복 구간의 열이어야 하고, 같은 줄끼리 한 묶음이 되게 한 구간에 둔다
   const sectionOf = new Map<string, string | null>();
   Object.entries(s.cellMeta[APPROVAL_NS.name] ?? {}).forEach(([key, name]) => {
@@ -1249,7 +1251,20 @@ export function linkIssues(s: Sheet, link: string | null | undefined): string[] 
   if (new Set(inSection.map((n) => sectionOf.get(n.key))).size > 1) {
     errors.push(`${inSection.map((n) => `'${n.label}'`).join('·')} 칸은 같은 반복 구간에 있어야 합니다(같은 줄끼리 한 묶음).`);
   }
+  // 목록이 아닌 연동 이름은 값이 하나 — 반복 구간 안에 두면 첫 줄 값만 쓰인다.
+  // 발주는 예외: 매입 결제 대장이 이름 값을 줄마다 읽으므로(발주 내역 등) 반복 구간 안에 둘 수 있다
+  (def.code === PO_LINK ? [] : def.names)
+    .filter((n) => !n.list && !!sectionOf.get(n.key))
+    .forEach((n) => errors.push(`'${n.label}' 칸은 반복 구간 밖에 두세요(반복 구간 안에 있으면 첫 줄 값만 쓰입니다).`));
   return errors;
+}
+
+/** 기간 이름이 붙은 칸이 날짜 칸·기간 칸인지 — 수식 칸은 계산한 날짜를 쓰므로 그대로 둔다 */
+function rangeCellIssues(s: Sheet, n: LinkName): string[] {
+  const key = Object.entries(s.cellMeta[APPROVAL_NS.name] ?? {}).find(([, name]) => name === n.key)?.[0];
+  if (!key || s.formulas[key] !== undefined) return [];
+  const type = (s.cellMeta[APPROVAL_NS.input]?.[key] as CellInput | undefined)?.type;
+  return type === 'date' || type === 'dateRange' ? [] : [`'${n.label}' 칸은 날짜 칸이나 기간 칸이어야 합니다.`];
 }
 
 /** 휴가 종류 칸에 쓸 수 있는 항목 — 칸 속성 패널이 '휴가 종류' 이름을 붙일 때 채워 준다 */

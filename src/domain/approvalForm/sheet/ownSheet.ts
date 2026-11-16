@@ -169,14 +169,57 @@ export function draftEditIssues(before: Sheet, after: Sheet): string[] {
   return [...new Set(issues)];
 }
 
+const textAt = (s: Sheet, key: string) => {
+  const i = key.indexOf(':');
+  return String(s.rows[Number(key.slice(0, i))]?.[key.slice(i + 1)] ?? '');
+};
+
+/** 글자가 든 사람 칸(사람·사람 여러 명)을 '열 + 글자'로 묶은 것 — 묶음마다 행 번호를 위에서부터 */
+function personCellGroups(s: Sheet): Map<string, { col: string; rows: number[] }> {
+  const out = new Map<string, { col: string; rows: number[] }>();
+  Object.entries(s.cellMeta[APPROVAL_NS.input] ?? {}).forEach(([key, v]) => {
+    const type = (v as { type?: unknown } | undefined)?.type;
+    if (type !== 'user' && type !== 'users') return;
+    const i = key.indexOf(':');
+    const r = Number(key.slice(0, i));
+    const col = key.slice(i + 1);
+    const t = textAt(s, key);
+    if (!t || !s.cols.includes(col) || r < 0 || r >= s.rows.length) return;
+    const id = `${col}\u0000${t}`;
+    const g = out.get(id) ?? { col, rows: [] };
+    g.rows.push(r);
+    out.set(id, g);
+  });
+  out.forEach((g) => g.rows.sort((a, b) => a - b));
+  return out;
+}
+
 /**
- * 고친 뒤 사람 칸 ID — 칸 자리가 옮겨졌을 수 있어, 같은 자리에 같은 글자(이름)가 남은 칸만 그대로 둔다.
- * 옮겨진 사람 칸은 글자(이름·부서)는 남고 ID 만 빠진다(동명이인 구분·알림만 영향)
+ * 고친 뒤 사람 칸 ID — 행을 넣거나 지워 사람 칸 자리가 옮겨져도 ID 가 따라간다(업무 대행자·동행자 연동이 이 ID 를 읽는다).
+ * 열 키는 열을 넣어도 바뀌지 않고 행 차례도 그대로라, 같은 열에서 같은 글자(이름)인 사람 칸을 위에서부터 차례로 짝짓는다.
+ * 짝이 분명하지 않으면(그 이름의 칸 수가 달라짐) ID 가 모두 같은 사람일 때만 남기고, 아니면 뺀다(다른 사람 ID 가 붙지 않게).
+ * 병합으로 다른 열로 옮겨진 사람 칸, 사람 칸이 아닌 칸의 ID 는 같은 자리에 같은 글자가 남았을 때만 그대로 둔다
  */
 export function keepRefsAfterEdit(refs: Record<string, string>, before: Sheet, after: Sheet): Record<string, string> {
-  const text = (s: Sheet, key: string) => {
-    const i = key.indexOf(':');
-    return String(s.rows[Number(key.slice(0, i))]?.[key.slice(i + 1)] ?? '');
-  };
-  return Object.fromEntries(Object.entries(refs).filter(([key]) => text(before, key) !== '' && text(before, key) === text(after, key)));
+  const out: Record<string, string> = {};
+  const was = personCellGroups(before);
+  const now = personCellGroups(after);
+  const matched = new Set<string>();
+  was.forEach((b, id) => {
+    b.rows.forEach((r) => matched.add(cellKey(r, b.col)));
+    const a = now.get(id);
+    if (!a) return;
+    const ids = b.rows.map((r) => refs[cellKey(r, b.col)]);
+    if (a.rows.length === b.rows.length) {
+      a.rows.forEach((r, i) => {
+        if (ids[i]) out[cellKey(r, a.col)] = ids[i];
+      });
+    } else if (a.rows.length < b.rows.length && ids[0] && ids.every((x) => x === ids[0])) {
+      a.rows.forEach((r) => (out[cellKey(r, a.col)] = ids[0]));
+    }
+  });
+  Object.entries(refs).forEach(([key, id]) => {
+    if (!matched.has(key) && textAt(before, key) !== '' && textAt(before, key) === textAt(after, key)) out[key] = id;
+  });
+  return out;
 }

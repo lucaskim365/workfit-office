@@ -1295,6 +1295,8 @@ function ApprovalDraftInner({
 
   const validate = (forSubmit: boolean): string | null => {
     if (!title.trim()) return '제목을 입력하세요.';
+    // 시트 틀을 아직 못 읽었으면 필수·숫자 검사 목록이 비어 있다 — 검사 없이 상신되지 않게 막는다
+    if (forSubmit && sheetVersion !== null && !sheetTpl?.sheet) return '서식을 불러오는 중입니다. 잠시 뒤 다시 눌러 주세요.';
     if (forSubmit && sheetVersion !== null && sheetRequiredRef.current.length > 0) {
       return `필수 칸을 채워 주세요: ${sheetRequiredRef.current.slice(0, 5).join(', ')}${sheetRequiredRef.current.length > 5 ? ' 외' : ''}`;
     }
