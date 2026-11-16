@@ -58,6 +58,22 @@ export interface CellInput {
   options?: string[];
   /** 종속 선택(select 만) — 다른 칸 값에 따라 고를 항목이 바뀐다(엑셀 종속 드롭다운, 기존 서식 '지출 항목별 분류') */
   depends?: SelectDepends;
+  /**
+   * 안내 글자(플레이스홀더) — 비어 있는 칸 안에 흐리게(예: '14:00 (종일이면 비움)'). 작성 화면에만, 값이 아니라 저장·결재·인쇄엔 없다.
+   * 글로 쓰는 칸(PLACEHOLDER_INPUTS)만
+   */
+  placeholder?: string;
+}
+
+/** 안내 글자를 쓸 수 있는 입력 칸 — 글·숫자를 직접 쓰는 칸(날짜·선택·사람 칸은 고르는 화면이 따로 있다) */
+export const PLACEHOLDER_INPUTS: ReadonlySet<CellInputType> = new Set<CellInputType>(['text', 'multiline', 'number', 'currency']);
+/** 안내 글자 최대 길이 */
+export const PLACEHOLDER_MAX = 60;
+
+/** 이 칸의 안내 글자 — 쓸 수 없는 칸 종류거나 비었으면 undefined */
+export function placeholderOf(input: CellInput | undefined): string | undefined {
+  const p = input?.placeholder?.trim();
+  return input && PLACEHOLDER_INPUTS.has(input.type) && p ? p.slice(0, PLACEHOLDER_MAX) : undefined;
 }
 
 /**
@@ -1003,6 +1019,11 @@ export interface LinkName {
   /** 시스템이 계산해 넣는 칸(기안자 입력 아님) */
   computed?: boolean;
   /**
+   * 기안자가 고칠 수 없는 칸 — 서식의 '기안자 수정 잠금' 체크와 상관없이 늘 잠긴다(편집기에선 잠금이 켜진 채 고정).
+   * 휴일근무 출근·퇴근 시각·근무 시간 — 사후 신청이라 근태 기록 값만(HOLIDAY_WORK_LOCKED_KEYS 와 같아야 함)
+   */
+  locked?: boolean;
+  /**
    * 반복 구간의 열 이름 — 값이 줄마다 하나씩(목록). 문서 맨 위 칸 하나로 담을 수 없어 fieldValues.__named 에만 남는다
    * (relatedImport.ts). 반복 구간 안에 있어야 하고, 한 연동 기능의 목록 이름은 같은 구간에 둔다(같은 줄끼리 한 묶음)
    */
@@ -1108,9 +1129,9 @@ export const LINK_TYPES: LinkTypeDef[] = [
     feature: '휴일근무 — 근태(휴일 근무 인정)',
     names: [
       { key: 'workDate', label: '근무 일자', required: true, hint: '날짜 칸 — 주말·공휴일만 고를 수 있음' },
-      { key: 'workStart', label: '출근 시각' },
-      { key: 'workEnd', label: '퇴근 시각' },
-      { key: 'workHours', label: '근무 시간' },
+      { key: 'workStart', label: '출근 시각', locked: true, hint: '근무 일자의 근태 기록에서 자동으로 채움 — 기안자가 고칠 수 없음' },
+      { key: 'workEnd', label: '퇴근 시각', locked: true, hint: '근무 일자의 근태 기록에서 자동으로 채움 — 기안자가 고칠 수 없음' },
+      { key: 'workHours', label: '근무 시간', locked: true, hint: '근태 기록의 출근·퇴근 시각으로 계산해 채움 — 기안자가 고칠 수 없음' },
       MEMO,
     ],
   },

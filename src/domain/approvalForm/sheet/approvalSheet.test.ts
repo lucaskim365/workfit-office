@@ -383,3 +383,25 @@ test('금액·숫자 입력 칸 — 정렬을 안 정했으면 오른쪽 정렬,
   s = setApprovalProp(s, { r1: 0, c1: 2, r2: 0, c2: 2 }, APPROVAL_NS.input, { type: 'text' });
   assert.equal(s.styles[cellKey(0, s.cols[2])]?.align, undefined);
 });
+
+test('휴일근무 연동 — 편집기가 잠금을 고정하는 칸 이름(locked)과 기안 화면이 막는 칸(HOLIDAY_WORK_LOCKED_KEYS)이 같다', async () => {
+  const { linkTypeDef } = await import('./approvalSheet');
+  const { HOLIDAY_WORK_LOCKED_KEYS } = await import('@/domain/commute/overtimeDraft');
+  const locked = (linkTypeDef('휴일근무')?.names ?? []).filter((n) => n.locked).map((n) => n.key);
+  assert.deepEqual([...locked].sort(), [...HOLIDAY_WORK_LOCKED_KEYS].sort());
+  // 다른 연동은 늘 잠그는 칸이 없다(휴가 일수는 입력 칸으로 두지 않는 계산 칸 — 따로)
+  for (const code of ['휴가', '외근', '국내출장', '해외출장', '발주']) {
+    assert.deepEqual((linkTypeDef(code)?.names ?? []).filter((n) => n.locked), [], code);
+  }
+});
+
+test('안내 글자 — 글·숫자 칸만, 공백만이면 없음, 최대 길이', async () => {
+  const { placeholderOf, PLACEHOLDER_MAX } = await import('./approvalSheet');
+  assert.equal(placeholderOf({ type: 'text', placeholder: ' 예: 14:00 ' }), '예: 14:00');
+  assert.equal(placeholderOf({ type: 'number', placeholder: '시간' }), '시간');
+  assert.equal(placeholderOf({ type: 'text', placeholder: '   ' }), undefined);
+  assert.equal(placeholderOf({ type: 'date', placeholder: '날짜' }), undefined);
+  assert.equal(placeholderOf({ type: 'select', options: ['a'], placeholder: '고르기' }), undefined);
+  assert.equal(placeholderOf({ type: 'text', placeholder: 'x'.repeat(100) })?.length, PLACEHOLDER_MAX);
+  assert.equal(placeholderOf(undefined), undefined);
+});

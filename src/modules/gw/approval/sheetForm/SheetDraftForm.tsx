@@ -42,6 +42,7 @@ import {
   readSheetValues,
   sheetDocFields,
   sheetLogoMarkId,
+  placeholderOf,
   type CellInput,
 } from '@/domain/approvalForm/sheet/approvalSheet';
 import { SHEET_NAMED_KEY, collectNamed, hasImportableNames, importNamed, sheetWith, type NamedValues } from '@/domain/approvalForm/sheet/relatedImport';
@@ -63,7 +64,10 @@ const INHERIT: CSSProperties = { font: 'inherit', color: 'inherit', textAlign: '
  * 글 입력 — 칸 폭을 넘으면 다음 줄로 넘기고 행이 늘어난다(칸에 글씨가 잘리지 않게).
  * singleLine: 한 줄 글 칸 — 보이는 줄바꿈은 되지만 Enter·붙여넣기 줄바꿈은 넣지 않는다
  */
-function AutoTextarea({ value, onChange, singleLine = false }: { value: string; onChange: (v: string) => void; singleLine?: boolean }) {
+/** 안내 글자(플레이스홀더) — 흐리게, 인쇄엔 안 나옴 */
+const PLACEHOLDER_CLS = 'placeholder:text-[#b4b4b4] print:placeholder:text-transparent';
+
+function AutoTextarea({ value, onChange, singleLine = false, placeholder }: { value: string; onChange: (v: string) => void; singleLine?: boolean; placeholder?: string }) {
   const ref = useRef<HTMLTextAreaElement>(null);
   useLayoutEffect(() => {
     const el = ref.current;
@@ -78,7 +82,8 @@ function AutoTextarea({ value, onChange, singleLine = false }: { value: string; 
       value={value}
       onChange={(e) => onChange(singleLine ? e.target.value.replace(/\r?\n/g, ' ') : e.target.value)}
       onKeyDown={singleLine ? (e) => e.key === 'Enter' && e.preventDefault() : undefined}
-      className={`${FIELD} resize-none overflow-hidden`}
+      placeholder={placeholder}
+      className={`${FIELD} resize-none overflow-hidden ${PLACEHOLDER_CLS}`}
       style={INHERIT}
     />
   );
@@ -87,7 +92,22 @@ function AutoTextarea({ value, onChange, singleLine = false }: { value: string; 
 /** 숫자 칸에 넣을 수 있는 글자 — 부호·숫자·콤마·소수점 하나. 그 밖의 글자는 아예 들어가지 않는다 */
 const NUMBER_TYPING = /^-?[\d,]*\.?\d*$/;
 
-function NumberInput({ raw, shown, invalid, onChange }: { raw: string; shown: string; invalid: boolean; onChange: (v: string) => void }) {
+/** align: 서식에서 칸 정렬을 정했으면 그대로, 안 정했으면 숫자라 오른쪽 */
+function NumberInput({
+  raw,
+  shown,
+  invalid,
+  align,
+  placeholder,
+  onChange,
+}: {
+  raw: string;
+  shown: string;
+  invalid: boolean;
+  align?: CSSProperties['textAlign'];
+  placeholder?: string;
+  onChange: (v: string) => void;
+}) {
   const [focused, setFocused] = useState(false);
   return (
     <input
@@ -99,11 +119,11 @@ function NumberInput({ raw, shown, invalid, onChange }: { raw: string; shown: st
         const text = e.target.value.trim();
         if (NUMBER_TYPING.test(text)) onChange(text.replace(/,/g, ''));
       }}
-      // 비어 있으면 흐린 0 — 숫자 칸임을 알 수 있게(인쇄엔 안 나옴)
-      placeholder="0"
+      // 비어 있으면 흐린 안내 글자, 정하지 않았으면 0 — 숫자 칸임을 알 수 있게(인쇄엔 안 나옴)
+      placeholder={placeholder ?? '0'}
       title={invalid ? '숫자만 입력할 수 있습니다' : undefined}
       className={`${FIELD} placeholder:text-[#c8c8c8] print:placeholder:text-transparent ${invalid ? 'bg-rose-100 ring-1 ring-rose-400' : ''}`}
-      style={{ ...INHERIT, textAlign: 'right' }}
+      style={{ ...INHERIT, textAlign: align ?? 'right' }}
     />
   );
 }
@@ -340,12 +360,22 @@ function SelectCell({ options, raw, onSet }: { options: string[]; raw: string; o
 function CellField({ input, sheet, r, c, width, onSet, org }: { input: CellInput; sheet: Sheet; r: number; c: number; width: number; onSet: (text: string, ref?: string) => void; org: ReturnType<typeof useOrgTree> }) {
   const col = sheet.cols[c];
   const raw = String(sheet.rows[r]?.[col] ?? '');
+  const placeholder = placeholderOf(input);
   switch (input.type) {
     case 'multiline':
-      return <AutoTextarea value={raw} onChange={onSet} />;
+      return <AutoTextarea value={raw} onChange={onSet} placeholder={placeholder} />;
     case 'number':
     case 'currency':
-      return <NumberInput raw={raw} shown={displayValue(sheet, r, col)} invalid={raw.trim() !== '' && parseNumber(raw) === null} onChange={onSet} />;
+      return (
+        <NumberInput
+          raw={raw}
+          shown={displayValue(sheet, r, col)}
+          invalid={raw.trim() !== '' && parseNumber(raw) === null}
+          align={sheet.styles[`${r}:${col}`]?.align}
+          placeholder={placeholder}
+          onChange={onSet}
+        />
+      );
     case 'date':
       return (
         <DateInput
@@ -419,9 +449,17 @@ function CellField({ input, sheet, r, c, width, onSet, org }: { input: CellInput
       // 셀에 맞춤 칸 — 줄을 바꾸지 않고 글씨를 줄여 칸에 맞춘다(엑셀과 같음). 아니면 넘칠 때 줄바꿈하며 행이 늘어난다
       if (sheet.styles[`${r}:${col}`]?.shrink) {
         const size = shrinkFontSize(raw, sheet.styles[`${r}:${col}`], width);
-        return <input value={raw} onChange={(e) => onSet(e.target.value)} className={FIELD} style={{ ...INHERIT, ...(size ? { fontSize: size } : {}) }} />;
+        return (
+          <input
+            value={raw}
+            onChange={(e) => onSet(e.target.value)}
+            placeholder={placeholder}
+            className={`${FIELD} ${PLACEHOLDER_CLS}`}
+            style={{ ...INHERIT, ...(size ? { fontSize: size } : {}) }}
+          />
+        );
       }
-      return <AutoTextarea value={raw} onChange={onSet} singleLine />;
+      return <AutoTextarea value={raw} onChange={onSet} singleLine placeholder={placeholder} />;
   }
 }
 

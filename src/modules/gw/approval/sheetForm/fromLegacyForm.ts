@@ -24,7 +24,19 @@ import {
 import type { ApprovalForm, FormField } from '@/domain/approvalForm/schema';
 import { DEFAULT_AUTO_NUMBER } from '@/domain/approvalForm/autoNumber';
 import { normalizeTablePayload } from '../formFields/sheetModel';
-import { APPROVAL_NS, LINK_TYPES, approvalCellProps, linkTypeDef, rowConditionOf, setApprovalProp, setCellName, setRowCondition, type CellInputType } from '@/domain/approvalForm/sheet/approvalSheet';
+import {
+  APPROVAL_NS,
+  LINK_TYPES,
+  PLACEHOLDER_INPUTS,
+  PLACEHOLDER_MAX,
+  approvalCellProps,
+  linkTypeDef,
+  rowConditionOf,
+  setApprovalProp,
+  setCellName,
+  setRowCondition,
+  type CellInputType,
+} from '@/domain/approvalForm/sheet/approvalSheet';
 import { setRepeatSection } from '@/domain/approvalForm/sheet/repeatRows';
 import { insertDocHeader } from '@/domain/approvalForm/sheet/sheetHeader';
 
@@ -310,9 +322,13 @@ export function legacyFormToSheet(form: ApprovalForm): LegacyConversion {
     const input = INPUT_OF[f.type];
     if (input) {
       const options = input === 'select' || input === 'multiSelect' ? { options: f.options ?? [] } : {};
-      s = setApprovalProp(s, at, APPROVAL_NS.input, { type: input, ...options });
+      // 기존 항목의 안내 글자(예: 14:00 (종일이면 비움)) — 글·숫자 칸만
+      const hint = PLACEHOLDER_INPUTS.has(input) && f.placeholder?.trim() ? { placeholder: f.placeholder.trim().slice(0, PLACEHOLDER_MAX) } : {};
+      s = setApprovalProp(s, at, APPROVAL_NS.input, { type: input, ...options, ...hint });
       // 금액은 천 단위 쉼표·오른쪽 정렬(기존 양식처럼 35,000)
       if (input === 'currency') s = applyStyle(s, at, { numFmt: 'currency', align: 'right' });
+      // 숫자 한 칸(근무 시간 등)은 옆 칸의 글·날짜·시각과 같은 왼쪽 — 자릿수를 세로로 맞출 표가 아니다
+      else if (input === 'number') s = applyStyle(s, at, { align: 'left' });
       if (f.required) s = setApprovalProp(s, at, APPROVAL_NS.required, true);
     } else if (f.type === '자동번호') {
       // 같은 서식 코드에 붙이므로 그 항목의 순번을 이어 쓴다(1번부터 다시 시작하지 않게)

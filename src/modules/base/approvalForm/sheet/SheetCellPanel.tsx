@@ -18,6 +18,8 @@ import {
   LINK_TYPES,
   linkTypeDef,
   nameLabel,
+  PLACEHOLDER_INPUTS,
+  PLACEHOLDER_MAX,
 } from '@/domain/approvalForm/sheet/approvalSheet';
 import {
   clearDependent,
@@ -96,12 +98,12 @@ function Row({ label, hint, children }: { label: string; hint?: string; children
   );
 }
 
-function Check({ checked, onChange, label, hint }: { checked: boolean; onChange: (v: boolean) => void; label: string; hint: string }) {
+function Check({ checked, onChange, label, hint, disabled = false }: { checked: boolean; onChange: (v: boolean) => void; label: string; hint: string; disabled?: boolean }) {
   const [open, setOpen] = useState(false);
   return (
     <div>
-      <label className="flex cursor-pointer items-center gap-2 rounded-md px-1 py-0.5 hover:bg-panel-alt">
-        <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} className="h-3.5 w-3.5 accent-teal" />
+      <label className={`flex items-center gap-2 rounded-md px-1 py-0.5 ${disabled ? 'cursor-not-allowed opacity-70' : 'cursor-pointer hover:bg-panel-alt'}`}>
+        <input type="checkbox" checked={checked} disabled={disabled} onChange={(e) => onChange(e.target.checked)} className="h-3.5 w-3.5 accent-teal" />
         <span className="text-[11.5px] font-semibold text-ink">{label}</span>
         <HelpButton text={hint} open={open} onToggle={() => setOpen((v) => !v)} />
       </label>
@@ -173,6 +175,8 @@ export function SheetCellPanel({
   const multi = range.r1 !== range.r2 || range.c1 !== range.c2;
   const where = multi ? `${cellAddress(range.r1, range.c1)}:${cellAddress(range.r2, range.c2)}` : cellAddress(focus.r, focus.c);
   const isFormula = sheet.formulas[`${focus.r}:${sheet.cols[focus.c]}`] !== undefined;
+  /** 연동 기능이 늘 잠그는 칸 이름(휴일근무 출근·퇴근 시각·근무 시간) — 이 칸이면 잠금 체크를 켠 채 고정 */
+  const systemLocked = props.name ? linkDef?.names.find((n) => n.key === props.name && n.locked) : undefined;
 
   // 선택 항목은 줄마다 하나 — 입력 중엔 글자 그대로 두고, 칸을 벗어날 때 넣는다
   const optionsText = (props.input?.options ?? []).join('\n');
@@ -187,6 +191,19 @@ export function SheetCellPanel({
   };
 
   const hasOptions = props.input?.type === 'select' || props.input?.type === 'multiSelect';
+
+  // 안내 글자(플레이스홀더) — 입력 중엔 글자 그대로 두고, 칸을 벗어날 때 넣는다(고를 항목과 같음)
+  const canPlaceholder = !!props.input && PLACEHOLDER_INPUTS.has(props.input.type);
+  const placeholderText = props.input?.placeholder ?? '';
+  const [placeholder, setPlaceholder] = useState(placeholderText);
+  useEffect(() => setPlaceholder(placeholderText), [placeholderText, focus.r, focus.c]);
+  const commitPlaceholder = () => {
+    if (!props.input) return;
+    const p = placeholder.trim().slice(0, PLACEHOLDER_MAX);
+    if (p === (props.input.placeholder ?? '')) return;
+    const { placeholder: _old, ...rest } = props.input;
+    setInput(p ? { ...rest, placeholder: p } : rest);
+  };
 
   // 칸 종류 — 입력 칸·자동 채우기·자동번호를 하나로(부품을 누르는 것과 같다)
   const kindValue = props.input
@@ -346,6 +363,19 @@ export function SheetCellPanel({
         <div className="text-[10.5px] leading-snug text-ink3">{kindNote}</div>
       </div>
 
+      {canPlaceholder && (
+        <Row label="안내 글자" hint="비어 있는 칸 안에 흐리게 보입니다(예: 14:00 (종일이면 비움)). 작성 화면에만 — 값으로 저장되지 않고 결재·인쇄엔 안 나옵니다.">
+          <input
+            className={inp}
+            value={placeholder}
+            maxLength={PLACEHOLDER_MAX}
+            onChange={(e) => setPlaceholder(e.target.value)}
+            onBlur={commitPlaceholder}
+            onKeyDown={(e) => e.key === 'Enter' && (e.currentTarget as HTMLInputElement).blur()}
+            placeholder="예: 14:00 (종일이면 비움)"
+          />
+        </Row>
+      )}
       {hasOptions && !props.input?.depends && (
         <Row label="고를 항목" hint="한 줄에 하나씩 적습니다">
           <textarea className={`${inp} min-h-[84px] resize-y`} value={options} onChange={(e) => setOptions(e.target.value)} onBlur={commitOptions} />
@@ -399,12 +429,23 @@ export function SheetCellPanel({
           />
         )}
         {/* 잠금은 글자·수식 칸에도 쓴다 — [표 모양 고치기]에서 그 칸을 못 고치고 그 행·열을 못 지움 */}
-        <Check
-          checked={props.lock}
-          onChange={(v) => onChange(setApprovalProp(sheet, range, APPROVAL_NS.lock, v))}
-          label="기안자 수정 잠금"
-          hint="기안자가 이 칸을 고칠 수 없습니다 — 입력 칸이면 값을, 글자·수식 칸이면 [표 모양 고치기]에서 그 칸과 그 행·열을 못 바꿉니다."
-        />
+        {systemLocked ? (
+          // 연동 기능이 늘 잠그는 칸(휴일근무 출근·퇴근 시각·근무 시간) — 체크와 상관없이 기안 화면이 막으므로 켜진 채 고정
+          <Check
+            checked
+            disabled
+            onChange={() => {}}
+            label="기안자 수정 잠금 (자동)"
+            hint={`${systemLocked.label} 칸은 ${linkDef?.label ?? '연동'} 연동이 늘 잠급니다 — ${systemLocked.hint ?? '시스템이 채우는 칸'}. 이 칸의 잠금은 풀 수 없습니다.`}
+          />
+        ) : (
+          <Check
+            checked={props.lock}
+            onChange={(v) => onChange(setApprovalProp(sheet, range, APPROVAL_NS.lock, v))}
+            label="기안자 수정 잠금"
+            hint="기안자가 이 칸을 고칠 수 없습니다 — 입력 칸이면 값을, 글자·수식 칸이면 [표 모양 고치기]에서 그 칸과 그 행·열을 못 바꿉니다."
+          />
+        )}
         <Check
           checked={props.seal}
           onChange={(v) => onChange(setApprovalProp(sheet, range, APPROVAL_NS.seal, v))}

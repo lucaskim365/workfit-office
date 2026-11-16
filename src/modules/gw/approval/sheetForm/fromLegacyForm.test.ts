@@ -75,6 +75,19 @@ test('기존 서식 → 시트 — 라벨·값 칸, 입력 종류, 금액 키, �
   assert.ok(!warnings.some((w) => w.includes('필수')));
 });
 
+test('기존 서식 → 시트 — 숫자 한 칸은 옆 글·시각 칸과 같은 왼쪽, 금액은 오른쪽(휴일근무 근무 시간 | 출근 시각)', () => {
+  const form = legacyForm('휴일근무', [
+    { key: 'workHours', label: '근무 시간', type: '숫자', width: 'half' },
+    { key: 'workStart', label: '출근 시각', type: '텍스트', width: 'half' },
+    { key: 'cost', label: '경비', type: '금액' },
+  ]);
+  const { sheet: s } = legacyFormToSheet(form);
+  const hours = findText(s, '근무 시간')!;
+  const cost = findText(s, '경비')!;
+  assert.equal(s.styles[`${hours.r}:${s.cols[hours.c + 1]}`]?.align, 'left');
+  assert.equal(s.styles[`${cost.r}:${s.cols[cost.c + 1]}`]?.align, 'right');
+});
+
 test('기존 서식 → 시트 — 표·직인·자동번호·회사정보·안내문·섹션', () => {
   const table = JSON.stringify({
     version: 2,
@@ -451,4 +464,20 @@ test('나란히 놓을 표 짝 — 같은 구역에서 잇단 반쪽 표 둘, �
   assert.equal(pairs.size, 1, '셋째는 짝이 없고, 다른 구역 표와는 짝짓지 않음');
   assert.equal(legacyTablePairs([t('a'), t('b', { hideOnExternal: true })]).size, 0, '대외 숨김이 다르면 따로');
   assert.equal(legacyTablePairs([t('a'), field({ key: 'x', label: 'x', type: '표', width: 'full' })]).size, 0, '전체 폭 표는 그대로');
+});
+
+test('기존 서식 → 시트 — 항목 안내 글자(placeholder)는 글·숫자 칸의 안내 글자로(외근 시각 "종일이면 비움")', () => {
+  const form = legacyForm('외근', [
+    { key: 'startTime', label: '외근 시작 시각', type: '텍스트', width: 'half', placeholder: '예: 14:00 (종일이면 비움)' },
+    { key: 'endTime', label: '외근 복귀 시각', type: '텍스트', width: 'half', placeholder: '' },
+    { key: 'outsideType', label: '외근 구분', type: '선택', options: ['종일 외근'], placeholder: '고르세요' },
+  ]);
+  const { sheet: s } = legacyFormToSheet(form);
+  const at = (label: string) => {
+    const p = findText(s, label)!;
+    return approvalCellProps(s, p.r, p.c + 1).input;
+  };
+  assert.equal(at('외근 시작 시각')?.placeholder, '예: 14:00 (종일이면 비움)');
+  assert.equal(at('외근 복귀 시각')?.placeholder, undefined, '빈 안내 글자는 안 넣음');
+  assert.equal(at('외근 구분')?.placeholder, undefined, '선택 칸엔 안 넣음(고르는 화면이 따로)');
 });
