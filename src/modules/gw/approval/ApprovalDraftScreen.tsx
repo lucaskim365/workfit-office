@@ -1030,7 +1030,7 @@ function ApprovalDraftInner({
   // 시트 서식의 비어 있는 필수 칸 이름표 — 상신 때만 막는다(임시 저장은 됨)
   const sheetRequiredRef = useRef<string[]>([]);
   // 시트에 든 문서 정보 칸(기안자·제목 등)은 문서 머리에서 뺀다 — 같은 틀을 SheetDraftForm 도 읽는다(같은 조회, 한 번만 받음)
-  const { data: sheetTpl, isFetching: sheetTplLoading } = useFormVersionSheet(form && sheetVersion !== null ? form.id : null, sheetVersion);
+  const { data: sheetTpl, isFetching: sheetTplLoading, isError: sheetTplFailed } = useFormVersionSheet(form && sheetVersion !== null ? form.id : null, sheetVersion);
   // 시트로 쓰는 문서는 기존 양식 항목을 그리지 않는다 — 기존 서식에 시트를 붙여도 항목 목록(옛 문서용)은 남아 있으므로
   const docForm = useMemo(() => {
     const f = withBodyHeader(form, sheetHeaderItems(sheetTpl?.sheet));
@@ -1302,8 +1302,10 @@ function ApprovalDraftInner({
     if (!title.trim()) return '제목을 입력하세요.';
     // 시트 틀을 아직 못 읽었으면 필수·숫자 검사 목록이 비어 있다 — 검사 없이 상신되지 않게 막는다
     if (forSubmit && sheetVersion !== null && !sheetTpl?.sheet && !readOwnSheet(values[SHEET_OWN_KEY])) {
-      return sheetTplLoading
-        ? '서식을 불러오는 중입니다. 잠시 뒤 다시 눌러 주세요.'
+      if (sheetTplLoading) return '서식을 불러오는 중입니다. 잠시 뒤 다시 눌러 주세요.';
+      // 읽기에 실패(네트워크 등) — 다시 시도하면 풀린다. 버전 기록이 아예 없을 때만 관리자에게
+      return sheetTplFailed
+        ? '서식을 불러오지 못했습니다. 연결을 확인하고 잠시 뒤 다시 눌러 주세요.'
         : `이 문서가 쓴 서식 틀(v${sheetVersion})을 찾지 못해 상신할 수 없습니다. 관리자에게 알려 주세요.`;
     }
     if (forSubmit && sheetVersion !== null && sheetRequiredRef.current.length > 0) {

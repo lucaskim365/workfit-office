@@ -527,7 +527,6 @@ export function SheetDraftForm({
   const fetched = useFormVersionSheet(template ? null : formId, template ? null : version);
   const loaded = useMemo(() => (template ? { sheet: template } : fetched.data), [template, fetched.data]);
   const isLoading = !template && fetched.isLoading;
-  const error = template ? null : fetched.error;
   const org = useOrgTree();
   const key = versionKey(formId, version);
   const rawValues = values[SHEET_VALUES_KEY];
@@ -615,8 +614,9 @@ export function SheetDraftForm({
   const latest = useRef<{ tplSheet: typeof tplSheet; extras: typeof extras; rawValues: typeof rawValues; refs: typeof refs } | null>(null);
   const importing = useRef(false);
 
-  if (isLoading) return <div className="py-10 text-center text-[12px] text-[#888]">서식을 불러오는 중…</div>;
-  if (error || !sheet) return <div className="py-10 text-center text-[12px] text-rose-600">서식 틀(v{version})을 읽지 못했습니다.</div>;
+  // 문서가 고친 틀(표 모양 고치기)을 가졌으면 버전 틀을 못 읽어도 그 틀로 보인다(상신도 그 틀로 검사된다)
+  if (isLoading && !sheet) return <div className="py-10 text-center text-[12px] text-[#888]">서식을 불러오는 중…</div>;
+  if (!sheet) return <div className="py-10 text-center text-[12px] text-rose-600">서식 틀(v{version})을 읽지 못했습니다.</div>;
 
   const set = (r: number, c: number, text: string, ref?: string) => {
     // 기안자가 쓴 '='는 수식이 아니라 글자 — 수식은 서식 틀에만 있다
