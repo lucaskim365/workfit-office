@@ -5,6 +5,7 @@
  * 순번 채널(channelKey)은 서식 틀 기준 그대로라 문서마다 바뀌지 않는다.
  */
 import { cellKey, type Sheet } from '@/lib/sheet/core';
+import { DOC_NO_VALUE_KEY } from '@/domain/approvalDoc/docNo';
 import { sheetAutoNumberCells, type SheetAutoNumberCell } from '@/domain/approvalForm/sheetAutoNumber';
 import { SHEET_VALUES_KEY, applyValues, conditionHiddenRows, readSheetValues } from './approvalSheet';
 import { SHEET_ROWS_KEY, expandRepeats, extraRowCount, readRowExtras, repeatSections } from './repeatRows';
@@ -42,7 +43,8 @@ export function docAutoNumberCells(template: Sheet | null | undefined, fieldValu
 export function keepOwnAutoNumbers<T extends Record<string, unknown>>(template: Sheet | null | undefined, fieldValues: T, own: Record<string, unknown> | null | undefined): T {
   const cells = docAutoNumberCells(template, fieldValues);
   if (!cells.length) return fieldValues;
-  const mine = new Set(docAutoNumberCells(template, own ?? {}).map((x) => readSheetValues(own?.[SHEET_VALUES_KEY])[x.key]).filter(Boolean));
+  // 저장된 문서의 칸 값 전체와 견준다 — 번호 칸의 '자리'로 찾으면 표 모양을 고치거나 줄 수가 바뀐 문서에서 자기 번호를 못 찾는다
+  const mine = new Set(Object.values(readSheetValues(own?.[SHEET_VALUES_KEY])).filter(Boolean));
   const values = { ...readSheetValues(fieldValues[SHEET_VALUES_KEY]) };
   let changed = false;
   cells.forEach((x) => {
@@ -51,5 +53,9 @@ export function keepOwnAutoNumbers<T extends Record<string, unknown>>(template: 
       changed = true;
     }
   });
-  return changed ? { ...fieldValues, [SHEET_VALUES_KEY]: JSON.stringify(values) } : fieldValues;
+  if (!changed) return fieldValues;
+  const next: Record<string, unknown> = { ...fieldValues, [SHEET_VALUES_KEY]: JSON.stringify(values) };
+  // 번호를 문서번호로 보이게 하던 값도 함께 — 남의 문서번호가 목록에 보이지 않게(상신 때 새 번호로 다시 채워진다)
+  if (next[DOC_NO_VALUE_KEY] && next[DOC_NO_VALUE_KEY] !== own?.[DOC_NO_VALUE_KEY]) delete next[DOC_NO_VALUE_KEY];
+  return next as T;
 }

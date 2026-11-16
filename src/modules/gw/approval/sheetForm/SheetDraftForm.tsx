@@ -611,6 +611,10 @@ export function SheetDraftForm({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sheet]);
 
+  // 관련 문서 값 가져오기가 쓰는 것 — 훅이라 아래 조기 반환보다 위에 둔다(틀을 읽기 전·후 렌더의 훅 개수가 같아야 한다)
+  const latest = useRef<{ tplSheet: typeof tplSheet; extras: typeof extras; rawValues: typeof rawValues; refs: typeof refs } | null>(null);
+  const importing = useRef(false);
+
   if (isLoading) return <div className="py-10 text-center text-[12px] text-[#888]">서식을 불러오는 중…</div>;
   if (error || !sheet) return <div className="py-10 text-center text-[12px] text-rose-600">서식 틀(v{version})을 읽지 못했습니다.</div>;
 
@@ -635,18 +639,16 @@ export function SheetDraftForm({
   };
 
   /** 관련 문서의 이름 붙은 칸 값을 같은 이름 칸으로 복사 */
-  // 원본 문서를 읽는 동안에도 기안자가 계속 쓸 수 있다 — 읽고 난 뒤에는 그때의 값에 얹는다
-  const latest = useRef({ tplSheet, extras, rawValues, refs });
+  // 원본 문서를 읽는 동안에도 기안자가 계속 쓸 수 있다 — 읽고 난 뒤에는 그때의 값(latest)에 얹는다
   latest.current = { tplSheet, extras, rawValues, refs };
-  const importing = useRef(false);
   const importFrom = async (src: RelatedSource) => {
     if (!tplSheet || importing.current) return;
     importing.current = true;
     const named = await src.load().catch(() => null);
     importing.current = false;
     if (!named) return alert(`'${src.label}' 문서를 읽지 못했습니다.`);
+    if (!latest.current?.tplSheet) return;
     const { tplSheet: tpl, extras: ex, rawValues: raw, refs: rf } = latest.current;
-    if (!tpl) return;
     const res = importNamed(tpl, ex, readSheetValues(raw), rf, named);
     if (!res.filled.length) return alert(`'${src.label}'에는 이 서식과 같은 이름의 칸이 없습니다.`);
     if (!confirm(`'${src.label}'에서 ${res.filled.join(', ')} 값을 가져옵니다.

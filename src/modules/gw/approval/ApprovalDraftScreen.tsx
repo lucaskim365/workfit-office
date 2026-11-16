@@ -1184,6 +1184,9 @@ function ApprovalDraftInner({
 
   const isResubmit = !!editDoc && editDoc.status !== '임시저장';
 
+  /** 시트 문서 값에서 이 문서가 받지 않은 자동번호를 뺀다 */
+  const ownNumbers = (v: typeof values) => keepOwnAutoNumbers(readOwnSheet(v[SHEET_OWN_KEY]) ?? sheetTpl?.sheet, v, editDoc?.fieldValues);
+
   const buildInput = (): ApprovalDraftInput => {
     let leave: LeaveForm | null = null;
     if (linkCode === '휴가') {
@@ -1255,10 +1258,10 @@ function ApprovalDraftInner({
         sheetVersion === null ? form?.fields : [],
         isOvertimeAutoFill && overtimeFill
           ? markOvertimeTimes(values, overtimeFill)
-          : isSheetHolidayWork && sheetHoliday.fill
+          : isSheetHolidayWork && sheetHoliday.fill && sheetHoliday.filledDate === String(values['workDate'] ?? '')
             ? // 시트 휴일근무 — 근무 구분(휴일·연장)과 근태 기록의 시각을 문서에 남긴다(시각 칸이 없는 서식도 대체휴무가 지급되게)
               {
-                ...values,
+                ...ownNumbers(values),
                 workKind: sheetHoliday.fill.workKind,
                 // 늘 근태 기록 값 — 문서에 남아 있던 시각(날짜를 바꾸기 전 것)을 쓰지 않는다
                 workStart: sheetHoliday.fill.workStart,
@@ -1266,7 +1269,7 @@ function ApprovalDraftInner({
               }
             : // 시트 문서 — 자동번호는 이 문서가 받은 것만(보관본을 불러와 다른 문서의 번호가 넘어오지 않게)
               sheetVersion !== null
-              ? keepOwnAutoNumbers(readOwnSheet(values[SHEET_OWN_KEY]) ?? sheetTpl?.sheet, values, editDoc?.fieldValues)
+              ? ownNumbers(values)
               : values
       ),
       attachments,

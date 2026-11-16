@@ -53,3 +53,16 @@ test('이 문서가 받은 번호만 남긴다 — 다른 문서의 번호가 �
   // 임시저장 문서에 다른 문서의 보관본을 불러온 경우 — 지운다
   assert.deepEqual(JSON.parse(keepOwnAutoNumbers(s, withNo('PO-0009'), withNo('PO-0001'))[SHEET_VALUES_KEY]), { [memoKey]: '메모' });
 });
+
+test('이 문서가 받은 번호 — 표 모양을 고쳐 번호 칸 자리가 달라져도 자기 번호는 남고, 남의 문서번호 표시는 지운다', () => {
+  let s = createSheet(3, 2);
+  s = setCellMeta(s, APPROVAL_NS.autoNo, 2, 1, DEFAULT_AUTO_NUMBER); // 지금 틀: 번호 칸이 3행(위에 행을 넣은 뒤)
+  const now = cellKey(2, s.cols[1]);
+  const before = cellKey(1, s.cols[1]); // 저장된 문서에서는 2행에 있었다
+  const own = { [SHEET_VALUES_KEY]: JSON.stringify({ [before]: 'PO-0001' }), __docNo: 'PO-0001' };
+  const cur = { [SHEET_VALUES_KEY]: JSON.stringify({ [now]: 'PO-0001' }), __docNo: 'PO-0001' };
+  assert.equal(keepOwnAutoNumbers(s, cur, own), cur, '자리가 달라도 같은 번호면 그대로');
+  const foreign = keepOwnAutoNumbers(s, { [SHEET_VALUES_KEY]: JSON.stringify({ [now]: 'PO-0009' }), __docNo: 'PO-0009' }, own) as Record<string, unknown>;
+  assert.deepEqual(JSON.parse(String(foreign[SHEET_VALUES_KEY])), {});
+  assert.equal(foreign.__docNo, undefined);
+});

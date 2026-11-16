@@ -12,7 +12,7 @@ export interface ConditionField {
 /**
  * 규칙 조건으로 고를 수 있는 항목 — 기존 양식의 '선택' 항목 + 그 서식 최신 시트의 이름 붙은 선택 칸.
  * 처음부터 시트로 만든 서식은 항목 목록이 비어 있어 시트에서만 나온다.
- * 기존 양식에 시트를 붙인 서식은 칸 이름이 항목 키와 같으므로 한 번만 넣는다(기존 항목이 먼저)
+ * 기존 양식에 시트를 붙인 서식은 칸 이름이 항목 키와 같으므로 한 번만 넣고, 고를 항목은 둘을 합친다(기존 항목이 먼저)
  */
 export function routeConditionFields(form: Pick<ApprovalForm, 'fields'> | null | undefined, sheet: Sheet | null | undefined): ConditionField[] {
   const out: ConditionField[] = (form?.fields ?? [])
@@ -20,7 +20,10 @@ export function routeConditionFields(form: Pick<ApprovalForm, 'fields'> | null |
     .map((f) => ({ key: f.key, label: f.label, options: f.options ?? [] }));
   if (sheet) {
     routeConditionSources(sheet).forEach((src) => {
-      if (!out.some((f) => f.key === src.key)) out.push(src);
+      const known = out.find((f) => f.key === src.key);
+      if (!known) return void out.push(src);
+      // 같은 키 — 시트에서 더한 항목도 고를 수 있게 합친다(시트로 기안을 켠 서식은 시트 쪽 항목이 실제 값)
+      known.options = [...new Set([...known.options, ...src.options])];
     });
   }
   return out;

@@ -330,9 +330,12 @@ export function SheetEditor({
   const endComposition = () => {
     if (!composingRef.current) return;
     composingRef.current = false;
-    swallowUntilRef.current = performance.now() + 150;
-    // 초점을 잠깐 떼면 입력기가 조합을 그 자리에서 확정한다(초점은 focusGrid 가 다시 준다)
-    cellInputRef.current?.blur();
+    // 사람이 다음 글자를 치기엔 너무 짧은 틈만 — 빠르게 이어 치는 다음 칸 첫 글자는 버리지 않는다
+    swallowUntilRef.current = performance.now() + 40;
+    // 초점을 뗐다가 바로 돌려주면 입력기가 조합을 그 자리에서 확정한다(초점이 없는 틈에 친 글쇠가 사라지지 않게 곧바로 되돌린다)
+    const el = cellInputRef.current;
+    el?.blur();
+    el?.focus({ preventScroll: true });
   };
 
   const commitEdit = (move?: { dr: number; dc: number }) => {

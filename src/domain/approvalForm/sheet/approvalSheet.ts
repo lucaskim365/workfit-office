@@ -784,7 +784,9 @@ export function routeConditionSources(s: Sheet): RouteConditionSource[] {
   topLevelNamedCells(s).forEach(({ key, name, r, c }) => {
     const input = s.cellMeta[APPROVAL_NS.input]?.[key] as CellInput | undefined;
     if (!input || input.type !== 'select' || out.has(name)) return;
-    const options = [...new Set((input.options ?? []).map((o) => o.trim()).filter(Boolean))];
+    // 종속 선택 칸은 기준 칸 값마다 항목이 따로 — 갈래 항목을 모두 모은다. '직접입력'은 문서에 쓴 글자가 들어가 조건 값이 못 된다
+    const all = input.depends ? input.depends.branches.flatMap((b) => b.options) : (input.options ?? []);
+    const options = [...new Set(all.map((o) => o.trim()).filter((o) => o && !isDirectInputOption(o)))];
     out.set(name, { key: name, label: cellCaption(s, r, c), options });
   });
   return [...out.values()];

@@ -27,7 +27,7 @@ test('규칙 조건 후보 — 처음부터 시트로 만든 서식(항목 없�
   ]);
 });
 
-test('규칙 조건 후보 — 기존 양식은 선택 항목만, 시트를 붙였으면 같은 키는 한 번(기존 항목 먼저)·새 칸은 더함', () => {
+test('규칙 조건 후보 — 기존 양식은 선택 항목만, 시트를 붙였으면 같은 키는 한 번(항목은 합침, 기존 항목 먼저)·새 칸은 더함', () => {
   const legacy = form([
     { key: 'expenseItem', label: '경비 항목', type: '선택', options: ['식대', '회의비'] },
     { key: 'memo', label: '메모', type: '텍스트' },
@@ -35,7 +35,7 @@ test('규칙 조건 후보 — 기존 양식은 선택 항목만, 시트를 붙�
   ]);
   assert.deepEqual(routeConditionFields(legacy, null), [{ key: 'expenseItem', label: '경비 항목', options: ['식대', '회의비'] }]);
   assert.deepEqual(routeConditionFields(legacy, sheet()), [
-    { key: 'expenseItem', label: '경비 항목', options: ['식대', '회의비'] },
+    { key: 'expenseItem', label: '경비 항목', options: ['식대', '회의비', '교통비'] }, // 시트에서 더한 항목(교통비)도 고를 수 있게 합친다
     { key: 'payBy', label: '결제 수단', options: ['법인카드', '개인카드'] },
   ]);
   assert.deepEqual(routeConditionFields(null, null), []);
