@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createSheet, setCellMeta } from '@/lib/sheet/core';
 import { APPROVAL_NS, setCellName } from './approvalSheet';
-import { leaveCellValues, leaveDocExtras } from './leaveSheet';
+import { leaveCellValues, leaveDocExtras, leaveFromValues } from './leaveSheet';
 import type { LeaveDocValues } from '@/domain/leave/leavePicker';
 
 const picked: LeaveDocValues = {
@@ -48,4 +48,15 @@ test('시트 휴가원 — 문서 값은 기존 양식 휴가원과 같은 키�
     leaveUnit: '오후반차',
     quarterStart: '',
   });
+});
+
+test('시트 휴가원 — 고른 휴가를 문서 값에서 되살린다(다시 연 문서에서도 끝 날짜·일수·반차 단위가 지워지지 않게)', () => {
+  const v = { ...picked, leaveType: '대체휴무', period__end: '2026-11-25', leaveUnit: '오후반차', days: 0.5 };
+  assert.deepEqual(leaveFromValues(leaveDocExtras(v)), v);
+  // 아직 안 고른 문서(휴가 종류나 시작일이 없음)
+  assert.equal(leaveFromValues({ period: '2026-11-23' }), null);
+  assert.equal(leaveFromValues({ leaveType: '연차' }), null);
+  // 옛 문서 — 일수가 비어 있으면 0(다시 계산)
+  assert.equal(leaveFromValues({ leaveType: '연차', period: '2026-11-23', period__days: '' })?.days, 0);
+  assert.equal(leaveDocExtras({ ...picked, days: 0 }).period__days, '');
 });

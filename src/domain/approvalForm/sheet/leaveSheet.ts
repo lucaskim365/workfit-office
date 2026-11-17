@@ -33,13 +33,34 @@ export function leaveCellValues(s: Sheet, v: LeaveDocValues): Record<string, str
   return out;
 }
 
+/**
+ * 문서 값에서 고른 휴가를 되살린다 — 휴가 종류와 시작일이 있을 때만(없으면 아직 안 고른 것).
+ * 고른 값을 화면 상태가 아니라 문서 값에서 읽으면, 다시 연 문서·보관본 불러오기·서식 바꾸기에서도 늘 문서 값과 같다
+ */
+export function leaveFromValues(values: Record<string, unknown>): LeaveDocValues | null {
+  const s = (k: string) => String(values[k] ?? '');
+  if (!s('leaveType') || !s('period')) return null;
+  const days = Number(s('period__days'));
+  return {
+    leaveType: s('leaveType'),
+    period: s('period'),
+    period__end: s('period__end') || s('period'),
+    startTime: s('startTime'),
+    endTime: s('endTime'),
+    leaveUnit: s('leaveUnit'),
+    quarterStart: s('quarterStart'),
+    days: Number.isFinite(days) && days > 0 ? days : 0,
+  };
+}
+
 /** 문서 값으로 남길 것 — 시트 칸과 상관없이 휴가 차감·근태·캘린더가 읽는 값(기존 양식 휴가원이 넣는 것과 같음) */
 export function leaveDocExtras(v: LeaveDocValues): Record<string, string> {
   return {
     leaveType: v.leaveType,
     period: v.period,
     period__end: v.period__end || v.period,
-    period__days: String(v.days),
+    // 일수를 모르면(옛 문서) 빈 값 — 상신 때 기간·종류로 다시 계산한다
+    period__days: v.days > 0 ? String(v.days) : '',
     startTime: v.startTime,
     endTime: v.endTime,
     leaveUnit: v.leaveUnit,

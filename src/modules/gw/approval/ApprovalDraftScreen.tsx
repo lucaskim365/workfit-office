@@ -66,8 +66,8 @@ import { isRestDay } from '@/shared/ui/form/datePickerGrid';
 import { nowLocalIso } from '@/shared/lib/datetime';
 import { formatMinutes, substituteUseMinutes } from '@/domain/leave/substituteLedger';
 import { LeavePeriodPicker, rangeLabel } from './components/leave/LeavePeriodPicker';
-import { pickOfDocValues, type LeaveDocValues, type WorkDay } from '@/domain/leave/leavePicker';
-import { LEAVE_PICKER_NAMES, leaveCellValues, leaveDocExtras } from '@/domain/approvalForm/sheet/leaveSheet';
+import { pickOfDocValues, type WorkDay } from '@/domain/leave/leavePicker';
+import { LEAVE_PICKER_NAMES, leaveCellValues, leaveDocExtras, leaveFromValues } from '@/domain/approvalForm/sheet/leaveSheet';
 import { useCommutePolicy } from '@/features/commute/useCommutePolicy';
 
 /**
@@ -1057,14 +1057,18 @@ function ApprovalDraftInner({
     breakEndTime: commutePolicy?.breakEndTime ?? '12:30',
   };
   const [leavePickerOpen, setLeavePickerOpen] = useState(false);
-  /** 이번에 창에서 고른 값 — 시트 칸에 넣고(systemValues) 문서 값에도 남긴다(onFields). 고르기 전에는 문서에 있던 값 그대로 */
-  const [leavePicked, setLeavePicked] = useState<LeaveDocValues | null>(null);
+  /**
+   * 고른 휴가 — 화면 상태가 아니라 문서 값에서 읽는다(창에서 적용하면 문서 값에 넣는다). 그래서 다시 연 문서·보관본 불러오기·
+   * 서식 바꾸기에서도 늘 문서 값과 같고, 시트에 칸이 없는 값(끝 날짜·일수·반차 단위 등)도 다음 저장 때 지워지지 않는다
+   */
+  const leavePicked = isSheetLeave ? leaveFromValues(values) : null;
+  const leaveTpl = readOwnSheet(values[SHEET_OWN_KEY]) ?? sheetTpl?.sheet;
   const sheetSystemValues = (link: string, linked: Record<string, string>) => {
-    if (!isSheetLeave || !leavePicked || !sheetTpl?.sheet) return sheetHoliday.systemValues(link, linked);
-    const cells = leaveCellValues(readOwnSheet(values[SHEET_OWN_KEY]) ?? sheetTpl.sheet, leavePicked);
+    if (!leavePicked || !leaveTpl) return sheetHoliday.systemValues(link, linked);
+    const cells = leaveCellValues(leaveTpl, leavePicked);
     // 휴가 일수 칸이 있으면 고른 기간으로 계산한 값이 들어가게 — 고른 값으로 계산한다
     const picked = { ...linked, leaveType: leavePicked.leaveType, period: leavePicked.period, period__end: leavePicked.period__end || leavePicked.period };
-    return { ...sheetHoliday.systemValues(link, picked), ...cells, period__days: String(leavePicked.days) };
+    return { ...sheetHoliday.systemValues(link, picked), ...cells, ...(leavePicked.days > 0 ? { period__days: String(leavePicked.days) } : {}) };
   };
   const sheetSystemKey = isSheetLeave ? `${sheetHoliday.systemKey ?? ''}|${leavePicked ? JSON.stringify(leavePicked) : ''}` : sheetHoliday.systemKey;
   // 관련 문서 값 가져오기 — 관련 문서로 고른 문서의 이름 붙은 칸 값(시트 문서) 또는 필드 라벨 값(옛 서식 문서)
@@ -1875,7 +1879,7 @@ function ApprovalDraftInner({
                   values={values}
                   onFields={(fields) => {
                     // 시트 휴가원 — 창에서 고른 값(반차 단위·반반차 시작·일수 등)은 시트에 칸이 없어도 문서 값으로 남긴다
-                    setVals(isSheetLeave && leavePicked ? { ...fields, ...leaveDocExtras(leavePicked) } : fields);
+                    setVals(leavePicked ? { ...fields, ...leaveDocExtras(leavePicked) } : fields);
                     // 금액키 칸 → 문서 금액(결재선 규칙의 금액 조건이 읽음)
                     if (fields.amount !== undefined) setAmount(fields.amount.replace(/[^0-9.-]/g, ''));
                   }}
@@ -1969,7 +1973,6 @@ function ApprovalDraftInner({
           }}
           onClose={() => setLeavePickerOpen(false)}
           onApply={(v) => {
-            setLeavePicked(v);
             setVals(leaveDocExtras(v));
             setLeavePickerOpen(false);
           }}
