@@ -27,6 +27,7 @@ import {
   draftInputOf,
   invalidNumberCells,
   formulaErrorCells,
+  nameLabel,
   requiredMissing,
   completedDateRows,
   conditionHiddenRows,
@@ -664,7 +665,7 @@ export function SheetDraftForm({
     const { tplSheet: tpl, extras: ex, rawValues: raw, refs: rf } = latest.current;
     const res = importNamed(tpl, ex, readSheetValues(raw), rf, named);
     if (!res.filled.length) return alert(`'${src.label}'에는 이 서식과 같은 이름의 칸이 없습니다.`);
-    if (!confirm(`'${src.label}'에서 ${res.filled.join(', ')} 값을 가져옵니다.
+    if (!confirm(`'${src.label}'에서 ${res.filled.map(nameLabel).join(', ')} 값을 가져옵니다.
 이미 쓴 값은 가져온 값으로 바뀝니다.`)) return;
     emit(sheetWith(tpl, res), res.extras, res.refs);
   };
