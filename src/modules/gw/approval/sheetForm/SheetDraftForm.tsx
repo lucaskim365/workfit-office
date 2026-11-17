@@ -26,6 +26,7 @@ import {
   applyValues,
   draftInputOf,
   invalidNumberCells,
+  formulaErrorCells,
   requiredMissing,
   completedDateRows,
   conditionHiddenRows,
@@ -472,6 +473,8 @@ export interface SheetDraftFormProps {
   onFields: (fields: Record<string, string>) => void;
   /** 상신 전 검사용 — 숫자 칸에 숫자가 아닌 값이 든 칸 주소 */
   onIssues?: (invalidCells: string[]) => void;
+  /** 계산이 안 되는 수식 칸(#오류)의 이름 — 상신 전 검사용 */
+  onFormulaErrors?: (labels: string[]) => void;
   /** 저장된 서식 버전 대신 이 틀로 — 서식 편집기의 '기안 미리보기'(편집 중인 틀, 저장 안 함) */
   template?: Sheet;
   /** 자동 채우기 '기안 정보' 칸 값(기안자·부서·기안일·문서번호) */
@@ -517,6 +520,7 @@ export function SheetDraftForm({
   values,
   onFields,
   onIssues,
+  onFormulaErrors,
   template,
   relatedSources = [],
   link: linkProp = null,
@@ -613,6 +617,7 @@ export function SheetDraftForm({
 
   useEffect(() => {
     if (sheet) onIssues?.(invalidNumberCells(sheet));
+    if (sheet) onFormulaErrors?.(formulaErrorCells(sheet));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sheet]);
 

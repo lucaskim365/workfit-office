@@ -3,7 +3,7 @@
  * - input: 입력 칸 종류(CellInput) / name: 칸 이름(연동 키) / bind: 데이터 불러오기(BindSource)
  * - lock: 기안자 수정 잠금 / secret: 비공개(칸·행·열) / seal: 회사 직인 칸 — 값은 모두 true
  */
-import { applyStyle, cellKey, colLetter, mergeRange, parseNumber, pasteTsv, recalculate, setCellMeta, setCellValue, setRowMeta, type CellRange, type Sheet } from '@/lib/sheet/core';
+import { FORMULA_ERROR, applyStyle, cellKey, colLetter, mergeRange, parseNumber, pasteTsv, recalculate, setCellMeta, setCellValue, setRowMeta, type CellRange, type Sheet } from '@/lib/sheet/core';
 import { LEAVE_TYPE_OPTIONS, calculateLeaveDays, isHalfDayLeave, isQuarterDayLeave } from '@/domain/leave/policy';
 import { SHEET_AUTO_NO_NS } from '@/domain/approvalForm/sheetAutoNumber';
 import { autoNumberConfigSchema, type AutoNumberConfig } from '@/domain/approvalForm/autoNumber';
@@ -823,6 +823,44 @@ export function requiredMissing(s: Sheet): string[] {
     const input = draftInputOf(s, r, c);
     if (!input || (input.depends && draftOptions(s, input).length === 0)) return;
     if (String(s.rows[r]?.[s.cols[c]] ?? '').trim() === '') out.push(cellCaption(s, r, c));
+  });
+  return [...new Set(out)];
+}
+
+/**
+ * 수식 칸의 이름표 — 왼쪽, 없으면 위쪽의 글자 칸. 둘레가 다른 계산 결과(숫자·#오류)나 입력 칸이라
+ * cellCaption 처럼 바로 옆 값을 쓰면 '0' 같은 값이 이름이 되므로, 수식·숫자 칸과 같은 행의 입력 칸은 건너뛴다(표 머리 '공급가액' 등)
+ */
+function formulaCaption(s: Sheet, r: number, c: number): string {
+  const label = (r0: number, c0: number, skipInput: boolean) => {
+    // 병합 칸 안이면 그 병합의 대표(왼쪽 위) 칸 글자로 — 표 머리는 흔히 여러 열을 합쳐 놓는다
+    const m = s.merges.find((x) => r0 >= x.startRow && r0 < x.startRow + x.rowSpan && c0 >= x.startCol && c0 < x.startCol + x.colSpan);
+    const rr = m ? m.startRow : r0;
+    const cc = m ? m.startCol : c0;
+    const t = String(s.rows[rr]?.[s.cols[cc]] ?? '').trim();
+    if (!t || t === FORMULA_ERROR || parseNumber(t) !== null) return '';
+    if (s.formulas[cellKey(rr, s.cols[cc])] !== undefined || (skipInput && approvalCellProps(s, rr, cc).input)) return '';
+    return t.replace(/\s+/g, ' ');
+  };
+  // 같은 행 왼쪽은 기안자가 쓴 값일 수 있어 입력 칸을 건너뛰고, 위쪽(표 머리)은 열 전체가 입력 칸이어도 쓴다
+  for (let cc = c - 1; cc >= 0; cc--) if (label(r, cc, true)) return label(r, cc, true);
+  for (let rr = r - 1; rr >= 0; rr--) if (label(rr, c, false)) return label(rr, c, false);
+  return cellAddress(r, c);
+}
+
+/**
+ * 계산이 안 되는 수식 칸(#오류)의 이름 — 숫자 자리에 글자가 들어가면 생긴다(예: 수량 칸에 '세 개').
+ * 빈 칸·0 나누기는 오류가 아니라서, 서식 처음 모양에는 없다. 상신 전에 알려 준다(조건으로 숨은 행은 뺀다)
+ */
+export function formulaErrorCells(s: Sheet): string[] {
+  const out: string[] = [];
+  const hiddenRows = conditionHiddenRows(s);
+  Object.keys(s.formulas).forEach((key) => {
+    const i = key.indexOf(':');
+    const r = Number(key.slice(0, i));
+    const c = s.cols.indexOf(key.slice(i + 1));
+    if (c < 0 || r >= s.rows.length || hiddenRows.has(r)) return;
+    if (s.rows[r]?.[s.cols[c]] === FORMULA_ERROR) out.push(formulaCaption(s, r, c));
   });
   return [...new Set(out)];
 }

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createSheet, cellKey, type Sheet } from '@/lib/sheet/core';
-import { CHECK_MARK, hasAmountKeyCell, routeConditionSources, conditionHiddenRows, conditionMatches, conditionSources, requiredMissing, rowConditionOf, setRowCondition, draftInfoValue, linkFieldValues, linkIssues, linkSystemValues, nameLabel, SHEET_VALUES_KEY, SHEET_VERSION_KEY, draftInputOf, invalidNumberCells, isSecretCell, readSheetValues, sheetDocFields, APPROVAL_NS, approvalCellProps, setApprovalProp, setCellName, validateApprovalSheet, applyValues, canMergeApprovalRange, extractValues, isDraftEditable, isStructureLocked, namedValues, pasteDraftTsv, setApprovalCellValue } from './approvalSheet';
+import { createSheet, cellKey, recalculate, type Sheet } from '@/lib/sheet/core';
+import { CHECK_MARK, formulaErrorCells, hasAmountKeyCell, routeConditionSources, conditionHiddenRows, conditionMatches, conditionSources, requiredMissing, rowConditionOf, setRowCondition, draftInfoValue, linkFieldValues, linkIssues, linkSystemValues, nameLabel, SHEET_VALUES_KEY, SHEET_VERSION_KEY, draftInputOf, invalidNumberCells, isSecretCell, readSheetValues, sheetDocFields, APPROVAL_NS, approvalCellProps, setApprovalProp, setCellName, validateApprovalSheet, applyValues, canMergeApprovalRange, extractValues, isDraftEditable, isStructureLocked, namedValues, pasteDraftTsv, setApprovalCellValue } from './approvalSheet';
 import { setCellMeta, setCellValue, setRowMeta } from '@/lib/sheet/core';
 
 function base(): Sheet {
@@ -502,4 +502,17 @@ test('결재선 규칙이 읽는 칸 — 금액 키 칸이 있는지, 선택 값
   assert.equal(hasAmountKeyCell(inRepeat), false);
   assert.deepEqual(routeConditionSources(inRepeat), []);
   assert.ok(!('amount' in sheetDocFields(inRepeat, 'f@v1')));
+});
+
+test('계산이 안 되는 수식 칸 — 숫자 자리에 글자가 들면 이름을, 빈 칸·숫자는 괜찮음', () => {
+  let s = createSheet(2, 3);
+  const [a, b, c] = s.cols;
+  s = setCellValue(s, 0, 0, '수량');
+  s = setCellValue(s, 0, 2, '공급가액');
+  s = { ...s, formulas: { [cellKey(1, c)]: '=A2*B2' } };
+  s = setCellMeta(setCellMeta(s, APPROVAL_NS.input, 1, 0, { type: 'text' }), APPROVAL_NS.input, 1, 1, { type: 'number' });
+  assert.deepEqual(formulaErrorCells(recalculate(s)), []); // 빈 칸
+  assert.deepEqual(formulaErrorCells(recalculate(setCellValue(setCellValue(s, 1, 0, '2'), 1, 1, '1500'))), []);
+  assert.deepEqual(formulaErrorCells(recalculate(setCellValue(setCellValue(s, 1, 0, '세 개'), 1, 1, '1500'))), ['공급가액']); // 옆 입력 칸 값이 아니라 표 머리
+  void a; void b;
 });

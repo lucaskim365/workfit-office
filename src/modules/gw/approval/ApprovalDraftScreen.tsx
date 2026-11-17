@@ -1044,6 +1044,7 @@ function ApprovalDraftInner({
   const sheetIssuesRef = useRef<string[]>([]);
   // 시트 서식의 비어 있는 필수 칸 이름표 — 상신 때만 막는다(임시 저장은 됨)
   const sheetRequiredRef = useRef<string[]>([]);
+  const sheetFormulaErrorsRef = useRef<string[]>([]);
   // 시트에 든 문서 정보 칸(기안자·제목 등)은 문서 머리에서 뺀다 — 같은 틀을 SheetDraftForm 도 읽는다(같은 조회, 한 번만 받음)
   const { data: sheetTpl, isFetching: sheetTplLoading, isError: sheetTplFailed } = useFormVersionSheet(form && sheetVersion !== null ? form.id : null, sheetVersion);
   // 시트로 쓰는 문서는 기존 양식 항목을 그리지 않는다 — 기존 서식에 시트를 붙여도 항목 목록(옛 문서용)은 남아 있으므로
@@ -1362,6 +1363,11 @@ function ApprovalDraftInner({
     }
     if (forSubmit && sheetVersion !== null && sheetRequiredRef.current.length > 0) {
       return `필수 칸을 채워 주세요: ${sheetRequiredRef.current.slice(0, 5).join(', ')}${sheetRequiredRef.current.length > 5 ? ' 외' : ''}`;
+    }
+    // 계산이 안 되는 칸(#오류)이 있으면 상신하지 않는다 — 금액이 '#오류'인 채로 결재·매입 결제 대장에 들어가지 않게(임시저장은 된다)
+    if (forSubmit && sheetVersion !== null && sheetFormulaErrorsRef.current.length > 0) {
+      const list = `${sheetFormulaErrorsRef.current.slice(0, 5).join(', ')}${sheetFormulaErrorsRef.current.length > 5 ? ' 외' : ''}`;
+      return `계산이 안 되는 칸이 있습니다: ${list}\n수량·단가처럼 계산에 쓰이는 칸에 숫자가 아닌 글자가 들어갔는지 확인해 주세요.`;
     }
     if (sheetVersion !== null && sheetIssuesRef.current.length > 0) {
       return `숫자 칸에 숫자가 아닌 값이 있습니다: ${sheetIssuesRef.current.slice(0, 5).join(', ')}`;
@@ -1899,6 +1905,7 @@ function ApprovalDraftInner({
                   }}
                   onIssues={(cells) => (sheetIssuesRef.current = cells)}
                   onRequired={(labels) => (sheetRequiredRef.current = labels)}
+                  onFormulaErrors={(labels) => (sheetFormulaErrorsRef.current = labels)}
                   relatedSources={relatedSources}
                   systemValues={sheetSystemValues}
                   // 휴일근무 — 출근·퇴근 시각·근무 시간은 근태 기록에서만(고칠 수 없음), 받아 오면 칸에 다시 넣는다
