@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { DEFAULT_COL_WIDTH, SheetEditor, SheetView, cellKey, displayValue, parseNumber, recalculate, setCellValue, shrinkFontSize, type Sheet } from '@/lib/sheet';
-import { Building2, Download, Minus, Plus, Table2, Trash2, X } from 'lucide-react';
+import { Building2, CalendarDays, Download, Minus, Plus, Table2, Trash2, X } from 'lucide-react';
 import { SHEET_OWN_KEY, canDraftDelete, draftCanMerge, draftInsertCol, draftEditIssues, draftEditPaste, draftEditSetValue, isProtectedCell, keepRefsAfterEdit, readOwnSheet } from '@/domain/approvalForm/sheet/ownSheet';
 import { DateInput } from '@/shared/ui/form/DateInput';
 import { nowLocalIso } from '@/shared/lib/datetime';
@@ -496,6 +496,11 @@ export interface SheetDraftFormProps {
   lockedNames?: readonly string[];
   /** systemValues 결과가 바뀌었음을 알리는 값 — 바뀌면 시트에 다시 넣는다(근태 기록을 늦게 받아 온 경우) */
   systemKey?: string;
+  /**
+   * 누르면 선택 창이 뜨는 이름 붙은 칸 — 휴가원의 휴가 기간·휴가 종류(기존 양식과 같은 '사용기간 및 휴가 정보 선택' 창).
+   * 이 칸들은 기안자가 직접 고치지 않고, 고른 값은 systemValues 로 들어온다
+   */
+  pickers?: { names: readonly string[]; open: () => void; placeholder: string; /** 칸 대신 보일 글(이름별) — 예: 사용기간에 요일·시각까지 */ labels?: Record<string, string> };
 }
 
 export interface RelatedSource {
@@ -523,6 +528,7 @@ export function SheetDraftForm({
   onRequired,
   lockedNames,
   systemKey,
+  pickers,
 }: SheetDraftFormProps) {
   const fetched = useFormVersionSheet(template ? null : formId, template ? null : version);
   const loaded = useMemo(() => (template ? { sheet: template } : fetched.data), [template, fetched.data]);
@@ -613,6 +619,8 @@ export function SheetDraftForm({
   // 관련 문서 값 가져오기가 쓰는 것 — 훅이라 아래 조기 반환보다 위에 둔다(틀을 읽기 전·후 렌더의 훅 개수가 같아야 한다)
   const latest = useRef<{ tplSheet: typeof tplSheet; extras: typeof extras; rawValues: typeof rawValues; refs: typeof refs } | null>(null);
   const importing = useRef(false);
+  /** 선택 창 칸에 보일 글 — 넘겨받은 것이 있으면 그것(값이 있을 때만) */
+  const shownValue = (name: string) => (pickers?.labels?.[name] ?? "");
 
   // 문서가 고친 틀(표 모양 고치기)을 가졌으면 버전 틀을 못 읽어도 그 틀로 보인다(상신도 그 틀로 검사된다)
   if (isLoading && !sheet) return <div className="py-10 text-center text-[12px] text-[#888]">서식을 불러오는 중…</div>;
@@ -833,6 +841,21 @@ export function SheetDraftForm({
             if (!input) return undefined;
             // 시스템이 채우는 칸 — 글자로만(휴일근로 출근·퇴근 시각·근무 시간은 근태 기록에서)
             const cellName = sheet.cellMeta[APPROVAL_NS.name]?.[cellKey(r, sheet.cols[c])];
+            // 선택 창으로 고르는 칸(휴가원 사용기간·휴가 종류) — 누르면 창, 고른 값만 보인다
+            if (typeof cellName === 'string' && pickers?.names.includes(cellName)) {
+              const shown = (shownValue(cellName) || displayValue(sheet, r, sheet.cols[c]));
+              return (
+                <button
+                  type="button"
+                  onClick={pickers.open}
+                  title="사용기간 및 휴가 정보 선택"
+                  className="flex w-full items-center justify-between gap-1.5 rounded px-1 py-0.5 text-left hover:bg-[#f3f7fe] print:p-0"
+                >
+                  <span className={shown ? '' : 'text-[11px] text-[#999] print:hidden'}>{shown || pickers.placeholder}</span>
+                  <CalendarDays className="h-3.5 w-3.5 shrink-0 text-[#2f6fe4] print:hidden" />
+                </button>
+              );
+            }
             if (typeof cellName === 'string' && lockedNames?.includes(cellName)) {
               const shown = displayValue(sheet, r, sheet.cols[c]);
               return <span title="근태 기록에서 자동으로 채웁니다">{shown || <span className="text-[11px] text-[#999] print:hidden">근태 기록에서 채움</span>}</span>;

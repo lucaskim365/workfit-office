@@ -65,6 +65,10 @@ import { clockOf, markOvertimeTimes, OVERTIME_AUTOFILL_FIELD, type OvertimeFill 
 import { isRestDay } from '@/shared/ui/form/datePickerGrid';
 import { nowLocalIso } from '@/shared/lib/datetime';
 import { formatMinutes, substituteUseMinutes } from '@/domain/leave/substituteLedger';
+import { LeavePeriodPicker, rangeLabel } from './components/leave/LeavePeriodPicker';
+import { pickOfDocValues, type LeaveDocValues, type WorkDay } from '@/domain/leave/leavePicker';
+import { LEAVE_PICKER_NAMES, leaveCellValues, leaveDocExtras } from '@/domain/approvalForm/sheet/leaveSheet';
+import { useCommutePolicy } from '@/features/commute/useCommutePolicy';
 
 /**
  * 브라우저 보관 상태 표시.
@@ -1043,6 +1047,26 @@ function ApprovalDraftInner({
   const isSheetHolidayWork = sheetVersion !== null && linkCode === '휴일근무';
   // 시트 연동 칸의 시스템 값 — 휴가 일수, 휴일근무 출근·퇴근 시각·근무 시간(근태 기록, 고칠 수 없음). 편집기 미리보기와 같은 훅
   const sheetHoliday = useSheetHolidayWork({ active: isSheetHolidayWork, workDate: String(values['workDate'] ?? ''), holidays: holidayList });
+  // 시트 휴가원 — 사용기간·휴가 종류 칸은 기존 양식 휴가원과 같은 '사용기간 및 휴가 정보 선택' 창으로 고른다(화면설계서 V5.8)
+  const isSheetLeave = sheetVersion !== null && linkCode === '휴가';
+  const { policy: commutePolicy } = useCommutePolicy();
+  const leaveDay: WorkDay = {
+    workStartTime: commutePolicy?.workStartTime ?? '08:30',
+    workEndTime: commutePolicy?.workEndTime ?? '17:30',
+    breakStartTime: commutePolicy?.breakStartTime ?? '11:30',
+    breakEndTime: commutePolicy?.breakEndTime ?? '12:30',
+  };
+  const [leavePickerOpen, setLeavePickerOpen] = useState(false);
+  /** 이번에 창에서 고른 값 — 시트 칸에 넣고(systemValues) 문서 값에도 남긴다(onFields). 고르기 전에는 문서에 있던 값 그대로 */
+  const [leavePicked, setLeavePicked] = useState<LeaveDocValues | null>(null);
+  const sheetSystemValues = (link: string, linked: Record<string, string>) => {
+    if (!isSheetLeave || !leavePicked || !sheetTpl?.sheet) return sheetHoliday.systemValues(link, linked);
+    const cells = leaveCellValues(readOwnSheet(values[SHEET_OWN_KEY]) ?? sheetTpl.sheet, leavePicked);
+    // 휴가 일수 칸이 있으면 고른 기간으로 계산한 값이 들어가게 — 고른 값으로 계산한다
+    const picked = { ...linked, leaveType: leavePicked.leaveType, period: leavePicked.period, period__end: leavePicked.period__end || leavePicked.period };
+    return { ...sheetHoliday.systemValues(link, picked), ...cells, period__days: String(leavePicked.days) };
+  };
+  const sheetSystemKey = isSheetLeave ? `${sheetHoliday.systemKey ?? ''}|${leavePicked ? JSON.stringify(leavePicked) : ''}` : sheetHoliday.systemKey;
   // 관련 문서 값 가져오기 — 관련 문서로 고른 문서의 이름 붙은 칸 값(시트 문서) 또는 필드 라벨 값(옛 서식 문서)
   const findDoc = useCachedApprovalLookup();
   const { data: allForms = [] } = useApprovalForms();
@@ -1850,17 +1874,31 @@ function ApprovalDraftInner({
                   version={sheetVersion}
                   values={values}
                   onFields={(fields) => {
-                    setVals(fields);
+                    // 시트 휴가원 — 창에서 고른 값(반차 단위·반반차 시작·일수 등)은 시트에 칸이 없어도 문서 값으로 남긴다
+                    setVals(isSheetLeave && leavePicked ? { ...fields, ...leaveDocExtras(leavePicked) } : fields);
                     // 금액키 칸 → 문서 금액(결재선 규칙의 금액 조건이 읽음)
                     if (fields.amount !== undefined) setAmount(fields.amount.replace(/[^0-9.-]/g, ''));
                   }}
                   onIssues={(cells) => (sheetIssuesRef.current = cells)}
                   onRequired={(labels) => (sheetRequiredRef.current = labels)}
                   relatedSources={relatedSources}
-                  systemValues={sheetHoliday.systemValues}
+                  systemValues={sheetSystemValues}
                   // 휴일근무 — 출근·퇴근 시각·근무 시간은 근태 기록에서만(고칠 수 없음), 받아 오면 칸에 다시 넣는다
                   lockedNames={sheetHoliday.lockedNames}
-                  systemKey={sheetHoliday.systemKey}
+                  systemKey={sheetSystemKey}
+                  pickers={
+                    isSheetLeave
+                      ? {
+                          names: LEAVE_PICKER_NAMES,
+                          open: () => setLeavePickerOpen(true),
+                          placeholder: '눌러서 사용기간·휴가 구분을 고르세요',
+                          // 기존 양식 휴가원과 같은 표시 — 사용기간에 요일과 시각까지
+                          labels: values['period']
+                            ? { period: `${rangeLabel(String(values['period']), String(values['period__end'] || values['period']))} · ${String(values['startTime'] ?? '')}~${String(values['endTime'] ?? '')}` }
+                            : undefined,
+                        }
+                      : undefined
+                  }
                   // 문서 항목 칸(제목·보존연한·공개범위) — 문서 머리와 같은 값을 시트 칸에서 쓴다
                   docFields={{ title, preservationPeriod, visibility }}
                   onDocField={(p) => {
@@ -1909,6 +1947,33 @@ function ApprovalDraftInner({
             }
           />
         </DraftApprovalLineModal>
+      )}
+
+      {/* 시트 휴가원 — 사용기간 및 휴가 정보 선택 창 */}
+      {leavePickerOpen && (
+        <LeavePeriodPicker
+          initial={{
+            from: String(values['period'] ?? ''),
+            to: String(values['period__end'] || values['period'] || ''),
+            pick: values['period'] ? pickOfDocValues(values, leaveDay) : null,
+          }}
+          day={leaveDay}
+          holidays={holidayList}
+          balance={{
+            annualDays: Number(bal?.available ?? bal?.remaining ?? 0),
+            annualGranted: Number(bal?.grant ?? 0),
+            annualUsed: Number(bal?.used ?? 0),
+            substituteMin: Number(bal?.substituteHoliday?.remainingMin ?? 0),
+            substituteTotalMin: Number(bal?.substituteHoliday?.totalMin ?? 0),
+            substituteUsedMin: Number(bal?.substituteHoliday?.usedMin ?? 0),
+          }}
+          onClose={() => setLeavePickerOpen(false)}
+          onApply={(v) => {
+            setLeavePicked(v);
+            setVals(leaveDocExtras(v));
+            setLeavePickerOpen(false);
+          }}
+        />
       )}
 
       {/* 상신 전 확인창 */}
