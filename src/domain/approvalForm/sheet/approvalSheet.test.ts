@@ -516,3 +516,20 @@ test('계산이 안 되는 수식 칸 — 숫자 자리에 글자가 들면 이�
   assert.deepEqual(formulaErrorCells(recalculate(setCellValue(setCellValue(s, 1, 0, '세 개'), 1, 1, '1500'))), ['공급가액']); // 옆 입력 칸 값이 아니라 표 머리
   void a; void b;
 });
+
+test('외근·출장 연동 — 업무 대행자(사용자 ID)·긴급 연락처도 옛 서식처럼 문서 값에', () => {
+  for (const link of ['외근', '국내출장', '해외출장']) {
+    let s = createSheet(3, 2);
+    s = setCellMeta(s, APPROVAL_NS.input, 0, 1, { type: 'date' });
+    s = setCellName(s, 0, 1, 'period');
+    s = setCellMeta(s, APPROVAL_NS.input, 1, 1, { type: 'user' });
+    s = setCellName(s, 1, 1, 'substituteId');
+    s = setCellMeta(s, APPROVAL_NS.input, 2, 1, { type: 'text' });
+    s = setCellName(s, 2, 1, 'emergencyContact');
+    const [, b] = s.cols;
+    s = setCellValue(setCellValue(setCellValue(s, 0, 1, '2026-12-14'), 1, 1, 'testB (테스트)'), 2, 1, '010-1234-5678');
+    const v = linkFieldValues(s, link, { [cellKey(1, b)]: 'U026' });
+    assert.equal(v.substituteId, 'U026', link);
+    assert.equal(v.emergencyContact, '010-1234-5678', link);
+  }
+});

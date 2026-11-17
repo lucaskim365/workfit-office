@@ -1206,6 +1206,9 @@ export const LINK_TYPES: LinkTypeDef[] = [
       { key: 'purpose', label: '목적' },
       { key: 'transportation', label: '교통수단' },
       { key: 'companions', label: '동행자', userIdOrText: true, hint: '사람(여러 명) 칸으로 두면 동행자 일정에도 올라갑니다' },
+      // 옛 외근·출장 서식에 있던 항목 — 외근·출장 현황의 연락처, 일정의 업무 대행자
+      { key: 'substituteId', label: '업무 대행자', userId: true, hint: '사람 칸' },
+      { key: 'emergencyContact', label: '긴급 연락처' },
       MEMO,
     ],
   },
@@ -1221,6 +1224,9 @@ export const LINK_TYPES: LinkTypeDef[] = [
         { key: 'purpose', label: '목적' },
         { key: 'transportation', label: '교통수단' },
         { key: 'companions', label: '동행자', userIdOrText: true, hint: '사람(여러 명) 칸으로 두면 동행자 일정에도 올라갑니다' },
+        // 옛 외근·출장 서식에 있던 항목 — 외근·출장 현황의 연락처, 일정의 업무 대행자
+        { key: 'substituteId', label: '업무 대행자', userId: true, hint: '사람 칸' },
+        { key: 'emergencyContact', label: '긴급 연락처' },
         ...(code === '해외출장' ? [{ key: 'overseasType', label: '출장 구분' }] : []),
         MEMO,
       ],
