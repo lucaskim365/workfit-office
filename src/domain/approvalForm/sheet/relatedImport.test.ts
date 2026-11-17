@@ -110,7 +110,7 @@ test('가져오기 — 반복 구간 열에 안 맞는 값이 섞이면 그 열�
   assert.equal(mixed.values[cellKey(1, b)], '5');
 });
 
-test('옛 서식 문서 — 라벨을 이름으로, 한 칸짜리 필드만', () => {
+test('옛 서식 문서 — 항목 키와 라벨을 이름으로, 한 칸짜리 필드만', () => {
   const fields = [
     { key: 'vendor', label: '거래처', type: '텍스트' },
     { key: 'period', label: '계약기간', type: '기간' },
@@ -119,8 +119,11 @@ test('옛 서식 문서 — 라벨을 이름으로, 한 칸짜리 필드만', ()
   ];
   assert.deepEqual(namedFromLegacy(fields, { vendor: '에이스', period: '2026-11-01', period__end: '2026-11-30', items: '{}', amt: 1500 }), {
     거래처: '에이스',
+    vendor: '에이스',
     계약기간: '2026-11-01 ~ 2026-11-30',
+    period: '2026-11-01 ~ 2026-11-30',
     금액: '1500',
+    amt: '1500',
   });
 });
 
@@ -141,5 +144,5 @@ test('비공개 칸 — 이름 값에서 빼고 가져온다(시트 칸·옛 서
     { key: 'a', label: '거래처', type: '텍스트' },
     { key: 'b', label: '단가', type: '금액', isSecret: true },
   ];
-  assert.deepEqual(namedFromLegacy(fields, { a: '가나상사', b: 1200 }), { 거래처: '가나상사' });
+  assert.deepEqual(namedFromLegacy(fields, { a: '가나상사', b: 1200 }), { 거래처: '가나상사', a: '가나상사' }); // 비공개 항목(b)은 키·라벨 모두 빠짐
 });

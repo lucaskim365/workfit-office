@@ -1245,6 +1245,22 @@ export function linkTypeDef(link: string | null | undefined): LinkTypeDef | unde
   return link ? LINK_TYPES.find((t) => t.code === link) : undefined;
 }
 
+/**
+ * 이름 붙은 칸을 사람에게 보일 때 — 그 칸 옆(왼쪽·위)의 글자('청구 금액' 등). 옆 글자가 없으면 nameLabel.
+ * 같은 'amount'라도 서식마다 '청구 금액'·'계약 금액'으로 다르게 적혀 있어 칸 옆 글자가 가장 알아보기 쉽다
+ */
+export function namedCaption(s: Sheet, name: string): string {
+  const key = Object.entries(s.cellMeta[APPROVAL_NS.name] ?? {}).find(([, n]) => n === name)?.[0];
+  if (key) {
+    const i = key.indexOf(':');
+    const r = Number(key.slice(0, i));
+    const c = s.cols.indexOf(key.slice(i + 1));
+    const cap = c >= 0 ? cellCaption(s, r, c) : '';
+    if (cap && cap !== cellAddress(r, c)) return cap;
+  }
+  return nameLabel(name);
+}
+
 /** 칸 이름 표시 — 시스템 이름(금액 키)·연동 이름은 한글로, 직접 쓴 이름은 그대로 */
 export function nameLabel(key: string): string {
   const common = COMMON_CELL_NAMES.find((n) => n.key === key);

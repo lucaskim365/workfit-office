@@ -75,7 +75,10 @@ export function readNamed(raw: unknown): NamedValues {
   }
 }
 
-/** 옛 서식 문서 → 이름 값. 라벨을 이름으로, 한 칸짜리 필드만(표·직인·안내문 등은 뺌). 비공개 항목은 뺀다 */
+/**
+ * 옛 서식 문서 → 이름 값. 항목 키와 라벨을 둘 다 이름으로, 한 칸짜리 필드만(표·직인·안내문 등은 뺌). 비공개 항목은 뺀다.
+ * 옛 서식을 시트로 바꾼 서식은 칸 이름이 옛 항목 키(period·amount·body …)라 키로 맞고, 관리자가 한글로 지은 이름은 라벨로 맞는다
+ */
 export function namedFromLegacy(
   fields: Array<{ key: string; label: string; type: string; isSecret?: boolean }>,
   fieldValues: Record<string, unknown>
@@ -85,15 +88,19 @@ export function namedFromLegacy(
   fields.forEach((f) => {
     const label = f.label.trim();
     if (!label || f.isSecret) return;
+    const put = (v: string) => {
+      out[label] = v;
+      if (f.key) out[f.key] = v;
+    };
     if (f.type === '기간') {
       const a = fieldValues[f.key];
       const b = fieldValues[`${f.key}__end`];
-      if (a) out[label] = b ? `${a} ~ ${b}` : String(a);
+      if (a) put(b ? `${a} ~ ${b}` : String(a));
       return;
     }
     if (!SIMPLE.has(f.type)) return;
     const v = fieldValues[f.key];
-    if (v !== undefined && v !== null && v !== '') out[label] = String(v);
+    if (v !== undefined && v !== null && v !== '') put(String(v));
   });
   return out;
 }
