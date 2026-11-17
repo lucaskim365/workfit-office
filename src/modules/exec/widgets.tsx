@@ -23,6 +23,7 @@ import { COMMUTE_STATUS_LABELS } from '@/domain/commute/schema';
 import type { DayEntry } from '@/domain/workPlan/dayEntries';
 import { EntryDetailModal, entryTimeKind } from './EntryDetailModal';
 import { birthdaysInMonth } from '@/domain/birthday/engine';
+import { hiresInMonth } from '@/domain/employeeProfile/hires';
 import { sortPostsForList } from '@/domain/board/rules';
 import { BOARDS_SEED } from '@/data/seeds/board.seed';
 import { resolveDeptId } from '@/domain/department/engine';
@@ -1589,6 +1590,56 @@ export function BirthdayWidget() {
                 <span className="truncate text-[12.5px] font-bold text-ink">{u.name}</span>
                 <span className="truncate text-[11px] text-ink3">{u.dept}</span>
                 {isToday && <span className="ml-auto shrink-0 rounded-full bg-[#d6336c] px-2 py-0.5 text-[10.5px] font-bold text-white">오늘</span>}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </Panel>
+  );
+}
+
+/* ───────────────────────── 조직도: 이달의 입사자 ───────────────────────── */
+
+/** 이번 달 입사한 사람 — 재직 중인 사람만, 날짜순. 오늘 입사는 강조, 아직 오지 않은 날은 그대로 */
+export function NewHiresWidget() {
+  const users = useUsers({ status: '사용' }).data ?? [];
+  const profiles = useEmployeeProfiles().data ?? [];
+  const today = todayKst();
+  const byId = new Map(users.map((u) => [u.id, u]));
+  const list = hiresInMonth(profiles.filter((p) => byId.has(p.userId)), today.slice(0, 7));
+  if (useMini()) {
+    const next = list.find((x) => x.date >= today) ?? list[list.length - 1];
+    const nextUser = next ? byId.get(next.person.userId) : undefined;
+    return (
+      <MiniPanel title="이달의 입사자">
+        <span className={MINI_BIG}>{list.length}<span className="ml-0.5 text-[14px] font-bold text-ink3">명</span></span>
+        <span className={`${MINI_SUB} ${next?.date === today ? '!text-[#0876c8]' : ''}`}>
+          {nextUser ? (next!.date === today ? `오늘 ${nextUser.name}` : `${Number(next!.date.slice(8))}일 ${nextUser.name}`) : '입사자 없음'}
+        </span>
+      </MiniPanel>
+    );
+  }
+  return (
+    <Panel>
+      <Head title="이달의 입사자" note={list.length ? `${list.length}명` : undefined} />
+      {list.length === 0 ? (
+        <Empty>이번 달 입사한 사람이 없습니다.</Empty>
+      ) : (
+        <ul className={`m-0 list-none gap-0.5 p-0 ${FIT_LIST}`}>
+          {list.map(({ person, date }) => {
+            const u = byId.get(person.userId)!;
+            const isToday = date === today;
+            return (
+              <li key={person.userId} className={`flex items-center gap-2.5 rounded-xl px-2.5 py-1.5 ${isToday ? 'bg-[#e8f3fc] dark:bg-sky-500/15' : ''}`}>
+                <span className={`w-10 shrink-0 text-[15px] font-black tabular-nums ${isToday ? 'text-[#0876c8]' : 'text-ink'}`}>
+                  {Number(date.slice(8))}
+                  <span className="ml-0.5 text-[10.5px] font-bold text-ink3">일</span>
+                </span>
+                <MiniAvatar user={u} size={24} />
+                <span className="truncate text-[12.5px] font-bold text-ink">{u.name}</span>
+                <span className="truncate text-[11px] text-ink3">{[u.dept, u.position].filter(Boolean).join(' · ')}</span>
+                {isToday && <span className="ml-auto shrink-0 rounded-full bg-[#0876c8] px-2 py-0.5 text-[10.5px] font-bold text-white">오늘</span>}
               </li>
             );
           })}
