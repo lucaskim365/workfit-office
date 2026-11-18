@@ -189,12 +189,12 @@ test('[3] 잠긴 칸에 규칙을 걸어도 잠금은 저장한 판 기준 — �
   assert.match(mergeBlock(coverText, { r1: 2, c1: 0, r2: 3, c2: 0 }, '휴가', locked) ?? '', /가려지게 합칠 수 없어요/);
   // 규칙 기준 칸이어도 잠긴 칸이 든 행은 잠금 안내
   assert.match(deleteRowsBlock(ruled, 3, 3, '휴가', locked) ?? '', /A4 칸은 '품명'\(관련 문서 값 가져오기\)에 쓰여서 지울 수 없어요/);
-  // 저장 검사 — 종류가 바뀐 채로는 저장 안 됨(되돌리기 등 어느 길로 와도)
+  // 잠긴 직접 쓴 이름에 규칙을 거는 것 자체를 막는다 — 걸고 저장하면 다음부터 '규칙 이름'으로 보여 잠금이 풀리므로
+  assert.match(sheetChangeBlock(saved, ruled, '휴가', locked) ?? '', /기준 칸으로 쓸 수 없어요/);
+  // 저장 검사 — 종류가 바뀐 채로도, 규칙만 건 채로도 저장 안 됨(되돌리기 등 어느 길로 와도)
   const issues = saveLockIssues({ sheet: saved, link: '휴가' }, { sheet: retyped, link: '휴가' });
-  assert.equal(issues.length, 1);
-  assert.match(issues[0], /칸의 종류가 바뀌었어요/);
-  // 규칙만 건 채로는 저장 괜찮다
-  assert.deepEqual(saveLockIssues({ sheet: saved, link: '휴가' }, { sheet: ruled, link: '휴가' }), []);
+  assert.ok(issues.some((x) => /칸의 종류가 바뀌었어요/.test(x)));
+  assert.match(saveLockIssues({ sheet: saved, link: '휴가' }, { sheet: ruled, link: '휴가' }).join(' '), /기준 칸으로 쓸 수 없어요/);
 });
 
 test('[3] 버전 되살리기 — 이름 개수가 같아도 잠긴 칸 종류가 다르면 막는다', () => {

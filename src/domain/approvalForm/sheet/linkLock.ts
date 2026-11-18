@@ -185,7 +185,18 @@ export function sheetChangeBlock(prev: Sheet, next: Sheet, link: string | null |
   if (dropped.length) return `이 칸은 ${reason(dropped[0], link)}에 쓰여서 지울 수 없어요.`;
   const changed = inputChangedLocked(prev, next, locked);
   if (changed) return `이 칸은 ${reason(changed, link)}에 쓰여서 칸 종류를 바꿀 수 없어요.`;
+  const ruled = newRuleOnLocked(prev, next, locked);
+  if (ruled) return `이 칸은 ${reason(ruled, link)}에 쓰여서 '값에 따라 바뀌는 것'의 기준 칸으로 쓸 수 없어요.`;
   return null;
+}
+
+/**
+ * 잠긴 직접 쓴 이름이 새로 규칙의 기준 이름이 됐나 — 그러면 다음 저장부터 '규칙 이름'으로 보여 잠금이 풀리므로 막는다.
+ * 연동 이름은 규칙과 상관없이 늘 잠기므로 기준 칸으로 써도 된다(휴가 종류에 따라 행 보이기 등)
+ */
+function newRuleOnLocked(prev: Sheet, next: Sheet, locked: LockedNames): string | undefined {
+  const was = ruleNames(prev);
+  return [...ruleNames(next)].find((n) => isLockedName(locked, n) && !isLinkKey(n) && !was.has(n));
 }
 
 /**
@@ -226,6 +237,8 @@ export function saveLockIssues(
     const was = new Set(inputTypesOf(saved.sheet, n));
     if (inputTypesOf(current.sheet, n).some((t) => !was.has(t))) issues.push(`${reason(n, saved.link)}에 쓰이는 칸의 종류가 바뀌었어요. 되돌리기(Ctrl+Z)로 살려 주세요.`);
   }
+  const ruled = newRuleOnLocked(saved.sheet, current.sheet, locked);
+  if (ruled) issues.push(`${reason(ruled, saved.link)}에 쓰이는 칸을 '값에 따라 바뀌는 것'의 기준 칸으로 쓸 수 없어요. 규칙을 지워 주세요.`);
   const before = countNames(allNames(saved.sheet));
   const after = countNames(allNames(current.sheet));
   [...after].forEach(([n, k]) => {
