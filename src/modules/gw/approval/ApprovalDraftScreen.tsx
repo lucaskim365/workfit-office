@@ -38,6 +38,8 @@ import { SheetDraftForm, type RelatedSource } from './sheetForm/SheetDraftForm';
 import { sheetDraftTouched } from '@/domain/approvalForm/sheet/draftTouched';
 import { isSheetDoc } from './sheetForm/SheetDocView';
 import { SHEET_NAMED_KEY, namedFromLegacy, readNamed, secretNames, withoutNames } from '@/domain/approvalForm/sheet/relatedImport';
+import { SHEET_LABELED_KEY, labeledFromDoc, labeledFromLegacy } from '@/domain/approvalForm/sheet/labelMatch';
+import type { Sheet } from '@/lib/sheet/core';
 import { SHEET_OWN_KEY, readOwnSheet } from '@/domain/approvalForm/sheet/ownSheet';
 import { keepOwnAutoNumbers } from '@/domain/approvalForm/sheet/docAutoNumbers';
 import { korDateText, SHEET_VERSION_KEY } from '@/domain/approvalForm/sheet/approvalSheet';
@@ -419,7 +421,7 @@ function ApprovalDraftInner({
 
   const hasManuallyEnteredValues = (): boolean => {
     // 1. 사용자 입력(제목, 금액, 첨부, 관련문서)이 유의미하게 존재하는 경우 무조건 작성 중으로 판정
-    // 시트 서식 — 시트가 열리자마자 예약 키(__formVersion·__values·__rows·__refs·__named)와 이름 붙은 칸 값(금액 키 등)이
+    // 시트 서식 — 시트가 열리자마자 예약 키(__formVersion·__values·__rows·__refs·__named·__labeled)와 이름 붙은 칸 값(금액 키 등)이
     // values·amount 에 들어가므로 '값이 있나'로 보지 않고, 기안자가 쓴 칸이 있는지로 본다(틀이 처음 내보낸 값과 같으면 안 쓴 것)
     const isSheetDraft = sheetVersion !== null;
     const sheetTouched = isSheetDraft && !!sheetTpl?.sheet && sheetDraftTouched(sheetTpl.sheet, values);
@@ -1097,14 +1099,31 @@ function ApprovalDraftInner({
           const mine = d.drafterId === me.id || d.steps.some((s) => s.approverId === me.id && s.kind !== '참조');
           if (isSheetDoc(d.fieldValues)) {
             const named = readNamed(d.fieldValues[SHEET_NAMED_KEY]);
-            if (mine) return named;
-            // 원본 문서의 틀(문서가 고친 틀, 없으면 쓴 버전)에서 비공개 칸을 찾아 뺀다 — 틀을 못 읽으면 가져오지 않는다
-            const ver = parseVersionKey(String(d.fieldValues[SHEET_VERSION_KEY] ?? ''));
-            const tpl = readOwnSheet(d.fieldValues[SHEET_OWN_KEY]) ?? (ver ? await fetchFormVersionSheet(ver.formId, ver.version) : null);
-            return tpl ? withoutNames(named, secretNames(tpl)) : null;
+            // 원본 문서의 틀(문서가 고친 틀, 없으면 쓴 버전) — 처음 쓸 때 한 번만 읽는다
+            let tplRead: Promise<Sheet | null> | null = null;
+            const readTpl = () => {
+              if (!tplRead) {
+                const ver = parseVersionKey(String(d.fieldValues[SHEET_VERSION_KEY] ?? ''));
+                const own = readOwnSheet(d.fieldValues[SHEET_OWN_KEY]);
+                tplRead = own ? Promise.resolve(own) : ver ? fetchFormVersionSheet(ver.formId, ver.version) : Promise.resolve(null);
+              }
+              return tplRead;
+            };
+            // 칸 옆 글자(라벨) 값 — 비공개 칸은 처음부터 없다. 라벨 값이 없는 예전 문서는 틀과 저장 값으로 만든다(못 만들면 이름으로만)
+            const labeled =
+              d.fieldValues[SHEET_LABELED_KEY] !== undefined
+                ? readNamed(d.fieldValues[SHEET_LABELED_KEY])
+                : await readTpl()
+                    .then((t) => (t ? labeledFromDoc(t, d.fieldValues) : {}))
+                    .catch(() => ({}));
+            if (mine) return { ...labeled, ...named };
+            // 비공개 칸 이름은 틀에서 찾아 뺀다 — 틀을 못 읽으면 가져오지 않는다
+            const tpl = await readTpl();
+            return tpl ? { ...labeled, ...withoutNames(named, secretNames(tpl)) } : null;
           }
           const f = allForms.find((x) => x.code === d.docType);
-          return f ? namedFromLegacy(mine ? f.fields.map((x) => ({ ...x, isSecret: false })) : f.fields, d.fieldValues) : null;
+          // 라벨 값은 쓴 사람이어도 비공개 항목을 뺀다(받는 칸이 비공개인지 모르니)
+          return f ? { ...labeledFromLegacy(f.fields, d.fieldValues), ...namedFromLegacy(mine ? f.fields.map((x) => ({ ...x, isSecret: false })) : f.fields, d.fieldValues) } : null;
         },
       })),
     // eslint-disable-next-line react-hooks/exhaustive-deps

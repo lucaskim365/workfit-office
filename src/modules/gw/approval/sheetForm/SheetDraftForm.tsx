@@ -27,7 +27,6 @@ import {
   draftInputOf,
   invalidNumberCells,
   formulaErrorCells,
-  namedCaption,
   requiredMissing,
   completedDateRows,
   conditionHiddenRows,
@@ -47,7 +46,8 @@ import {
   placeholderOf,
   type CellInput,
 } from '@/domain/approvalForm/sheet/approvalSheet';
-import { SHEET_NAMED_KEY, collectNamed, hasImportableNames, importNamed, sheetWith, type NamedValues } from '@/domain/approvalForm/sheet/relatedImport';
+import { SHEET_NAMED_KEY, collectNamed, sheetWith, type NamedValues } from '@/domain/approvalForm/sheet/relatedImport';
+import { SHEET_LABELED_KEY, canImportRelated, collectLabeled, importRelated } from '@/domain/approvalForm/sheet/labelMatch';
 import { SHEET_ROWS_KEY, addRepeatRow, expandRepeats, healRepeatSections, insertRepeatRowAfter, readRowExtras, removeRepeatRow, removeRepeatRowAt, repeatSections } from '@/domain/approvalForm/sheet/repeatRows';
 import { extrasAnchorRow, extrasHiddenRows } from '@/domain/approvalForm/sheet/docExtras';
 import { LogoMarkProvider } from '../components/CompanyLetterhead';
@@ -580,6 +580,8 @@ export function SheetDraftForm({
       [SHEET_REFS_KEY]: JSON.stringify(refMap),
       // 이름 붙은 칸 값 — 다른 문서가 '관련 문서 값 가져오기'로 읽는다
       [SHEET_NAMED_KEY]: JSON.stringify(collectNamed(s)),
+      // 칸 옆 글자(라벨) 값 — 칸 이름이 없는 서식도 라벨이 같은 칸끼리 가져가게(labelMatch.ts). 비공개 칸은 없다
+      [SHEET_LABELED_KEY]: JSON.stringify(collectLabeled(s)),
       ...(ownNext !== undefined ? { [SHEET_OWN_KEY]: ownNext ? JSON.stringify(ownNext) : '' } : {}),
     });
   };
@@ -663,13 +665,14 @@ export function SheetDraftForm({
     if (!named) return alert(`'${src.label}' 문서를 읽지 못했습니다.`);
     if (!latest.current?.tplSheet) return;
     const { tplSheet: tpl, extras: ex, rawValues: raw, refs: rf } = latest.current;
-    const res = importNamed(tpl, ex, readSheetValues(raw), rf, named);
-    if (!res.filled.length) return alert(`'${src.label}'에는 이 서식과 같은 이름의 칸이 없습니다.`);
-    if (!confirm(`'${src.label}'에서 ${res.filled.map((n) => namedCaption(tpl, n)).join(', ')} 값을 가져옵니다.
+    // 칸 이름으로 먼저, 이름 없는 칸은 칸 옆 글자(라벨)로 — 라벨은 계산용 틀 복사본에만 붙고, 아래 sheetWith 에는 원래 틀(tpl)을 넘긴다
+    const res = importRelated(tpl, ex, readSheetValues(raw), rf, named);
+    if (!res.filled.length) return alert(`'${src.label}'에는 이 서식과 같은 이름(칸 옆 글자)의 칸이 없습니다.`);
+    if (!confirm(`'${src.label}'에서 ${res.captions.join(', ')} 값을 가져옵니다.
 이미 쓴 값은 가져온 값으로 바뀝니다.`)) return;
     emit(sheetWith(tpl, res), res.extras, res.refs);
   };
-  const canImport = !!tplSheet && hasImportableNames(tplSheet) && relatedSources.length > 0;
+  const canImport = !!tplSheet && canImportRelated(tplSheet) && relatedSources.length > 0;
 
   /**
    * 반복 구간 줄 수 바꾸기 — 값 자리를 옮기고 다시 펼친다. at 이 있으면 그 줄 아래에 넣기(+)·그 줄 지우기(−),

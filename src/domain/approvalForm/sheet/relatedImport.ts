@@ -83,26 +83,30 @@ export function namedFromLegacy(
   fields: Array<{ key: string; label: string; type: string; isSecret?: boolean }>,
   fieldValues: Record<string, unknown>
 ): NamedValues {
-  const SIMPLE = new Set(['텍스트', '장문', '숫자', '금액', '날짜', '선택', '다중선택', '부서']);
   const out: NamedValues = {};
   fields.forEach((f) => {
     const label = f.label.trim();
     if (!label || f.isSecret) return;
-    const put = (v: string) => {
-      out[label] = v;
-      if (f.key) out[f.key] = v;
-    };
-    if (f.type === '기간') {
-      const a = fieldValues[f.key];
-      const b = fieldValues[`${f.key}__end`];
-      if (a) put(b ? `${a} ~ ${b}` : String(a));
-      return;
-    }
-    if (!SIMPLE.has(f.type)) return;
-    const v = fieldValues[f.key];
-    if (v !== undefined && v !== null && v !== '') put(String(v));
+    const v = legacyFieldValue(f, fieldValues);
+    if (v === undefined) return;
+    out[label] = v;
+    if (f.key) out[f.key] = v;
   });
   return out;
+}
+
+const LEGACY_SIMPLE = new Set(['텍스트', '장문', '숫자', '금액', '날짜', '선택', '다중선택', '부서']);
+
+/** 옛 서식 필드 하나의 값 — 한 칸짜리 필드만(기간은 '시작 ~ 끝'). 값이 없거나 가져올 수 없는 종류면 undefined */
+export function legacyFieldValue(f: { key: string; type: string }, fieldValues: Record<string, unknown>): string | undefined {
+  if (f.type === '기간') {
+    const a = fieldValues[f.key];
+    const b = fieldValues[`${f.key}__end`];
+    return a ? (b ? `${a} ~ ${b}` : String(a)) : undefined;
+  }
+  if (!LEGACY_SIMPLE.has(f.type)) return undefined;
+  const v = fieldValues[f.key];
+  return v !== undefined && v !== null && v !== '' ? String(v) : undefined;
 }
 
 export interface ImportResult {
