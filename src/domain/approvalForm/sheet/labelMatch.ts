@@ -2,8 +2,10 @@
  * 관련 문서 값 가져오기 — 칸 이름이 없는 칸은 '칸 옆 글자(라벨)'가 같은 칸끼리 맞춘다.
  * 서식 편집에서 칸 이름을 더는 붙이지 않으므로, 기안자가 보는 글자('품명'·'금액(VAT 포함)')로 찾는다. 칸 이름이 있으면 이름이 먼저.
  *
- * - 칸 옆 글자: 같은 줄 왼쪽에서 가장 가까운 글자 칸, 없으면 위쪽(cellCaption 과 같은 차례). 반복 구간 안 칸은 그 열의 머리글(구간 위 글자)
- *   입력·수식·데이터 불러오기·자동번호·직인·작성 요령·이름 붙은 칸과 숫자만 있는 글자는 라벨이 아니다(기안자 값·계산 결과가 라벨이 되지 않게)
+ * - 칸 옆 글자: 같은 줄 왼쪽에서 가장 가까운 글자 칸, 없으면 위쪽 3줄까지(cellLabel). 반복 구간 안 칸은 그 열의 머리글(구간 바로 위 글자)
+ *   입력·수식·데이터 불러오기·자동번호·직인·이름 붙은 칸을 만나면 거기서 멈춘다(그 너머 글자는 그 칸의 라벨) — 기안자 값·계산 결과도 라벨이 되지 않는다
+ *   작성 요령·숫자만 있는 글자는 라벨이 아니고 지나간다
+ * - 칸 이름이 있는 칸은 이름으로 먼저 맞추고, 원본에 그 이름이 없을 때만 라벨로 맞춘다(규칙이 붙인 이름 등)
  * - 맞추는 글자: 빈칸을 모두 빼고, 괄호 기호만 빼고(안 글자는 남김), 앞뒤 ':'·'*'를 뺀다 — '금액(VAT 포함) :' → '금액VAT포함'
  * - 한 서식 안에서 같은 라벨인 입력 칸이 둘 이상이면 어느 칸인지 모르니 라벨로는 맞추지 않는다. 글자가 없는 라벨(기호뿐)도
  * - 비공개 칸은 라벨 값으로 남기지도, 채우지도 않는다
@@ -39,32 +41,56 @@ export function normalizeLabel(text: string): string {
 /** 라벨로 보일 글자 — 빈칸만 하나로 */
 const displayOf = (text: string) => text.trim().replace(/\s+/g, ' ');
 
-/** 라벨이 될 수 있는 칸의 글자 — 병합 칸 안이면 대표(왼쪽 위) 칸 글자. 라벨이 아니면 '' */
-function labelTextAt(s: Sheet, r0: number, c0: number): string {
-  const m = s.merges.find((x) => r0 >= x.startRow && r0 < x.startRow + x.rowSpan && c0 >= x.startCol && c0 < x.startCol + x.colSpan);
+/** 위쪽에서 라벨을 찾는 줄 수 — 바로 위 머리글·한두 줄 띄운 머리글까지만(멀리 있는 제목 '발 주 서'가 라벨이 되지 않게) */
+export const LABEL_UP_ROWS = 3;
+
+/** (r, c)를 덮는 병합(없으면 undefined) */
+const mergeAt = (s: Sheet, r: number, c: number) =>
+  s.merges.find((x) => r >= x.startRow && r < x.startRow + x.rowSpan && c >= x.startCol && c < x.startCol + x.colSpan);
+
+/**
+ * 라벨을 찾다 만난 칸 — 'label'(라벨 글자), 'stop'(여기서 멈춤: 이 너머 글자는 다른 칸의 라벨), 'skip'(지나감).
+ * 병합 칸 안이면 대표(왼쪽 위) 칸으로 본다.
+ * 멈추는 칸: 입력·데이터 불러오기·수식·이름 붙은·직인·자동번호 칸 — 그 칸이 사이에 있으면 더 먼 글자는 그 칸의 라벨이다.
+ * 지나가는 칸: 빈칸·숫자만 있는 글자·작성 요령·글자가 없는(기호뿐) 칸
+ */
+type LabelHit = { kind: 'label'; text: string; colSpan: number } | { kind: 'stop' } | { kind: 'skip' };
+
+function labelAt(s: Sheet, r0: number, c0: number): LabelHit {
+  const m = mergeAt(s, r0, c0);
   const r = m ? m.startRow : r0;
   const c = m ? m.startCol : c0;
   const col = s.cols[c];
-  if (col === undefined) return '';
-  const t = String(s.rows[r]?.[col] ?? '').trim();
-  if (!t || t === FORMULA_ERROR || parseNumber(t) !== null) return '';
-  if (s.formulas[cellKey(r, col)] !== undefined) return '';
+  if (col === undefined) return { kind: 'skip' };
   const p = approvalCellProps(s, r, c);
-  if (p.input || p.bind || p.name || p.autoNo || p.seal || p.guide) return '';
-  return normalizeLabel(t) ? t : '';
+  if (s.formulas[cellKey(r, col)] !== undefined || p.input || p.bind || p.name || p.autoNo || p.seal) return { kind: 'stop' };
+  const t = String(s.rows[r]?.[col] ?? '').trim();
+  if (!t || t === FORMULA_ERROR || parseNumber(t) !== null || p.guide || !normalizeLabel(t)) return { kind: 'skip' };
+  return { kind: 'label', text: t, colSpan: m ? m.colSpan : 1 };
 }
 
-/** 칸 옆 글자 — 같은 줄 왼쪽, 없으면 위쪽. 반복 구간 안 칸은 위쪽(열 머리글)만, 구간 위에서부터 */
+/**
+ * 칸 옆 글자 — 같은 줄 왼쪽, 없으면 위쪽. 반복 구간 안 칸은 위쪽(열 머리글)만, 구간 바로 위에서부터.
+ * - 왼쪽: 가장 가까운 라벨 글자. 사이에 멈추는 칸(입력·불러오기·수식·이름·직인·자동번호)이 있으면 왼쪽은 그만두고 위쪽을 본다
+ *   ('[수량][입력][입력]'의 둘째 입력 칸은 '수량'이 아니다 — 표 모양이면 위 머리글이 라벨)
+ * - 위쪽: LABEL_UP_ROWS(3) 줄까지만. 멈추는 칸을 만나면 라벨 없음.
+ *   이 칸보다 넓게 병합된 글자(제목·구역 이름 '발 주 서')를 만나도 라벨 없음 — 열 머리글은 그 칸 너비 이하
+ */
 export function cellLabel(s: Sheet, r: number, c: number, sec?: Pick<RepeatSection, 'first'>): string {
   if (!sec) {
     for (let cc = c - 1; cc >= 0; cc--) {
-      const t = labelTextAt(s, r, cc);
-      if (t) return displayOf(t);
+      const h = labelAt(s, r, cc);
+      if (h.kind === 'stop') break;
+      if (h.kind === 'label') return displayOf(h.text);
     }
   }
-  for (let rr = (sec ? sec.first : r) - 1; rr >= 0; rr--) {
-    const t = labelTextAt(s, rr, c);
-    if (t) return displayOf(t);
+  const own = mergeAt(s, r, c);
+  const span = own ? own.colSpan : 1;
+  const top = sec ? sec.first : r;
+  for (let rr = top - 1; rr >= Math.max(0, top - LABEL_UP_ROWS); rr--) {
+    const h = labelAt(s, rr, c);
+    if (h.kind === 'stop') return '';
+    if (h.kind === 'label') return h.colSpan > span ? '' : displayOf(h.text);
   }
   return '';
 }
@@ -176,14 +202,17 @@ export function labeledFromLegacy(
   return out;
 }
 
-/** 받는 쪽 — 라벨로 채울 칸: 칸 이름이 없고, 라벨이 하나뿐이고, 비공개가 아닌 입력 칸 */
-function targetSlots(template: Sheet): LabelSlot[] {
-  return uniqueSlots(template).filter((x) => !x.named);
-}
-
 /** 이 서식에 관련 문서 값을 가져올 칸이 있는가(가져오기 단추를 보일지) — 이름 붙은 칸, 또는 라벨로 맞출 칸 */
 export function canImportRelated(template: Sheet): boolean {
-  return Object.keys(template.cellMeta[APPROVAL_NS.name] ?? {}).length > 0 || targetSlots(template).length > 0;
+  return Object.keys(template.cellMeta[APPROVAL_NS.name] ?? {}).length > 0 || uniqueSlots(template).length > 0;
+}
+
+/** 슬롯 칸들의 키 — 반복 구간 열이면 구간의 모든 줄 */
+function slotKeys(s: Sheet, x: LabelSlot): string[] {
+  const col = s.cols[x.c];
+  const sec = x.sec;
+  const rows = sec ? Array.from({ length: sec.last - sec.first + 1 }, (_, k) => sec.first + k) : [x.r];
+  return rows.map((rr) => cellKey(rr, col));
 }
 
 export interface RelatedImportResult extends ImportResult {
@@ -192,15 +221,24 @@ export interface RelatedImportResult extends ImportResult {
 }
 
 /**
- * 관련 문서 값 가져오기 — 칸 이름으로 먼저, 이름 없는 칸은 라벨로. source 는 이름 값과 라벨 값을 합친 것.
+ * 관련 문서 값 가져오기 — 칸 이름으로 먼저, 이름 없는 칸과 이름이 원본에 없는 칸은 라벨로. source 는 이름 값과 라벨 값을 합친 것.
+ * 한 칸은 한 번만 채운다(이름이 원본에 있으면 라벨은 보지 않음). 라벨이 겹치는 칸·비공개 칸은 라벨로 채우지 않는다.
  * 라벨 키는 틀의 복사본에만 잠깐 칸 이름으로 붙인다 — 돌려주는 것은 값·줄 수·사람 칸 ID 뿐이라 문서 시트에는 남지 않는다
  * (sheetWith 에는 원래 틀을 넘길 것)
  */
 export function importRelated(template: Sheet, extras: RowExtras, values: SheetValues, refs: SheetValues, source: NamedValues): RelatedImportResult {
-  const slots = targetSlots(template);
   const names = { ...(template.cellMeta[APPROVAL_NS.name] ?? {}) };
+  const nameIn = (key: string) => {
+    const n = names[key];
+    return typeof n === 'string' && n ? n : undefined;
+  };
+  // 이름 붙은 칸은 그 이름이 원본에 하나도 없을 때만 라벨로 — 이 복사본에서만 이름을 라벨 키로 바꿔 붙인다
+  const slots = uniqueSlots(template).filter(
+    (x) => !x.named || slotKeys(template, x).every((k) => { const n = nameIn(k); return !n || source[n] === undefined; })
+  );
   const labelOf = new Map<string, string>();
   slots.forEach((x) => {
+    if (x.named) slotKeys(template, x).forEach((k) => delete names[k]);
     names[x.key] = x.labelKey;
     labelOf.set(x.labelKey, x.label);
   });

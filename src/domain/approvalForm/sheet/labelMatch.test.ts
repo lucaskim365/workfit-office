@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { cellKey, createSheet, setCellMeta, setCellValue, type Sheet } from '@/lib/sheet/core';
+import { cellKey, createSheet, mergeRange, setCellMeta, setCellValue, type Sheet } from '@/lib/sheet/core';
 import { APPROVAL_NS, SHEET_VALUES_KEY, applyValues, setCellName, type CellInputType } from './approvalSheet';
 import { canImportRelated, cellLabel, collectLabeled, importRelated, labeledFromDoc, labeledFromLegacy, labelKeyOf, normalizeLabel } from './labelMatch';
 import { collectNamed, hasImportableNames, sheetWith } from './relatedImport';
@@ -77,8 +77,74 @@ test('칸 옆 글자 — 기안자가 쓴 값·계산 결과·숫자는 라벨�
   s = setCellValue(s, 1, 0, '1');
   s = input(s, 1, 1);
   const filled = applyValues(s, { [cellKey(0, s.cols[1])]: '홍길동' }, { recalc: true });
-  assert.equal(cellLabel(filled, 0, 2), '성명'); // '홍길동'(입력 값)을 건너뜀
+  assert.equal(cellLabel(filled, 0, 2), ''); // '홍길동'(입력 칸)에서 멈춤 — 더 먼 '성명'은 그 칸의 라벨
   assert.equal(cellLabel(filled, 1, 1), ''); // '1'은 라벨이 아님, 위는 입력 칸
+});
+
+test('칸 옆 글자 — 왼쪽에 입력·불러오기 칸이 끼면 멈춘다(먼 라벨을 집지 않음)', () => {
+  // [기안자][불러오기 칸][빈칸][입력]
+  let s = createSheet(1, 4);
+  s = setCellValue(s, 0, 0, '기안자');
+  s = setCellMeta(s, APPROVAL_NS.bind, 0, 1, 'drafter');
+  s = input(s, 0, 3);
+  assert.equal(cellLabel(s, 0, 3), '');
+  // [수량][입력][입력] — 첫 칸만 '수량', 둘째는 라벨 없음 → '수량'이 하나라 맞춰진다
+  let q = createSheet(1, 3);
+  q = setCellValue(q, 0, 0, '수량');
+  q = input(q, 0, 1);
+  q = input(q, 0, 2);
+  assert.equal(cellLabel(q, 0, 1), '수량');
+  assert.equal(cellLabel(q, 0, 2), '');
+  assert.deepEqual(collectLabeled(applyValues(q, { [cellKey(0, q.cols[1])]: '5' }, { recalc: true })), { [labelKeyOf('수량')]: '5' });
+  // 수식 칸·이름 붙은 칸에서도 멈춘다
+  let f = createSheet(1, 3);
+  f = setCellValue(f, 0, 0, '합계');
+  f = setCellValue(f, 0, 1, '=1+1');
+  f = input(f, 0, 2);
+  assert.equal(cellLabel(f, 0, 2), '');
+  let n = createSheet(1, 3);
+  n = setCellValue(n, 0, 0, '거래처');
+  n = setCellName(n, 0, 1, 'vendor');
+  n = input(n, 0, 2);
+  assert.equal(cellLabel(n, 0, 2), '');
+});
+
+test('칸 옆 글자 — 왼쪽이 막히면 위 머리글(표 모양). 위쪽은 3줄까지, 넓은 제목은 라벨이 아니다', () => {
+  // 0행: ''  | '품명' | '수량'
+  // 1행: '1' | [입력] | [입력]
+  let t = createSheet(2, 3);
+  t = setCellValue(t, 0, 1, '품명');
+  t = setCellValue(t, 0, 2, '수량');
+  t = setCellValue(t, 1, 0, '1');
+  t = input(t, 1, 1);
+  t = input(t, 1, 2);
+  assert.equal(cellLabel(t, 1, 1), '품명');
+  assert.equal(cellLabel(t, 1, 2), '수량'); // 왼쪽 입력 칸에서 멈추고 위를 본다
+  // 0행: '비고' / 1~3행 빈칸 / 4행: [입력] — 4줄 위라 라벨 아님, 3줄 위면 라벨
+  let far = createSheet(5, 1);
+  far = setCellValue(far, 0, 0, '비고');
+  far = input(far, 4, 0);
+  assert.equal(cellLabel(far, 4, 0), '');
+  assert.equal(cellLabel(input(far, 3, 0), 3, 0), '비고');
+  // 0행: '발 주 서'(4칸 병합 제목) / 1행: [입력] — 제목은 라벨이 아니다
+  let title = createSheet(2, 4);
+  title = setCellValue(title, 0, 0, '발 주 서');
+  title = mergeRange(title, { r1: 0, r2: 0, c1: 0, c2: 3 });
+  title = input(title, 1, 0);
+  assert.equal(cellLabel(title, 1, 0), '');
+  // 같은 너비로 병합된 머리글은 라벨이다(넓은 내용 칸 위 '내 용')
+  let body = createSheet(2, 4);
+  body = setCellValue(body, 0, 0, '내 용');
+  body = mergeRange(body, { r1: 0, r2: 0, c1: 0, c2: 3 });
+  body = mergeRange(body, { r1: 1, r2: 1, c1: 0, c2: 3 });
+  body = input(body, 1, 0);
+  assert.equal(cellLabel(body, 1, 0), '내 용');
+  // 위에 입력 칸이 있으면 멈춘다
+  let up = createSheet(3, 1);
+  up = setCellValue(up, 0, 0, '성명');
+  up = input(up, 1, 0);
+  up = input(up, 2, 0);
+  assert.equal(cellLabel(up, 2, 0), '');
 });
 
 test('라벨 값 모으기(원본) — 한 칸은 값, 반복 구간 열은 목록, 계산 칸은 없음', () => {
@@ -133,8 +199,39 @@ test('가져오기 — 이름 붙은 칸은 이름으로만 채운다(라벨이 
   const res = importRelated(tpl, {}, {}, {}, { vendor: '이름 값', [labelKeyOf('거래처')]: '라벨 값' });
   assert.equal(res.values[cellKey(0, tpl.cols[1])], '이름 값');
   assert.deepEqual(res.filled, ['vendor']);
-  // 이름 값이 없으면 라벨로도 채우지 않는다(이름 칸은 라벨 대상 아님)
-  assert.deepEqual(importRelated(tpl, {}, {}, {}, { [labelKeyOf('거래처')]: '라벨 값' }).filled, []);
+});
+
+test('가져오기 — 이름 붙은 칸이라도 원본에 그 이름이 없으면 라벨로 채운다(한 번만)', () => {
+  let tpl = createSheet(2, 2);
+  tpl = setCellValue(tpl, 0, 0, '거래처');
+  tpl = input(tpl, 0, 1);
+  tpl = setCellName(tpl, 0, 1, 'vendor'); // 규칙이 붙인 이름 같은 것 — 원본엔 없음
+  tpl = setCellValue(tpl, 1, 0, '연봉');
+  tpl = input(tpl, 1, 1);
+  tpl = setCellName(tpl, 1, 1, 'pay');
+  tpl = setCellMeta(tpl, APPROVAL_NS.secret, 1, 1, true);
+  const b = tpl.cols[1];
+  const res = importRelated(tpl, {}, {}, {}, { [labelKeyOf('거래처')]: '라벨 값', [labelKeyOf('연봉')]: '1억' });
+  assert.equal(res.values[cellKey(0, b)], '라벨 값');
+  assert.deepEqual(res.filled, [labelKeyOf('거래처')]); // 비공개 칸은 라벨로 채우지 않음
+  assert.deepEqual(res.captions, ['거래처']);
+  // 잠깐 바꾼 이름은 틀에 남지 않는다
+  assert.deepEqual(Object.values(sheetWith(tpl, res).cellMeta[APPROVAL_NS.name] ?? {}).sort(), ['pay', 'vendor']);
+});
+
+test('가져오기 — 이름 붙은 반복 구간 열도 이름이 원본에 없으면 라벨(머리글)로 채운다', () => {
+  let tpl = createSheet(2, 1);
+  tpl = setCellValue(tpl, 0, 0, '품명');
+  tpl = input(tpl, 1, 0);
+  tpl = setCellName(tpl, 1, 0, 'item');
+  tpl = setRepeatSection(tpl, 1, 1, '품목');
+  const a = tpl.cols[0];
+  const res = importRelated(tpl, {}, {}, {}, { [labelKeyOf('품명')]: ['가', '나'] });
+  assert.equal(res.values[cellKey(1, a)], '가');
+  assert.equal(res.values[cellKey(2, a)], '나');
+  assert.deepEqual(res.filled, [labelKeyOf('품명')]);
+  // 이름이 원본에 있으면 이름으로만
+  assert.deepEqual(importRelated(tpl, {}, {}, {}, { item: ['x'], [labelKeyOf('품명')]: ['가', '나'] }).filled, ['item']);
 });
 
 test('라벨이 서식에 둘 이상이면 어느 쪽에서도 맞추지 않는다', () => {

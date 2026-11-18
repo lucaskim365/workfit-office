@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { cellKey, createSheet, setCellMeta, setCellValue, type Sheet } from '@/lib/sheet/core';
+import { cellKey, createSheet, setCellMeta, setCellValue, setColMeta, setRowMeta, type Sheet } from '@/lib/sheet/core';
 import { APPROVAL_NS, applyValues, setCellName } from './approvalSheet';
 import { expandRepeats, repeatSections, setRepeatSection } from './repeatRows';
 import { collectNamed, importNamed, namedFromLegacy, readNamed, secretNames, withoutNames } from './relatedImport';
@@ -139,6 +139,14 @@ test('비공개 칸 — 이름 값에서 빼고 가져온다(시트 칸·옛 서
   s = setCellMeta(s, APPROVAL_NS.secret, 1, 1, true);
   assert.deepEqual(secretNames(s), ['단가']);
   assert.deepEqual(withoutNames({ 거래처: '가나상사', 단가: '1200' }, secretNames(s)), { 거래처: '가나상사' });
+  // 행 비공개·열 비공개 칸의 이름도 뺀다
+  let rc = createSheet(3, 3);
+  rc = setCellName(rc, 0, 0, '공개');
+  rc = setCellName(rc, 1, 0, '행비공개');
+  rc = setCellName(rc, 0, 2, '열비공개');
+  rc = setRowMeta(rc, APPROVAL_NS.secret, 1, true);
+  rc = setColMeta(rc, APPROVAL_NS.secret, 2, true);
+  assert.deepEqual(secretNames(rc).sort(), ['열비공개', '행비공개'].sort());
   // 옛 서식 — 비공개 항목은 뺀다
   const fields = [
     { key: 'a', label: '거래처', type: '텍스트' },

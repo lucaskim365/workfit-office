@@ -9,7 +9,7 @@
  * 가져온 값은 이 문서에 복사되어 저장된다 — 원본 문서가 나중에 바뀌어도 이 문서는 그대로
  */
 import { cellKey, parseNumber, type Sheet } from '@/lib/sheet/core';
-import { APPROVAL_NS, applyValues, type CellInput, type SheetValues } from './approvalSheet';
+import { APPROVAL_NS, applyValues, isSecretCell, type CellInput, type SheetValues } from './approvalSheet';
 import { addRepeatRow, expandRepeats, repeatSections, type RowExtras } from './repeatRows';
 
 /** 이름 → 값(한 칸) 또는 값 목록(반복 구간 열) */
@@ -43,11 +43,14 @@ export function collectNamed(sheet: Sheet): NamedValues {
   return out;
 }
 
-/** 비공개 칸에 붙은 이름들 — 다른 문서로 값을 가져올 때는 뺀다(문서 보기에서 가려지는 값) */
+/** 비공개 칸(칸·행·열 비공개 모두)에 붙은 이름들 — 다른 문서로 값을 가져올 때는 뺀다(문서 보기에서 가려지는 값) */
 export function secretNames(sheet: Sheet): string[] {
-  const secret = sheet.cellMeta[APPROVAL_NS.secret] ?? {};
   return Object.entries(sheet.cellMeta[APPROVAL_NS.name] ?? {})
-    .filter(([key, name]) => typeof name === 'string' && !!name && secret[key] === true)
+    .filter(([key, name]) => {
+      if (typeof name !== 'string' || !name) return false;
+      const i = key.indexOf(':');
+      return isSecretCell(sheet, Number(key.slice(0, i)), sheet.cols.indexOf(key.slice(i + 1)));
+    })
     .map(([, name]) => name as string);
 }
 
