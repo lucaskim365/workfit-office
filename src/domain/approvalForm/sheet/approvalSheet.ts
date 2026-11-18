@@ -202,12 +202,16 @@ export const VISIBILITY_LABEL: Record<string, string> = { 부서: '부서 공개
 /** 이 이름공간의 칸이 든 행·열은 기안자가 지울 수 없음 */
 const STRUCTURE_LOCK_NS = [APPROVAL_NS.name, APPROVAL_NS.bind, APPROVAL_NS.secret, APPROVAL_NS.seal, APPROVAL_NS.autoNo];
 
-/** 칸 이름·데이터 불러오기·비공개·직인이 든 행/열인지 — 기안자 삭제 금지 판단 */
-export function isStructureLocked(s: Sheet, axis: 'row' | 'col', index: number): boolean {
+/**
+ * 칸 이름·데이터 불러오기·비공개·직인이 든 행/열인지 — 기안자 삭제 금지 판단.
+ * names: false 면 칸 이름은 보지 않는다(서식 편집기의 일반 편집자 — 칸 이름은 linkLock 이 잠긴 이름·규칙 기준 칸만 따로 막는다)
+ */
+export function isStructureLocked(s: Sheet, axis: 'row' | 'col', index: number, opts: { names?: boolean } = {}): boolean {
   if (axis === 'row' && s.rowMeta[APPROVAL_NS.secret]?.[String(index)]) return true;
   const col = s.cols[index];
   if (axis === 'col' && col !== undefined && s.colMeta[APPROVAL_NS.secret]?.[col]) return true;
-  return STRUCTURE_LOCK_NS.some((ns) =>
+  const spaces = opts.names === false ? STRUCTURE_LOCK_NS.filter((ns) => ns !== APPROVAL_NS.name) : STRUCTURE_LOCK_NS;
+  return spaces.some((ns) =>
     Object.keys(s.cellMeta[ns] ?? {}).some((key) => {
       const i = key.indexOf(':');
       return axis === 'row' ? Number(key.slice(0, i)) === index : key.slice(i + 1) === col;
