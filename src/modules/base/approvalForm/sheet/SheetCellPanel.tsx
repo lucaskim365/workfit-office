@@ -43,8 +43,11 @@ import { AutoNumberSettings } from '../components/ApprovalFormEditor';
 import { useCompanyMarks } from '@/features/companyMark/useCompanyMarks';
 import { marksOf } from '@/domain/companyMark/schema';
 import { autoNumberPreview } from '@/domain/approvalForm/autoNumber';
-import { AMOUNT_NAME, isLockedName, lockInfo, lockTitle } from '@/domain/approvalForm/sheet/linkLock';
+import { AMOUNT_NAME, isLockedName, lockInfo, lockTitle, ruleNames, type LockedNames } from '@/domain/approvalForm/sheet/linkLock';
 import { canEditCellLinks } from './cellLinkGate';
+
+/** 잠긴 이름 없음(기본값) */
+const NO_LOCKED: LockedNames = new Set();
 
 /**
  * 시트 서식 편집기 — 고른 칸의 결재 속성(칸 종류·필수·잠금·직인·칸 이름·비공개·작성 요령)과 그 줄의 설정(보이기 조건·거래처용 숨김·반복 구간).
@@ -140,12 +143,15 @@ export function SheetCellPanel({
   selection,
   onChange,
   link = null,
+  locked = NO_LOCKED,
 }: {
   sheet: Sheet;
   selection: SheetSelection;
   onChange: (next: Sheet) => void;
   /** 연동 기능(연동 유형) — 있으면 그 연동 칸 이름(휴가 기간 등)을 칸 이름 목록에 */
   link?: string | null;
+  /** 잠긴 이름(🔒) — 마지막으로 저장한 판으로 정한 것(linkLock.lockedNamesOf) */
+  locked?: LockedNames;
 }) {
   const linkDef = linkTypeDef(link);
   const systemKeys = new Set([...COMMON_CELL_NAMES.map((n) => n.key), ...(linkDef?.names.map((n) => n.key) ?? [])]);
@@ -158,8 +164,17 @@ export function SheetCellPanel({
   const systemLocked = props.name ? linkDef?.names.find((n) => n.key === props.name && n.locked) : undefined;
   // 칸 이름·연동은 개발 담당자 몫 — 일반 편집자에겐 이름 대신 🔒, 그 칸의 종류는 못 바꾼다(연동이 칸 종류에 맞춰 값을 읽음)
   const devLinks = canEditCellLinks();
-  const lockedName = isLockedName(sheet, props.name) ? props.name : undefined;
+  const lockedName = isLockedName(locked, props.name) ? props.name : undefined;
   const kindLocked = !devLinks && !!lockedName;
+  // 금액 칸으로 정할 수 없는 까닭 — 잠긴 칸이거나 '값에 따라 바뀌는 것'의 기준 칸(그 이름을 규칙이 가리킴). 그 밖의 이름(규칙을 풀어 남은 것)은 덮어도 된다
+  const amountBlock =
+    !props.name || props.name === AMOUNT_NAME
+      ? undefined
+      : lockedName
+        ? '이 칸은 이미 다른 기능에 쓰여서 금액 칸으로 정할 수 없어요.'
+        : ruleNames(sheet).has(props.name)
+          ? "이 칸은 '값에 따라 바뀌는 것'의 기준 칸이에요 — 금액 칸으로 정하려면 그 규칙을 먼저 지워 주세요."
+          : undefined;
   // 금액 칸 — 편집자가 체크로 정한다(서식에 하나 — 다른 칸에 있으면 이 칸으로 옮김, 칸 이름 고르기와 같은 규칙)
   const amountKey = Object.entries(sheet.cellMeta[APPROVAL_NS.name] ?? {}).find(([, n]) => n === AMOUNT_NAME)?.[0];
   const amountAt = (() => {
@@ -538,13 +553,12 @@ export function SheetCellPanel({
         {!devLinks && (
           <Check
             checked={props.name === AMOUNT_NAME}
-            disabled={!!props.name && props.name !== AMOUNT_NAME}
+            disabled={!!amountBlock}
             onChange={(v) => onChange(setCellName(sheet, focus.r, focus.c, v ? AMOUNT_NAME : undefined))}
             label="이 칸이 문서 금액이에요 (결재선 금액 조건에 쓰여요)"
             hint={
-              props.name && props.name !== AMOUNT_NAME
-                ? '이 칸은 이미 다른 기능에 쓰여서 금액 칸으로 정할 수 없어요.'
-                : `결재선 규칙의 금액 조건이 이 칸 값을 문서 금액으로 읽어요. 숫자·금액 칸이나 수식 칸이어야 해요. 서식에 한 칸만 — ${amountAt ? `지금은 ${amountAt} 칸이고, 체크하면 이 칸으로 옮겨요.` : '다른 칸을 체크하면 그 칸으로 옮겨요.'}`
+              amountBlock ??
+              `결재선 규칙의 금액 조건이 이 칸 값을 문서 금액으로 읽어요. 숫자·금액 칸이나 수식 칸이어야 해요. 서식에 한 칸만 — ${amountAt ? `지금은 ${amountAt} 칸이고, 체크하면 이 칸으로 옮겨요.` : '다른 칸을 체크하면 그 칸으로 옮겨요.'}`
             }
           />
         )}

@@ -4,13 +4,15 @@
  * 그 이름이 사라지는 동작(행·열 지우기, 덮는 병합, 입력 종류 바꾸기 등)과 저장은 막는다.
  * 여기는 판단만 하는 순수 함수 — 누가 막히는지(개발자인지)는 화면 쪽(cellLinkGate)이 정한다.
  *
- * 잠그는 이름 = 'amount'(금액 키 — 편집자가 직접 체크로 정함)가 아닌 이름 중
- *  - 연동 기능 이름(LINK_TYPES 의 키)이면 늘 잠금
- *  - 직접 쓴 이름은 '값에 따라 바뀌는 것'(행 보이기 조건·종속 선택)이 가리키는 이름이 아닐 때 잠금
- *    (그 이름은 편집자가 규칙을 걸 때 저절로 지어 붙는 것이라 편집자 몫이다)
+ * 잠그는 이름은 '마지막으로 저장한 판'으로 정한다(lockedNamesOf) — 지금 시트의 규칙으로 정하면
+ * 편집자가 잠긴 칸에 규칙을 걸어 잠금을 풀 수 있기 때문. 저장한 판에서 'amount'(금액 키 — 편집자가 직접 체크로 정함)가 아닌 이름 중
+ *  - 연동 기능 이름(LINK_TYPES 의 키)이면 잠금
+ *  - 직접 쓴 이름은 그 판에서 '값에 따라 바뀌는 것'(행 보이기 조건·종속 선택)이 가리키지 않았으면 잠금
+ *    (가리키던 이름은 편집자가 규칙을 걸 때 저절로 지어 붙는 것이라 편집자 몫이다)
+ * 저장한 뒤 새로 붙은 이름(규칙이 지어 붙인 이름)은 잠그지 않는다. 연동 이름이 새로 생기는 것은 저장 검사가 막는다.
  */
 import { cellKey, type CellRange, type Sheet } from '@/lib/sheet/core';
-import { APPROVAL_NS, LINK_TYPES, cellAddress, coveredKeys, linkTypeDef, nameLabel, rowConditionOf, type CellInput } from './approvalSheet';
+import { APPROVAL_NS, LINK_TYPES, cellAddress, cellCaption, coveredKeys, linkTypeDef, nameLabel, rowConditionOf, setCellName, type CellInput } from './approvalSheet';
 
 /** 편집자가 직접 정하는 이름(잠그지 않음) — 금액 키 */
 export const AMOUNT_NAME = 'amount';
@@ -19,6 +21,9 @@ const LINK_KEYS = new Set(LINK_TYPES.flatMap((t) => t.names.map((n) => n.key)));
 
 /** 연동 기능 이름(휴가 기간·발주처 등)인가 — 어느 연동 기능이든 */
 export const isLinkKey = (name: string): boolean => LINK_KEYS.has(name);
+
+/** 잠긴 이름들 — 마지막으로 저장한 판에서 정한다(lockedNamesOf) */
+export type LockedNames = ReadonlySet<string>;
 
 /** '값에 따라 바뀌는 것'이 가리키는 이름 — 행 보이기 조건·종속 선택의 기준 칸 이름 */
 export function ruleNames(s: Sheet): Set<string> {
@@ -34,28 +39,31 @@ export function ruleNames(s: Sheet): Set<string> {
   return out;
 }
 
-/** 이 이름이 잠긴 이름인가(시트 기준 — 규칙이 가리키는 직접 쓴 이름은 잠그지 않음) */
-export function isLockedName(s: Sheet, name: string | undefined, rules: Set<string> = ruleNames(s)): name is string {
-  if (!name || name === AMOUNT_NAME) return false;
-  return isLinkKey(name) || !rules.has(name);
-}
+const keyRow = (key: string) => Number(key.slice(0, key.indexOf(':')));
+const keyCol = (key: string) => key.slice(key.indexOf(':') + 1);
 
-/** 잠긴 이름이 붙은 칸 — 칸 키('행:열키') → 이름 */
-export function lockedCells(s: Sheet): Map<string, string> {
-  const rules = ruleNames(s);
-  const out = new Map<string, string>();
-  Object.entries(s.cellMeta[APPROVAL_NS.name] ?? {}).forEach(([key, name]) => {
-    if (typeof name === 'string' && isLockedName(s, name, rules)) out.set(key, name);
+/** 칸 이름 전부 — 칸 키('행:열키') → 이름(금액 키 포함) */
+const nameEntries = (s: Sheet): Array<[string, string]> =>
+  Object.entries(s.cellMeta[APPROVAL_NS.name] ?? {}).filter((e): e is [string, string] => typeof e[1] === 'string' && !!e[1]);
+
+/** 저장한 판의 잠긴 이름 — 연동 이름, 그리고 그 판의 규칙이 가리키지 않던 직접 쓴 이름(금액 키는 빼고) */
+export function lockedNamesOf(saved: Sheet): Set<string> {
+  const rules = ruleNames(saved);
+  const out = new Set<string>();
+  nameEntries(saved).forEach(([, n]) => {
+    if (n !== AMOUNT_NAME && (isLinkKey(n) || !rules.has(n))) out.add(n);
   });
   return out;
 }
 
-/** 이 칸(행·열 번호)의 잠긴 이름 */
-export function lockedNameAt(s: Sheet, r: number, c: number): string | undefined {
-  const col = s.cols[c];
-  if (col === undefined) return undefined;
-  const name = s.cellMeta[APPROVAL_NS.name]?.[cellKey(r, col)];
-  return typeof name === 'string' && isLockedName(s, name) ? name : undefined;
+/** 이 이름이 잠긴 이름인가 */
+export function isLockedName(locked: LockedNames, name: string | undefined): name is string {
+  return !!name && name !== AMOUNT_NAME && locked.has(name);
+}
+
+/** 잠긴 이름이 붙은 칸 — 칸 키('행:열키') → 이름 */
+export function lockedCells(s: Sheet, locked: LockedNames): Map<string, string> {
+  return new Map(nameEntries(s).filter(([, n]) => isLockedName(locked, n)));
 }
 
 /** 잠긴 이름을 사람에게 — 이름표(지금 연동 기능의 한글 이름 우선)와 그 이름을 쓰는 기능 */
@@ -81,50 +89,57 @@ const reason = (name: string, link: string | null | undefined): string => {
   return `'${label}'(${feature})`;
 };
 
-const keyRow = (key: string) => Number(key.slice(0, key.indexOf(':')));
-const keyCol = (key: string) => key.slice(key.indexOf(':') + 1);
+/** 이 칸이 '값에 따라 바뀌는 것'의 기준 칸이라 지울 수 없다는 안내 */
+const ruleNote = (s: Sheet, r: number, c: number): string =>
+  `${cellAddress(r, c)} 칸('${cellCaption(s, r, c)}') 값에 따라 바뀌는 규칙이 있어요. 규칙('값에 따라 바뀌는 것')을 먼저 지우면 지울 수 있어요.`;
 
-/** 행 r1~r2 를 지우면 사라지는 잠긴 이름이 있으면 막는 까닭, 없으면 null */
-export function deleteRowsBlock(s: Sheet, r1: number, r2: number, link: string | null | undefined): string | null {
-  const lo = Math.min(r1, r2);
-  const hi = Math.max(r1, r2);
-  for (const [key, name] of lockedCells(s)) {
+/** 범위 안 칸 이름 중 막는 것 — 잠긴 이름이면 그 기능, 규칙 기준 칸이면 규칙 안내 */
+function deleteBlock(s: Sheet, locked: LockedNames, link: string | null | undefined, inRange: (r: number, c: number) => boolean): string | null {
+  const rules = ruleNames(s);
+  let ruleHit: string | null = null;
+  for (const [key, name] of nameEntries(s)) {
     const r = keyRow(key);
-    if (r >= lo && r <= hi) return `${r + 1}행의 칸은 ${reason(name, link)}에 쓰여서 지울 수 없어요.`;
+    const c = s.cols.indexOf(keyCol(key));
+    if (c < 0 || !inRange(r, c)) continue;
+    if (isLockedName(locked, name)) return `${cellAddress(r, c)} 칸은 ${reason(name, link)}에 쓰여서 지울 수 없어요.`;
+    if (!ruleHit && rules.has(name)) ruleHit = ruleNote(s, r, c);
   }
-  return null;
+  return ruleHit;
 }
 
-/** 열 c1~c2 를 지우면 사라지는 잠긴 이름이 있으면 막는 까닭, 없으면 null */
-export function deleteColsBlock(s: Sheet, c1: number, c2: number, link: string | null | undefined): string | null {
+/** 행 r1~r2 를 지우면 사라지는 잠긴 이름·규칙 기준 칸이 있으면 막는 까닭, 없으면 null */
+export function deleteRowsBlock(s: Sheet, r1: number, r2: number, link: string | null | undefined, locked: LockedNames): string | null {
+  const lo = Math.min(r1, r2);
+  const hi = Math.max(r1, r2);
+  return deleteBlock(s, locked, link, (r) => r >= lo && r <= hi);
+}
+
+/** 열 c1~c2 를 지우면 사라지는 잠긴 이름·규칙 기준 칸이 있으면 막는 까닭, 없으면 null */
+export function deleteColsBlock(s: Sheet, c1: number, c2: number, link: string | null | undefined, locked: LockedNames): string | null {
   const lo = Math.min(c1, c2);
   const hi = Math.max(c1, c2);
-  for (const [key, name] of lockedCells(s)) {
-    const c = s.cols.indexOf(keyCol(key));
-    if (c >= lo && c <= hi) return `${cellAddress(keyRow(key), c)} 칸은 ${reason(name, link)}에 쓰여서 지울 수 없어요.`;
-  }
-  return null;
+  return deleteBlock(s, locked, link, (_r, c) => c >= lo && c <= hi);
 }
 
 /**
  * 병합하면 잠긴 이름이 사라지나 — 막는 까닭, 괜찮으면 null.
  * 잠긴 칸이 남는 칸(왼쪽 위, 왼쪽 위가 비었으면 처음 나오는 내용 있는 칸 — 그 칸이 왼쪽 위로 옮겨짐)이면 괜찮다
  */
-export function mergeBlock(s: Sheet, range: CellRange, link: string | null | undefined): string | null {
-  const locked = lockedCells(s);
+export function mergeBlock(s: Sheet, range: CellRange, link: string | null | undefined, locked: LockedNames): string | null {
+  const cells = lockedCells(s, locked);
   const r1 = Math.min(range.r1, range.r2);
   const r2 = Math.max(range.r1, range.r2);
   const c1 = Math.min(range.c1, range.c2);
   const c2 = Math.max(range.c1, range.c2);
   const inside: string[] = [];
-  for (let r = r1; r <= r2; r++) for (let c = c1; c <= c2; c++) if (s.cols[c] !== undefined && locked.has(cellKey(r, s.cols[c]))) inside.push(cellKey(r, s.cols[c]));
+  for (let r = r1; r <= r2; r++) for (let c = c1; c <= c2; c++) if (s.cols[c] !== undefined && cells.has(cellKey(r, s.cols[c]))) inside.push(cellKey(r, s.cols[c]));
   if (inside.length >= 2) {
-    const labels = inside.map((k) => `'${lockInfo(locked.get(k)!, link).label}'`).join('·');
+    const labels = inside.map((k) => `'${lockInfo(cells.get(k)!, link).label}'`).join('·');
     return `${labels} 칸은 다른 기능에 따로 쓰여서 한 칸으로 합칠 수 없어요.`;
   }
   const covered = new Set(coveredKeys(s, range));
   const hit = inside.find((k) => covered.has(k));
-  return hit ? `이 칸은 ${reason(locked.get(hit)!, link)}에 쓰여서 가려지게 합칠 수 없어요. 이 칸이 왼쪽 위에 오도록 고르세요.` : null;
+  return hit ? `이 칸은 ${reason(cells.get(hit)!, link)}에 쓰여서 가려지게 합칠 수 없어요. 이 칸이 왼쪽 위에 오도록 고르세요.` : null;
 }
 
 /** 이름별 개수 */
@@ -134,22 +149,29 @@ function countNames(names: Iterable<string>): Map<string, number> {
   return out;
 }
 
-const allNames = (s: Sheet): string[] =>
-  Object.values(s.cellMeta[APPROVAL_NS.name] ?? {}).filter((n): n is string => typeof n === 'string' && !!n && n !== AMOUNT_NAME);
+const allNames = (s: Sheet): string[] => nameEntries(s).map(([, n]) => n).filter((n) => n !== AMOUNT_NAME);
 
 /** prev 의 잠긴 이름 중 next 에서 사라진(개수가 줄어든) 이름 */
-export function droppedLockedNames(prev: Sheet, next: Sheet): string[] {
-  const before = countNames(lockedCells(prev).values());
+export function droppedLockedNames(prev: Sheet, next: Sheet, locked: LockedNames): string[] {
+  const before = countNames(lockedCells(prev, locked).values());
   const after = countNames(allNames(next));
   return [...before].filter(([n, k]) => (after.get(n) ?? 0) < k).map(([n]) => n);
 }
 
-/** 잠긴 칸의 입력 종류가 바뀌었거나 빠졌나 — 연동 기능은 칸 종류(날짜·선택 등)에 맞춰 값을 읽는다 */
-export function inputChangedLocked(prev: Sheet, next: Sheet): string | undefined {
-  const typeAt = (s: Sheet, key: string) => (s.cellMeta[APPROVAL_NS.input]?.[key] as CellInput | undefined)?.type;
-  for (const [key, name] of lockedCells(prev)) {
-    if (next.cellMeta[APPROVAL_NS.name]?.[key] !== name) continue; // 칸이 옮겨진 경우는 이름 검사(droppedLockedNames)가 본다
-    if (typeAt(prev, key) !== typeAt(next, key)) return name;
+/** 이 이름이 붙은 칸들의 입력 종류(입력 칸이 아니면 undefined) */
+const inputTypesOf = (s: Sheet, name: string): Array<string | undefined> =>
+  nameEntries(s)
+    .filter(([, n]) => n === name)
+    .map(([key]) => (s.cellMeta[APPROVAL_NS.input]?.[key] as CellInput | undefined)?.type);
+
+/**
+ * 잠긴 칸의 입력 종류가 바뀌었거나 빠졌나 — 연동 기능은 칸 종류(날짜·선택 등)에 맞춰 값을 읽는다.
+ * 칸이 옮겨져도(행 넣기·병합) 이름으로 찾아 비교한다
+ */
+export function inputChangedLocked(prev: Sheet, next: Sheet, locked: LockedNames): string | undefined {
+  for (const name of new Set(lockedCells(prev, locked).values())) {
+    const was = new Set(inputTypesOf(prev, name));
+    if (inputTypesOf(next, name).some((t) => !was.has(t))) return name;
   }
   return undefined;
 }
@@ -158,18 +180,35 @@ export function inputChangedLocked(prev: Sheet, next: Sheet): string | undefined
  * 편집자 동작(칸 속성·부품) 하나를 받아도 되나 — 막는 까닭, 괜찮으면 null.
  * 잠긴 이름이 사라지거나, 잠긴 칸의 입력 종류가 바뀌면 막는다
  */
-export function sheetChangeBlock(prev: Sheet, next: Sheet, link: string | null | undefined): string | null {
-  const dropped = droppedLockedNames(prev, next);
+export function sheetChangeBlock(prev: Sheet, next: Sheet, link: string | null | undefined, locked: LockedNames): string | null {
+  const dropped = droppedLockedNames(prev, next, locked);
   if (dropped.length) return `이 칸은 ${reason(dropped[0], link)}에 쓰여서 지울 수 없어요.`;
-  const changed = inputChangedLocked(prev, next);
+  const changed = inputChangedLocked(prev, next, locked);
   if (changed) return `이 칸은 ${reason(changed, link)}에 쓰여서 칸 종류를 바꿀 수 없어요.`;
   return null;
+}
+
+/**
+ * 규칙을 풀어 아무 규칙도 가리키지 않게 된 이름을 뗀다 — 규칙을 걸 때 저절로 지어 붙은 이름이 남아
+ * 편집자가 볼 수도 뗄 수도 없는 이름으로 남지 않게. 잠긴 이름·연동 이름·금액 키는 그대로 둔다
+ */
+export function dropUnusedRuleNames(prev: Sheet, next: Sheet, locked: LockedNames): Sheet {
+  const after = ruleNames(next);
+  const gone = new Set([...ruleNames(prev)].filter((n) => !after.has(n) && n !== AMOUNT_NAME && !isLinkKey(n) && !locked.has(n)));
+  if (!gone.size) return next;
+  let out = next;
+  for (const [key, name] of nameEntries(next)) {
+    const c = next.cols.indexOf(keyCol(key));
+    if (gone.has(name) && c >= 0) out = setCellName(out, keyRow(key), c, undefined);
+  }
+  return out;
 }
 
 /**
  * 저장 전 검사 — 마지막으로 저장한 것과 비교해 연결이 틀어졌으면 막는 까닭들(붙여넣기·버전 되살리기·되돌리기 등 어느 길로 왔든).
  * - 연동 기능이 바뀜
  * - 저장한 판의 잠긴 이름이 사라짐(개수가 줄어듦)
+ * - 잠긴 칸의 입력 종류가 바뀜
  * - 연동 기능 이름이 새로 생기거나 늘어남(편집자는 연동 이름을 붙일 수 없다)
  * 이름 없는 새 서식, 규칙이 지어 붙인 이름·금액 키는 괜찮다
  */
@@ -178,8 +217,15 @@ export function saveLockIssues(
   current: { sheet: Sheet; link: string | null }
 ): string[] {
   const issues: string[] = [];
+  const locked = lockedNamesOf(saved.sheet);
   if ((saved.link ?? null) !== (current.link ?? null)) issues.push('연동 기능은 바꿀 수 없어요. 마지막으로 저장한 연동 기능으로 되돌려 주세요.');
-  droppedLockedNames(saved.sheet, current.sheet).forEach((n) => issues.push(`${reason(n, saved.link)}에 쓰이는 칸이 사라졌어요. 되돌리기(Ctrl+Z)로 살려 주세요.`));
+  const dropped = droppedLockedNames(saved.sheet, current.sheet, locked);
+  dropped.forEach((n) => issues.push(`${reason(n, saved.link)}에 쓰이는 칸이 사라졌어요. 되돌리기(Ctrl+Z)로 살려 주세요.`));
+  for (const n of new Set(lockedCells(saved.sheet, locked).values())) {
+    if (dropped.includes(n)) continue;
+    const was = new Set(inputTypesOf(saved.sheet, n));
+    if (inputTypesOf(current.sheet, n).some((t) => !was.has(t))) issues.push(`${reason(n, saved.link)}에 쓰이는 칸의 종류가 바뀌었어요. 되돌리기(Ctrl+Z)로 살려 주세요.`);
+  }
   const before = countNames(allNames(saved.sheet));
   const after = countNames(allNames(current.sheet));
   [...after].forEach(([n, k]) => {

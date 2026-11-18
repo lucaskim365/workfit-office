@@ -51,7 +51,7 @@ import { healRepeatSections, repeatIssues, repeatSections } from '@/domain/appro
 import { valueRuleIssues } from '@/domain/approvalForm/sheet/valueRules';
 import { missingAmountKeyIssues } from '@/domain/approvalRoute/amountRules';
 import { useRouteRules } from '@/features/gw/useRouteRules';
-import { deleteColsBlock, deleteRowsBlock, isLockedName, lockTitle, lockedCells, mergeBlock, ruleNames, saveLockIssues, sheetChangeBlock } from '@/domain/approvalForm/sheet/linkLock';
+import { deleteColsBlock, deleteRowsBlock, dropUnusedRuleNames, isLockedName, lockTitle, lockedCells, lockedNamesOf, mergeBlock, saveLockIssues, sheetChangeBlock } from '@/domain/approvalForm/sheet/linkLock';
 import { canEditCellLinks } from './cellLinkGate';
 
 const inp ='w-full rounded-lg border border-border-hi bg-panel px-2.5 py-1.5 text-[12px] text-ink outline-none focus:border-teal disabled:bg-panel-alt disabled:text-ink3';
@@ -140,11 +140,17 @@ function Designer({
   const [savedLink, setSavedLink] = useState<string | null>(initialLink);
   // 칸 이름·연동 기능은 개발 담당자 몫 — 일반 편집자는 연결 칸(🔒)이 사라지는 동작과 저장을 못 한다(linkLock.ts)
   const devLinks = canEditCellLinks();
-  /** 칸 속성·부품으로 시트를 바꾼다 — 일반 편집자면 연결 칸 이름이 사라지거나 그 칸 종류가 바뀌는 변경은 막는다 */
+  // 잠긴 이름(🔒)은 마지막으로 저장한 판으로 정한다 — 지금 시트에 규칙을 걸어 잠금이 풀리지 않게
+  const locked = useMemo(() => lockedNamesOf(savedSheet), [savedSheet]);
+  /**
+   * 칸 속성·부품으로 시트를 바꾼다 — 일반 편집자면 연결 칸 이름이 사라지거나 그 칸 종류가 바뀌는 변경은 막고,
+   * 규칙을 풀어 아무 데도 안 쓰이게 된(규칙이 지어 붙인) 이름은 뗀다
+   */
   const changeSheet = (next: Sheet) => {
     if (!devLinks) {
-      const why = sheetChangeBlock(sheet, next, link);
+      const why = sheetChangeBlock(sheet, next, link, locked);
       if (why) return setMsg({ kind: 'err', text: why });
+      next = dropUnusedRuleNames(sheet, next, locked);
     }
     setSheet(next);
   };
@@ -237,7 +243,7 @@ function Designer({
     e.target.value = '';
     if (!file) return;
     // 엑셀로 바꾸면 칸 속성이 모두 지워진다 — 다른 기능에 쓰이는 칸(🔒)이 있는 서식은 일반 편집자가 바꿀 수 없다
-    const firstLocked = devLinks ? undefined : [...lockedCells(sheet).values()][0];
+    const firstLocked = devLinks ? undefined : [...lockedCells(sheet, locked).values()][0];
     if (firstLocked) return setMsg({ kind: 'err', text: `이 서식에는 다른 기능에 쓰이는 칸(🔒 ${lockTitle(firstLocked, link)})이 있어서 엑셀로 바꿀 수 없어요. 모양은 이 화면에서 고쳐 주세요.` });
     const hasContent = sheet.rows.some((row) => Object.values(row).some((v) => v !== ''));
     // 문서 정보 표(기안자·제목 등 칸)가 있던 시트면 불러온 엑셀 위에 다시 넣는다 — 새 서식은 이 표로 시작하므로 엑셀만 넣어도 유지
@@ -338,10 +344,10 @@ function Designer({
     const res = applyPart(sheet, range, id, toggle);
     if ('notice' in res) return setMsg({ kind: 'err', text: res.notice });
     if (!devLinks) {
-      const why = sheetChangeBlock(sheet, res, link);
+      const why = sheetChangeBlock(sheet, res, link, locked);
       if (why) return setMsg({ kind: 'err', text: why });
     }
-    setSheet(res);
+    setSheet(devLinks ? res : dropUnusedRuleNames(sheet, res, locked));
     setSide('cell');
   };
   const onPartDrop = (e: React.DragEvent) => {
@@ -359,8 +365,6 @@ function Designer({
 
   // ── 칸 표시(편집 격자 안) ──
   const sections = useMemo(() => repeatSections(sheet), [sheet]);
-  // 🔒 표시용 — '값에 따라 바뀌는 것'이 가리키는 이름(잠그지 않음)
-  const rules = useMemo(() => ruleNames(sheet), [sheet]);
   // 행 보이기 조건 표시용 — 조건 칸 이름 → 칸 왼쪽 글자(지출 항목)
   const condLabels = useMemo(() => new Map(conditionSources(sheet).map((x) => [x.name, x.label])), [sheet]);
   const badge = (r: number, c: number) => {
@@ -487,7 +491,7 @@ function Designer({
     const icons: Mark[] = [];
     if (p.required && p.input) icons.push({ key: 'req', icon: <Asterisk className={ic} />, cls: 'text-rose-500', title: '필수 입력 — 비어 있으면 상신할 수 없음' });
     // 칸 이름 — 다른 기능에 쓰이는 칸은 🔒(지우거나 종류를 못 바꿈). 금액 칸·규칙이 지어 붙인 이름은 개발 빌드에서만 이름표
-    if (isLockedName(sheet, p.name, rules)) {
+    if (isLockedName(locked, p.name)) {
       icons.push({ key: 'name', icon: <span className="text-[8px] leading-none">🔒</span>, cls: '', title: lockTitle(p.name, link) });
     } else if (p.name === 'amount') {
       icons.push({ key: 'name', icon: <Tag className={ic} />, cls: 'text-teal', title: devLinks ? `칸 이름: ${nameLabel(p.name)}` : '문서 금액 — 결재선 금액 조건에 쓰여요' });
@@ -948,23 +952,24 @@ function Designer({
             // 왼쪽 위 칸이 기준 — 가려지는 칸의 부품(입력 칸 등)은 뺀다. 칸 이름·불러오기·직인·자동번호가 빠지면 먼저 묻는다
             mergeCells={(s, range) => {
               // 일반 편집자 — 다른 기능에 쓰이는 칸(🔒)이 가려지거나 둘이 한 칸이 되는 병합은 막는다(그 칸이 남는 칸이면 괜찮다)
-              const locked = devLinks ? null : mergeBlock(s, range, link);
-              if (locked) {
-                setMsg({ kind: 'err', text: locked });
+              const why = devLinks ? null : mergeBlock(s, range, link, locked);
+              if (why) {
+                setMsg({ kind: 'err', text: why });
                 return s;
               }
               if (mergeCoversLinks(s, range) && !confirm('가려지는 칸에 연결된 부품(불러오기·직인·자동번호 등)이 있습니다. 병합하면 그 연결이 빠집니다. 병합할까요?')) return s;
               if (mergeDropsContent(s, range) && !confirm('병합하면 왼쪽 위 칸만 남고 다른 칸의 글자는 지워집니다. 병합할까요?')) return s;
               return mergeApprovalRange(s, range);
             }}
-            // 연결된 칸이 든 행·열은 못 지운다 — 다른 기능에 쓰이는 칸(🔒)이면 어느 기능인지 알린다
+            // 연결된 칸이 든 행·열은 못 지운다 — 다른 기능에 쓰이는 칸(🔒)이면 어느 기능인지, '값에 따라 바뀌는 것'의 기준 칸이면 규칙을 먼저 지우라고 알린다.
+            // 일반 편집자는 그 밖의 칸 이름(규칙을 풀어 남은 이름 등 — 보이지 않음)으로는 막히지 않는다
             canDeleteRow={(s, r) => {
-              blockNote.current = deleteRowsBlock(s, r, r, link);
-              return !blockNote.current && !isStructureLocked(s, 'row', r);
+              blockNote.current = deleteRowsBlock(s, r, r, link, locked);
+              return !blockNote.current && !isStructureLocked(s, 'row', r, { names: devLinks });
             }}
             canDeleteCol={(s, c) => {
-              blockNote.current = deleteColsBlock(s, c, c, link);
-              return !blockNote.current && !isStructureLocked(s, 'col', c);
+              blockNote.current = deleteColsBlock(s, c, c, link, locked);
+              return !blockNote.current && !isStructureLocked(s, 'col', c, { names: devLinks });
             }}
             setValue={setApprovalCellValue}
             renderBadge={badge}
@@ -1065,7 +1070,7 @@ function Designer({
                 <SheetPalette sheet={sheet} selection={selection} onApply={putPart} />
               </details>
               )}
-              <SheetCellPanel sheet={sheet} selection={selection} onChange={changeSheet} link={link} />
+              <SheetCellPanel sheet={sheet} selection={selection} onChange={changeSheet} link={link} locked={locked} />
             </>
           ) : side === 'settings' ? (
             <SheetFormSettings form={form} onChange={set} />
