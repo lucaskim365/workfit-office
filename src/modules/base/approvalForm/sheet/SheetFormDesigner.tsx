@@ -51,6 +51,8 @@ import { healRepeatSections, repeatIssues, repeatSections } from '@/domain/appro
 import { valueRuleIssues } from '@/domain/approvalForm/sheet/valueRules';
 import { missingAmountKeyIssues } from '@/domain/approvalRoute/amountRules';
 import { useRouteRules } from '@/features/gw/useRouteRules';
+import { deleteColsBlock, deleteRowsBlock, isLockedName, lockTitle, lockedCells, mergeBlock, ruleNames, saveLockIssues, sheetChangeBlock } from '@/domain/approvalForm/sheet/linkLock';
+import { canEditCellLinks } from './cellLinkGate';
 
 const inp ='w-full rounded-lg border border-border-hi bg-panel px-2.5 py-1.5 text-[12px] text-ink outline-none focus:border-teal disabled:bg-panel-alt disabled:text-ink3';
 
@@ -136,6 +138,18 @@ function Designer({
   // 연동 기능(연동 유형) — 휴가·외근·출장·휴일근무 기능과 잇기. 버전과 함께 저장된다
   const [link, setLink] = useState<string | null>(initialLink);
   const [savedLink, setSavedLink] = useState<string | null>(initialLink);
+  // 칸 이름·연동 기능은 개발 담당자 몫 — 일반 편집자는 연결 칸(🔒)이 사라지는 동작과 저장을 못 한다(linkLock.ts)
+  const devLinks = canEditCellLinks();
+  /** 칸 속성·부품으로 시트를 바꾼다 — 일반 편집자면 연결 칸 이름이 사라지거나 그 칸 종류가 바뀌는 변경은 막는다 */
+  const changeSheet = (next: Sheet) => {
+    if (!devLinks) {
+      const why = sheetChangeBlock(sheet, next, link);
+      if (why) return setMsg({ kind: 'err', text: why });
+    }
+    setSheet(next);
+  };
+  // 행·열 지우기를 막은 까닭 — 편집기의 일반 알림('연결된 칸이 있어…') 대신 보인다
+  const blockNote = useRef<string | null>(null);
   const [side, setSide] = useState<'cell' | 'settings' | 'history'>('cell');
   // 기존 서식(항목 목록이 있는 서식)에 시트를 붙인 경우 — 서식 기록·항목 목록은 그대로, 시트 틀만 버전으로 쌓는다
   const legacy = !!initialForm.id && hasLegacyFields(initialForm);
@@ -222,6 +236,9 @@ function Designer({
     const file = e.target.files?.[0];
     e.target.value = '';
     if (!file) return;
+    // 엑셀로 바꾸면 칸 속성이 모두 지워진다 — 다른 기능에 쓰이는 칸(🔒)이 있는 서식은 일반 편집자가 바꿀 수 없다
+    const firstLocked = devLinks ? undefined : [...lockedCells(sheet).values()][0];
+    if (firstLocked) return setMsg({ kind: 'err', text: `이 서식에는 다른 기능에 쓰이는 칸(🔒 ${lockTitle(firstLocked, link)})이 있어서 엑셀로 바꿀 수 없어요. 모양은 이 화면에서 고쳐 주세요.` });
     const hasContent = sheet.rows.some((row) => Object.values(row).some((v) => v !== ''));
     // 문서 정보 표(기안자·제목 등 칸)가 있던 시트면 불러온 엑셀 위에 다시 넣는다 — 새 서식은 이 표로 시작하므로 엑셀만 넣어도 유지
     const keepFull = isFullHeaderSheet(sheet);
@@ -263,6 +280,9 @@ function Designer({
     if (isNew && versionHeads.has(code)) {
       return setMsg({ kind: 'err', text: `서식 코드 '${code}'는 예전에 지운 시트 서식이 쓰던 코드입니다(버전 기록 v${versionHeads.get(code)}까지 남아 있음 — 그 코드로 쓴 문서를 보여 주려고 지우지 않음). 다른 코드를 정해 주세요.` });
     }
+    // 일반 편집자 — 마지막 저장과 비교해 연결 칸·연동 기능이 틀어졌으면 막는다(붙여넣기·버전 되살리기·되돌리기 등 어느 길로 왔든)
+    const lockIssues = devLinks ? [] : saveLockIssues({ sheet: savedSheet, link: savedLink }, { sheet, link });
+    if (lockIssues.length) return setMsg({ kind: 'err', text: '다른 기능과 이어진 칸이 바뀌어 저장할 수 없어요.', list: lockIssues });
     const errors = [...validateApprovalSheet(sheet), ...repeatIssues(sheet), ...linkIssues(sheet, link)];
     if (errors.length) return setMsg({ kind: 'err', text: '저장할 수 없습니다. 아래를 고쳐 주세요.', list: errors });
     if (!user) return setMsg({ kind: 'err', text: '로그인 정보가 없습니다.' });
@@ -317,6 +337,10 @@ function Designer({
   const putPart = (id: string, range: CellRange, toggle = false) => {
     const res = applyPart(sheet, range, id, toggle);
     if ('notice' in res) return setMsg({ kind: 'err', text: res.notice });
+    if (!devLinks) {
+      const why = sheetChangeBlock(sheet, res, link);
+      if (why) return setMsg({ kind: 'err', text: why });
+    }
     setSheet(res);
     setSide('cell');
   };
@@ -335,6 +359,8 @@ function Designer({
 
   // ── 칸 표시(편집 격자 안) ──
   const sections = useMemo(() => repeatSections(sheet), [sheet]);
+  // 🔒 표시용 — '값에 따라 바뀌는 것'이 가리키는 이름(잠그지 않음)
+  const rules = useMemo(() => ruleNames(sheet), [sheet]);
   // 행 보이기 조건 표시용 — 조건 칸 이름 → 칸 왼쪽 글자(지출 항목)
   const condLabels = useMemo(() => new Map(conditionSources(sheet).map((x) => [x.name, x.label])), [sheet]);
   const badge = (r: number, c: number) => {
@@ -460,7 +486,14 @@ function Designer({
     const ic = 'h-2.5 w-2.5';
     const icons: Mark[] = [];
     if (p.required && p.input) icons.push({ key: 'req', icon: <Asterisk className={ic} />, cls: 'text-rose-500', title: '필수 입력 — 비어 있으면 상신할 수 없음' });
-    if (p.name) icons.push({ key: 'name', icon: <Tag className={ic} />, cls: 'text-teal', title: `칸 이름: ${nameLabel(p.name)}` });
+    // 칸 이름 — 다른 기능에 쓰이는 칸은 🔒(지우거나 종류를 못 바꿈). 금액 칸·규칙이 지어 붙인 이름은 개발 빌드에서만 이름표
+    if (isLockedName(sheet, p.name, rules)) {
+      icons.push({ key: 'name', icon: <span className="text-[8px] leading-none">🔒</span>, cls: '', title: lockTitle(p.name, link) });
+    } else if (p.name === 'amount') {
+      icons.push({ key: 'name', icon: <Tag className={ic} />, cls: 'text-teal', title: devLinks ? `칸 이름: ${nameLabel(p.name)}` : '문서 금액 — 결재선 금액 조건에 쓰여요' });
+    } else if (p.name && devLinks) {
+      icons.push({ key: 'name', icon: <Tag className={ic} />, cls: 'text-teal', title: `칸 이름: ${nameLabel(p.name)}` });
+    }
     if (p.lock) icons.push({ key: 'lock', icon: <Lock className={ic} />, cls: 'text-ink3', title: '기안자 수정 잠금' });
     if (p.secret) icons.push({ key: 'secret', icon: <EyeOff className={ic} />, cls: 'text-rose-500', title: '비공개' });
     if (p.seal) icons.push({ key: 'seal', icon: <Stamp className={ic} />, cls: 'text-red-600', title: '회사 직인 자리' });
@@ -664,6 +697,9 @@ function Designer({
                     )
                       return;
                     const res = legacyFormToSheet(initialForm);
+                    // 일반 편집자 — 다시 만든 틀의 연결 칸(🔒)·연동 기능이 지금 저장된 것과 다르면 바꾸지 않는다(저장 때도 막힘)
+                    const lockIssues = devLinks ? [] : saveLockIssues({ sheet: savedSheet, link: savedLink }, { sheet: res.sheet, link: res.link });
+                    if (lockIssues.length) return setMsg({ kind: 'err', text: '다시 만든 틀은 다른 기능과 이어진 칸이 지금과 달라 바꿀 수 없어요.', list: lockIssues });
                     setSheet(res.sheet);
                     setLink(res.link);
                     setNote('기존 양식에서 다시 만듦');
@@ -805,6 +841,12 @@ function Designer({
           </select>
         </Field>
         <Field label="연동 기능">
+          {!devLinks ? (
+            // 연동 기능은 개발 담당자가 정한다 — 일반 편집자는 보기만
+            <div className={`${inp} truncate bg-panel-alt text-ink2`} title="이 서식으로 쓴 문서가 이어지는 기능 — 바꾸려면 개발 담당자에게 요청하세요">
+              {link ? `🔒 ${LINK_TYPES.find((t) => t.code === link)?.feature ?? link}` : '없음 (일반 결재 서식)'}
+            </div>
+          ) : (
           <select
             className={inp}
             value={link ?? ''}
@@ -818,6 +860,7 @@ function Designer({
               </option>
             ))}
           </select>
+          )}
         </Field>
       </div>
 
@@ -873,7 +916,7 @@ function Designer({
               <Help text={PALETTE_HELP} size="h-3.5 w-3.5">
                 <span className="text-[12.5px] font-extrabold text-ink">부품</span>
               </Help>
-              <PartRemoveButton sheet={sheet} selection={selection} onChange={setSheet} />
+              <PartRemoveButton sheet={sheet} selection={selection} onChange={changeSheet} />
             </div>
             <SheetPalette sheet={sheet} selection={selection} onApply={putPart} variant="side" />
           </div>
@@ -904,17 +947,33 @@ function Designer({
             mode="design"
             // 왼쪽 위 칸이 기준 — 가려지는 칸의 부품(입력 칸 등)은 뺀다. 칸 이름·불러오기·직인·자동번호가 빠지면 먼저 묻는다
             mergeCells={(s, range) => {
+              // 일반 편집자 — 다른 기능에 쓰이는 칸(🔒)이 가려지거나 둘이 한 칸이 되는 병합은 막는다(그 칸이 남는 칸이면 괜찮다)
+              const locked = devLinks ? null : mergeBlock(s, range, link);
+              if (locked) {
+                setMsg({ kind: 'err', text: locked });
+                return s;
+              }
               if (mergeCoversLinks(s, range) && !confirm('가려지는 칸에 연결된 부품(칸 이름·불러오기·직인·자동번호)이 있습니다. 병합하면 그 연결이 빠집니다. 병합할까요?')) return s;
               if (mergeDropsContent(s, range) && !confirm('병합하면 왼쪽 위 칸만 남고 다른 칸의 글자는 지워집니다. 병합할까요?')) return s;
               return mergeApprovalRange(s, range);
             }}
-            canDeleteRow={(s, r) => !isStructureLocked(s, 'row', r)}
-            canDeleteCol={(s, c) => !isStructureLocked(s, 'col', c)}
+            // 연결된 칸이 든 행·열은 못 지운다 — 다른 기능에 쓰이는 칸(🔒)이면 어느 기능인지 알린다
+            canDeleteRow={(s, r) => {
+              blockNote.current = deleteRowsBlock(s, r, r, link);
+              return !blockNote.current && !isStructureLocked(s, 'row', r);
+            }}
+            canDeleteCol={(s, c) => {
+              blockNote.current = deleteColsBlock(s, c, c, link);
+              return !blockNote.current && !isStructureLocked(s, 'col', c);
+            }}
             setValue={setApprovalCellValue}
             renderBadge={badge}
             rowEnd={rowMarks}
             onSelect={setSelection}
-            onNotice={(text) => setMsg({ kind: 'err', text })}
+            onNotice={(text) => {
+              setMsg({ kind: 'err', text: blockNote.current ?? text });
+              blockNote.current = null;
+            }}
             guideWidth={SHEET_PAGE_WIDTH}
             // 문서는 아래로 펼치고 페이지가 스크롤 — 도구 막대·열 머리는 화면 위에 붙어 따라온다
             height="auto"
@@ -999,14 +1058,14 @@ function Designer({
               <details open data-tour="palette" className="group mb-3 border-b border-border pb-3">
                 <summary className="mb-1 flex cursor-pointer list-none items-center gap-2 text-[12.5px] font-extrabold text-ink">
                   <span className="mr-auto">부품</span>
-                  <PartRemoveButton sheet={sheet} selection={selection} onChange={setSheet} />
+                  <PartRemoveButton sheet={sheet} selection={selection} onChange={changeSheet} />
                   <span className="text-[10.5px] font-semibold text-ink3 group-open:hidden">펼치기 ▾</span>
                   <span className="hidden text-[10.5px] font-semibold text-ink3 group-open:inline">접기 ▴</span>
                 </summary>
                 <SheetPalette sheet={sheet} selection={selection} onApply={putPart} />
               </details>
               )}
-              <SheetCellPanel sheet={sheet} selection={selection} onChange={setSheet} link={link} />
+              <SheetCellPanel sheet={sheet} selection={selection} onChange={changeSheet} link={link} />
             </>
           ) : side === 'settings' ? (
             <SheetFormSettings form={form} onChange={set} />
@@ -1022,6 +1081,9 @@ function Designer({
               current={baseVersion}
               onPreview={(s, v) => setPreview({ sheet: s, title: `v${v}` })}
               onLoad={(s, v) => {
+                // 일반 편집자 — 연결 칸(🔒)이 지금 저장된 것과 다른 버전은 되살리지 않는다(저장 때도 막힘)
+                const lockIssues = devLinks ? [] : saveLockIssues({ sheet: savedSheet, link: savedLink }, { sheet: s, link });
+                if (lockIssues.length) return setMsg({ kind: 'err', text: `v${v}은(는) 다른 기능과 이어진 칸이 지금과 달라 되살릴 수 없어요.`, list: lockIssues });
                 if (!confirm(`v${v}의 틀을 편집기로 가져옵니다. 저장하면 새 버전이 됩니다(이전 버전은 그대로 남음). 계속할까요?`)) return;
                 setSheet(s);
                 setNote(`v${v}에서 되살림`);

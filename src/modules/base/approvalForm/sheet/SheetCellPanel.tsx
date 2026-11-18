@@ -43,6 +43,8 @@ import { AutoNumberSettings } from '../components/ApprovalFormEditor';
 import { useCompanyMarks } from '@/features/companyMark/useCompanyMarks';
 import { marksOf } from '@/domain/companyMark/schema';
 import { autoNumberPreview } from '@/domain/approvalForm/autoNumber';
+import { AMOUNT_NAME, isLockedName, lockInfo, lockTitle } from '@/domain/approvalForm/sheet/linkLock';
+import { canEditCellLinks } from './cellLinkGate';
 
 /**
  * 시트 서식 편집기 — 고른 칸의 결재 속성(칸 종류·필수·잠금·직인·칸 이름·비공개·작성 요령)과 그 줄의 설정(보이기 조건·거래처용 숨김·반복 구간).
@@ -154,6 +156,19 @@ export function SheetCellPanel({
   const isFormula = sheet.formulas[`${focus.r}:${sheet.cols[focus.c]}`] !== undefined;
   /** 연동 기능이 늘 잠그는 칸 이름(휴일근무 출근·퇴근 시각·근무 시간) — 이 칸이면 잠금 체크를 켠 채 고정 */
   const systemLocked = props.name ? linkDef?.names.find((n) => n.key === props.name && n.locked) : undefined;
+  // 칸 이름·연동은 개발 담당자 몫 — 일반 편집자에겐 이름 대신 🔒, 그 칸의 종류는 못 바꾼다(연동이 칸 종류에 맞춰 값을 읽음)
+  const devLinks = canEditCellLinks();
+  const lockedName = isLockedName(sheet, props.name) ? props.name : undefined;
+  const kindLocked = !devLinks && !!lockedName;
+  // 금액 칸 — 편집자가 체크로 정한다(서식에 하나 — 다른 칸에 있으면 이 칸으로 옮김, 칸 이름 고르기와 같은 규칙)
+  const amountKey = Object.entries(sheet.cellMeta[APPROVAL_NS.name] ?? {}).find(([, n]) => n === AMOUNT_NAME)?.[0];
+  const amountAt = (() => {
+    if (!amountKey) return undefined;
+    const i = amountKey.indexOf(':');
+    const r = Number(amountKey.slice(0, i));
+    const c = sheet.cols.indexOf(amountKey.slice(i + 1));
+    return c < 0 || (r === focus.r && c === focus.c) ? undefined : cellAddress(r, c);
+  })();
 
   // 선택 항목은 줄마다 하나 — 입력 중엔 글자 그대로 두고, 칸을 벗어날 때 넣는다
   const optionsText = (props.input?.options ?? []).join('\n');
@@ -206,8 +221,9 @@ export function SheetCellPanel({
     if ('notice' in res) return alert(res.notice);
     onChange(res);
   };
-  const kindNote =
-    kindValue === UNKNOWN_KIND
+  const kindNote = kindLocked
+    ? `🔒 ${lockTitle(lockedName!, link)} — 칸 종류는 바꿀 수 없어요(모양·글자는 바꿔도 돼요).`
+    : kindValue === UNKNOWN_KIND
       ? '지금은 없는 자동 채우기 항목입니다 — 다른 종류를 고르거나 글자 칸으로 빼세요.'
       : props.input?.depends
         ? '고를 항목이 다른 칸 값에 따라 바뀌는 선택 칸입니다 — 항목은 아래에서 기준 칸 값마다 적습니다.'
@@ -218,8 +234,17 @@ export function SheetCellPanel({
 
   // 더 보기 — 접혀 있어도 켜진 것은 한 줄로 보인다
   const [moreOpen, setMoreOpen] = useState(false);
-  const moreSet = [props.name ? `칸 이름: ${nameLabel(props.name)}` : '', props.secret ? '비공개' : '', props.guide ? '작성 요령' : ''].filter(Boolean);
-  const moreSummary = moreSet.length ? moreSet.join(' · ') : '칸 이름 · 비공개 · 작성 요령';
+  const nameSummary = !props.name
+    ? ''
+    : devLinks
+      ? `칸 이름: ${nameLabel(props.name)}`
+      : props.name === AMOUNT_NAME
+        ? '문서 금액'
+        : lockedName
+          ? `🔒 ${lockInfo(lockedName, link).label}`
+          : '';
+  const moreSet = [nameSummary, props.secret ? '비공개' : '', props.guide ? '작성 요령' : ''].filter(Boolean);
+  const moreSummary = moreSet.length ? moreSet.join(' · ') : devLinks ? '칸 이름 · 비공개 · 작성 요령' : '문서 금액 · 비공개 · 작성 요령';
   const { data: marks } = useCompanyMarks();
   const seals = marksOf(marks, 'seal');
   const logos = marksOf(marks, 'logo');
@@ -343,7 +368,8 @@ export function SheetCellPanel({
           className={`${inp} font-semibold`}
           value={kindValue}
           onChange={(e) => setKind(e.target.value)}
-          title="이 칸이 무엇인지 — 왼쪽 부품을 누르는 것과 같습니다"
+          disabled={kindLocked}
+          title={kindLocked ? '다른 기능에 쓰이는 칸이라 종류를 바꿀 수 없어요' : '이 칸이 무엇인지 — 왼쪽 부품을 누르는 것과 같습니다'}
         >
           <option value="">글자 칸 (그대로 보임)</option>
           {KIND_GROUPS.map((g) => (
@@ -500,6 +526,29 @@ export function SheetCellPanel({
       </div>
 
       <Fold title="더 보기" summary={moreSummary} open={moreOpen} onToggle={() => setMoreOpen((v) => !v)}>
+        {!devLinks && lockedName && (
+          // 다른 기능이 이 칸 값을 찾는 이름 — 보기만(바꾸려면 개발 담당자)
+          <div
+            className="rounded-md bg-amber-50 px-2 py-1 text-[11px] font-semibold text-amber-800 dark:bg-amber-500/10 dark:text-amber-300"
+            title="이 칸은 다른 기능과 이어져 있어 지우거나 종류를 바꿀 수 없어요. 모양·글자는 바꿔도 돼요."
+          >
+            🔒 {lockTitle(lockedName, link)}
+          </div>
+        )}
+        {!devLinks && (
+          <Check
+            checked={props.name === AMOUNT_NAME}
+            disabled={!!props.name && props.name !== AMOUNT_NAME}
+            onChange={(v) => onChange(setCellName(sheet, focus.r, focus.c, v ? AMOUNT_NAME : undefined))}
+            label="이 칸이 문서 금액이에요 (결재선 금액 조건에 쓰여요)"
+            hint={
+              props.name && props.name !== AMOUNT_NAME
+                ? '이 칸은 이미 다른 기능에 쓰여서 금액 칸으로 정할 수 없어요.'
+                : `결재선 규칙의 금액 조건이 이 칸 값을 문서 금액으로 읽어요. 숫자·금액 칸이나 수식 칸이어야 해요. 서식에 한 칸만 — ${amountAt ? `지금은 ${amountAt} 칸이고, 체크하면 이 칸으로 옮겨요.` : '다른 칸을 체크하면 그 칸으로 옮겨요.'}`
+            }
+          />
+        )}
+        {devLinks && (
         <Row
           label="칸 이름"
           hint={
@@ -559,6 +608,7 @@ export function SheetCellPanel({
             />
           )}
         </Row>
+        )}
         <Check
           checked={props.secret}
           onChange={(v) => onChange(setApprovalProp(sheet, range, APPROVAL_NS.secret, v))}
@@ -569,6 +619,8 @@ export function SheetCellPanel({
           checked={props.guide}
           // 작성 요령 칸은 기안자가 쓰는 칸이 아니다 — 켜면 입력 칸에서 뺀다
           onChange={(v) => onChange(setApprovalProp(v ? setApprovalProp(sheet, range, APPROVAL_NS.input, undefined) : sheet, range, APPROVAL_NS.guide, v))}
+          // 켜면 입력 칸에서 빠진다 — 다른 기능에 쓰이는 입력 칸은 못 켠다
+          disabled={kindLocked && !!props.input && !props.guide}
           label="작성 요령"
           hint="칸에 쓴 글을 작성 화면에만 흐리게 보입니다(결재·인쇄 화면엔 안 나옴) — 기안자에게 쓰는 법을 알려 줄 때. 입력 칸이었다면 글자 칸으로 바뀝니다."
         />
