@@ -953,7 +953,7 @@ function Designer({
                 setMsg({ kind: 'err', text: locked });
                 return s;
               }
-              if (mergeCoversLinks(s, range) && !confirm('가려지는 칸에 연결된 부품(칸 이름·불러오기·직인·자동번호)이 있습니다. 병합하면 그 연결이 빠집니다. 병합할까요?')) return s;
+              if (mergeCoversLinks(s, range) && !confirm('가려지는 칸에 연결된 부품(불러오기·직인·자동번호 등)이 있습니다. 병합하면 그 연결이 빠집니다. 병합할까요?')) return s;
               if (mergeDropsContent(s, range) && !confirm('병합하면 왼쪽 위 칸만 남고 다른 칸의 글자는 지워집니다. 병합할까요?')) return s;
               return mergeApprovalRange(s, range);
             }}

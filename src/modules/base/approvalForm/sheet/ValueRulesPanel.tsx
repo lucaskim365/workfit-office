@@ -17,6 +17,7 @@ import {
   staleRuleValues,
   valueSourceAt,
 } from '@/domain/approvalForm/sheet/valueRules';
+import { canEditCellLinks } from './cellLinkGate';
 
 /** 시트에서 눌러 고르는 중인 것 — 이 값일 때 보일 행, 또는 이 기준 칸에 따라 항목이 바뀔 칸 */
 export type ValuePick = { kind: 'rows'; value: string } | { kind: 'dependent' };
@@ -182,7 +183,7 @@ export function ValueRulesPanel({
         </div>
       )}
       {/* 이름이 아직 없으면 처음 고를 때 지어 붙인다 — 안내만 */}
-      {!name && <div className="text-[10px] text-ink3">처음 설정하면 이 칸에 칸 이름 '{ensureSourceName(sheet, source.r, source.c).name}'이(가) 붙습니다.</div>}
+      {!name && canEditCellLinks() && <div className="text-[10px] text-ink3">처음 설정하면 이 칸에 칸 이름 '{ensureSourceName(sheet, source.r, source.c).name}'이(가) 붙습니다.</div>}
     </div>
   );
 }
