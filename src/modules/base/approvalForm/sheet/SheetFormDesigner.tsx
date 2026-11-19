@@ -794,9 +794,9 @@ function Designer({
         </div>
       )}
 
-      <InfoBlock collapsible={standalone} title={fullHeader ? '서식 정보' : '서식 정보 · 문서 머리 항목'} linkLabel={LINK_TYPES.find((t) => t.code === link)?.feature ?? null}>
+      <InfoBlock collapsible={standalone} title={fullHeader ? '서식 정보' : '서식 정보 · 문서 머리 항목'} linkLabel={devLinks ? (LINK_TYPES.find((t) => t.code === link)?.feature ?? null) : undefined}>
       {/* 서식 정보 */}
-      <div data-tour="info" className="grid grid-cols-2 gap-2.5 rounded-xl border border-border bg-panel p-3 sm:grid-cols-3 xl:grid-cols-[70px_1fr_1fr_1fr_1fr_1fr]">
+      <div data-tour="info" className={`grid grid-cols-2 gap-2.5 rounded-xl border border-border bg-panel p-3 sm:grid-cols-3 ${devLinks ? 'xl:grid-cols-[70px_1fr_1fr_1fr_1fr_1fr]' : 'xl:grid-cols-[70px_1fr_1fr_1fr_1fr]'}`}>
         <Field label="아이콘">
           <input className={inp} value={form.icon} onChange={(e) => set({ icon: e.target.value })} placeholder="📄" />
         </Field>
@@ -844,13 +844,9 @@ function Designer({
             ))}
           </select>
         </Field>
+        {/* 연동 기능은 개발 담당자가 정한다 — 일반 편집자에게는 보이지 않는다(연동 서식은 공급사가 정한 서식을 쓴다). 연결 칸의 🔒는 그대로 */}
+        {devLinks && (
         <Field label="연동 기능">
-          {!devLinks ? (
-            // 연동 기능은 개발 담당자가 정한다 — 일반 편집자는 보기만
-            <div className={`${inp} truncate bg-panel-alt text-ink2`} title="이 서식으로 쓴 문서가 이어지는 기능 — 바꾸려면 개발 담당자에게 요청하세요">
-              {link ? `🔒 ${LINK_TYPES.find((t) => t.code === link)?.feature ?? link}` : '없음 (일반 결재 서식)'}
-            </div>
-          ) : (
           <select
             className={inp}
             value={link ?? ''}
@@ -864,8 +860,8 @@ function Designer({
               </option>
             ))}
           </select>
-          )}
         </Field>
+        )}
       </div>
 
       {/* 문서 머리 항목 — 기존 서식과 같은 설정(hiddenHeaderItems). 시트 위·아래에 붙는 머리·맺음말 중 보일 것.
@@ -1116,8 +1112,8 @@ function InfoBlock({
 }: {
   collapsible: boolean;
   title: string;
-  /** 접혀 있어도 보이게 — 고른 연동 기능(없으면 null) */
-  linkLabel: string | null;
+  /** 접혀 있어도 보이게 — 고른 연동 기능(없으면 null). undefined 면 표시 자체를 뺀다(일반 편집자) */
+  linkLabel: string | null | undefined;
   children: React.ReactNode;
 }) {
   if (!collapsible) return <>{children}</>;
@@ -1129,12 +1125,14 @@ function InfoBlock({
           <ChevronRight size={16} strokeWidth={2.5} />
         </span>
         {title}
+        {linkLabel !== undefined && (
         <span
           className={`ml-auto shrink-0 rounded-full px-2 py-px text-[10.5px] font-semibold ${linkLabel ? 'bg-teal-soft text-teal' : 'bg-panel-alt text-ink3'}`}
           title="이 서식으로 쓴 문서가 이어지는 기능 — 바꾸려면 펼쳐서 '연동 기능'"
         >
           연동: {linkLabel ?? '없음'}
         </span>
+        )}
       </summary>
       <div className="space-y-2 p-2 [&>div]:border-0 [&>div]:shadow-none">{children}</div>
     </details>

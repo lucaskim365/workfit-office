@@ -5,6 +5,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
+import { canEditCellLinks } from './cellLinkGate';
 
 export type TourSide = 'cell' | 'settings' | 'history';
 
@@ -26,7 +27,10 @@ export const SHEET_EDITOR_TOUR: TourStep[] = [
   {
     target: 'info',
     title: '서식 정보',
-    body: '서식 이름, 문서에 찍힐 큰 제목(격식 문서명), 들어갈 폴더를 정합니다.\n연동 기능을 고르면 휴가·출장처럼 결재가 끝난 뒤 다른 화면에 저절로 반영됩니다.',
+    // 연동 기능 고르기는 개발 담당자에게만 보인다
+    body: canEditCellLinks()
+      ? '서식 이름, 문서에 찍힐 큰 제목(격식 문서명), 들어갈 폴더를 정합니다.\n연동 기능을 고르면 휴가·출장처럼 결재가 끝난 뒤 다른 화면에 저절로 반영됩니다.'
+      : '서식 이름, 문서에 찍힐 큰 제목(격식 문서명), 들어갈 폴더를 정합니다.',
   },
   {
     target: 'sheet',
