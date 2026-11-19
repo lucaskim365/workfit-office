@@ -37,7 +37,7 @@ import { ApprovalDraftDocumentSheet } from './components/ApprovalDraftDocumentSh
 import { SheetDraftForm, type RelatedSource } from './sheetForm/SheetDraftForm';
 import { sheetDraftTouched } from '@/domain/approvalForm/sheet/draftTouched';
 import { isSheetDoc } from './sheetForm/SheetDocView';
-import { SHEET_NAMED_KEY, namedFromLegacy, readNamed, secretNames, withoutNames } from '@/domain/approvalForm/sheet/relatedImport';
+import { SHEET_NAMED_KEY, namedFromLegacy, readNamed, secretNames, withoutNames, type NamedValues } from '@/domain/approvalForm/sheet/relatedImport';
 import { SHEET_LABELED_KEY, labeledFromDoc, labeledFromLegacy } from '@/domain/approvalForm/sheet/labelMatch';
 import type { Sheet } from '@/lib/sheet/core';
 import { SHEET_OWN_KEY, readOwnSheet } from '@/domain/approvalForm/sheet/ownSheet';
@@ -1087,6 +1087,38 @@ function ApprovalDraftInner({
   // 관련 문서 값 가져오기 — 관련 문서로 고른 문서의 이름 붙은 칸 값(시트 문서) 또는 필드 라벨 값(옛 서식 문서)
   const findDoc = useCachedApprovalLookup();
   const { data: allForms = [] } = useApprovalForms();
+  /** 원본 문서 → 가져올 값(이름 값 + 칸 옆 글자 값) — 관련 문서로 건 문서와 검색해서 고른 문서가 같이 쓴다 */
+  const sourceValuesOf = async (d: ApprovalDoc): Promise<NamedValues | null> => {
+    // 비공개 칸 값은 그 문서를 쓴 사람과 결재한 사람만 가져온다(문서 보기에서 가려지는 사람은 가져올 수도 없게)
+    const mine = d.drafterId === me.id || d.steps.some((s) => s.approverId === me.id && s.kind !== '참조');
+    if (isSheetDoc(d.fieldValues)) {
+      const named = readNamed(d.fieldValues[SHEET_NAMED_KEY]);
+      // 원본 문서의 틀(문서가 고친 틀, 없으면 쓴 버전) — 처음 쓸 때 한 번만 읽는다
+      let tplRead: Promise<Sheet | null> | null = null;
+      const readTpl = () => {
+        if (!tplRead) {
+          const ver = parseVersionKey(String(d.fieldValues[SHEET_VERSION_KEY] ?? ''));
+          const own = readOwnSheet(d.fieldValues[SHEET_OWN_KEY]);
+          tplRead = own ? Promise.resolve(own) : ver ? fetchFormVersionSheet(ver.formId, ver.version) : Promise.resolve(null);
+        }
+        return tplRead;
+      };
+      // 칸 옆 글자(라벨) 값 — 비공개 칸은 처음부터 없다. 라벨 값이 없는 예전 문서는 틀과 저장 값으로 만든다(못 만들면 이름으로만)
+      const labeled =
+        d.fieldValues[SHEET_LABELED_KEY] !== undefined
+          ? readNamed(d.fieldValues[SHEET_LABELED_KEY])
+          : await readTpl()
+              .then((t) => (t ? labeledFromDoc(t, d.fieldValues) : {}))
+              .catch(() => ({}));
+      if (mine) return { ...labeled, ...named };
+      // 비공개 칸 이름은 틀에서 찾아 뺀다 — 틀을 못 읽으면 가져오지 않는다
+      const tpl = await readTpl();
+      return tpl ? { ...labeled, ...withoutNames(named, secretNames(tpl)) } : null;
+    }
+    const f = allForms.find((x) => x.code === d.docType);
+    // 라벨 값은 쓴 사람이어도 비공개 항목을 뺀다(받는 칸이 비공개인지 모르니)
+    return f ? { ...labeledFromLegacy(f.fields, d.fieldValues), ...namedFromLegacy(mine ? f.fields.map((x) => ({ ...x, isSecret: false })) : f.fields, d.fieldValues) } : null;
+  };
   const relatedSources = useMemo<RelatedSource[]>(
     () =>
       relatedDocs.map((rd) => ({
@@ -1094,41 +1126,19 @@ function ApprovalDraftInner({
         label: `${rd.docNo} ${rd.title}`,
         load: async () => {
           const d = findDoc(rd.docId);
-          if (!d) return null;
-          // 비공개 칸 값은 그 문서를 쓴 사람과 결재한 사람만 가져온다(문서 보기에서 가려지는 사람은 가져올 수도 없게)
-          const mine = d.drafterId === me.id || d.steps.some((s) => s.approverId === me.id && s.kind !== '참조');
-          if (isSheetDoc(d.fieldValues)) {
-            const named = readNamed(d.fieldValues[SHEET_NAMED_KEY]);
-            // 원본 문서의 틀(문서가 고친 틀, 없으면 쓴 버전) — 처음 쓸 때 한 번만 읽는다
-            let tplRead: Promise<Sheet | null> | null = null;
-            const readTpl = () => {
-              if (!tplRead) {
-                const ver = parseVersionKey(String(d.fieldValues[SHEET_VERSION_KEY] ?? ''));
-                const own = readOwnSheet(d.fieldValues[SHEET_OWN_KEY]);
-                tplRead = own ? Promise.resolve(own) : ver ? fetchFormVersionSheet(ver.formId, ver.version) : Promise.resolve(null);
-              }
-              return tplRead;
-            };
-            // 칸 옆 글자(라벨) 값 — 비공개 칸은 처음부터 없다. 라벨 값이 없는 예전 문서는 틀과 저장 값으로 만든다(못 만들면 이름으로만)
-            const labeled =
-              d.fieldValues[SHEET_LABELED_KEY] !== undefined
-                ? readNamed(d.fieldValues[SHEET_LABELED_KEY])
-                : await readTpl()
-                    .then((t) => (t ? labeledFromDoc(t, d.fieldValues) : {}))
-                    .catch(() => ({}));
-            if (mine) return { ...labeled, ...named };
-            // 비공개 칸 이름은 틀에서 찾아 뺀다 — 틀을 못 읽으면 가져오지 않는다
-            const tpl = await readTpl();
-            return tpl ? { ...labeled, ...withoutNames(named, secretNames(tpl)) } : null;
-          }
-          const f = allForms.find((x) => x.code === d.docType);
-          // 라벨 값은 쓴 사람이어도 비공개 항목을 뺀다(받는 칸이 비공개인지 모르니)
-          return f ? { ...labeledFromLegacy(f.fields, d.fieldValues), ...namedFromLegacy(mine ? f.fields.map((x) => ({ ...x, isSecret: false })) : f.fields, d.fieldValues) } : null;
+          return d ? sourceValuesOf(d) : null;
         },
       })),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [relatedDocs, allForms, me.id]
   );
+  // 문서 찾아 가져오기 — 고르기 창을 띄우고, 고르거나 닫으면 기다리던 쪽(SheetDraftForm)에 돌려준다
+  const [importPick, setImportPick] = useState<{ resolve: (src: RelatedSource | null) => void } | null>(null);
+  const searchSource = () => new Promise<RelatedSource | null>((resolve) => setImportPick({ resolve }));
+  const closeImportPick = (src: RelatedSource | null) => {
+    importPick?.resolve(src);
+    setImportPick(null);
+  };
   // 휴일근로 신청서 자동 입력 — 서식에 출근 시각 칸이 있을 때만
   // 기존 양식 휴일근무의 자동 채우기 — 시트로 쓰는 문서는 해당 없음(기존 서식에 시트를 붙여도 항목 목록은 남아 있음)
   const isOvertimeAutoFill = sheetVersion === null && !!form?.fields.some((f) => f.key === OVERTIME_AUTOFILL_FIELD);
@@ -1926,6 +1936,7 @@ function ApprovalDraftInner({
                   onRequired={(labels) => (sheetRequiredRef.current = labels)}
                   onFormulaErrors={(labels) => (sheetFormulaErrorsRef.current = labels)}
                   relatedSources={relatedSources}
+                  searchSource={searchSource}
                   systemValues={sheetSystemValues}
                   // 휴일근무 — 출근·퇴근 시각·근무 시간은 근태 기록에서만(고칠 수 없음), 받아 오면 칸에 다시 넣는다
                   lockedNames={sheetHoliday.lockedNames}
@@ -2446,6 +2457,26 @@ function ApprovalDraftInner({
             setShowRelatedModal(false);
           }}
           onClose={() => setShowRelatedModal(false)}
+        />
+      )}
+
+      {/* 문서 찾아 가져오기 — 관련 문서로 걸지 않아도 값을 가져온다. [관련 문서로도 연결]이면 가져오기를 고른 뒤 건다 */}
+      {importPick && (
+        <RelatedDocSearchModal
+          userId={me.id}
+          userDept={me.dept}
+          userDeptId={userDeptId}
+          selectedDocIds={relatedDocs.map((x) => x.docId)}
+          onSelect={() => {}}
+          onImport={(doc, related, link) =>
+            closeImportPick({
+              id: doc.id,
+              label: `${doc.docNo} ${doc.title}`,
+              load: () => sourceValuesOf(doc),
+              onImported: link ? () => setRelatedDocs((prev) => (prev.some((x) => x.docId === related.docId) ? prev : [...prev, related])) : undefined,
+            })
+          }
+          onClose={() => closeImportPick(null)}
         />
       )}
 

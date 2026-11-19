@@ -11,6 +11,11 @@ interface RelatedDocSearchModalProps {
   selectedDocIds: string[];
   onSelect: (docs: RelatedDoc[]) => void;
   onClose: () => void;
+  /**
+   * 값 가져오기용으로 열기 — 한 문서만 고르고, 이미 관련 문서로 건 문서도 고를 수 있다.
+   * link 는 [관련 문서로도 연결] 체크(처음엔 켜짐 — 결재자가 값의 출처를 볼 수 있게)
+   */
+  onImport?: (doc: ApprovalDoc, related: RelatedDoc, link: boolean) => void;
 }
 
 function formatDate(iso: string | null | undefined): string {
@@ -30,10 +35,13 @@ export function RelatedDocSearchModal({
   selectedDocIds,
   onSelect,
   onClose,
+  onImport,
 }: RelatedDocSearchModalProps) {
   const org = useOrgTree();
+  const importMode = !!onImport;
   const [keyword, setKeyword] = useState('');
   const [tempSelected, setTempSelected] = useState<ApprovalDoc[]>([]);
+  const [linkToo, setLinkToo] = useState(true);
 
   const [scopeFilter, setScopeFilter] = useState<'all' | 'mine' | 'approver' | 'dept'>('all');
   const [selectedDocType, setSelectedDocType] = useState('전체 서식');
@@ -112,24 +120,33 @@ export function RelatedDocSearchModal({
     return filteredDocs.slice(0, limit);
   }, [filteredDocs, limit]);
 
+  // 값 가져오기는 이미 건 문서도 고를 수 있다 — 연결만 다시 하지 않는다
+  const blocked = (doc: ApprovalDoc) => !importMode && selectedDocIds.includes(doc.id);
+
   const toggleSelect = (doc: ApprovalDoc) => {
-    if (selectedDocIds.includes(doc.id)) return;
+    if (blocked(doc)) return;
     setTempSelected((prev) =>
-      prev.some((x) => x.id === doc.id) ? prev.filter((x) => x.id !== doc.id) : [...prev, doc]
+      prev.some((x) => x.id === doc.id) ? prev.filter((x) => x.id !== doc.id) : importMode ? [doc] : [...prev, doc]
     );
   };
 
+  const toRelated = (d: ApprovalDoc): RelatedDoc => ({
+    docId: d.id,
+    docNo: d.docNo,
+    title: d.title,
+    docType: d.docType,
+    drafterName: d.drafterName || nameOf(d.drafterId),
+    drafterDept: d.drafterDept || '',
+    completedAt: d.completedAt,
+  });
+
   const handleApply = () => {
-    const relatedList: RelatedDoc[] = tempSelected.map((d) => ({
-      docId: d.id,
-      docNo: d.docNo,
-      title: d.title,
-      docType: d.docType,
-      drafterName: d.drafterName || nameOf(d.drafterId),
-      drafterDept: d.drafterDept || '',
-      completedAt: d.completedAt,
-    }));
-    onSelect(relatedList);
+    if (onImport) {
+      const d = tempSelected[0];
+      if (d) onImport(d, toRelated(d), linkToo && !selectedDocIds.includes(d.id));
+      return;
+    }
+    onSelect(tempSelected.map(toRelated));
     onClose();
   };
 
@@ -146,7 +163,7 @@ export function RelatedDocSearchModal({
         <div className="flex items-center justify-between border-b border-border bg-panel-alt/40 px-5 py-3.5">
           <div className="flex items-center gap-2">
             <Link2 className="h-4 w-4 text-teal shrink-0" />
-            <h2 className="text-sm font-bold text-ink">관련 문서 선택 (기결재 완료 문서)</h2>
+            <h2 className="text-sm font-bold text-ink">{importMode ? '값을 가져올 문서 선택 (기결재 완료 문서)' : '관련 문서 선택 (기결재 완료 문서)'}</h2>
           </div>
           <button
             type="button"
@@ -270,7 +287,7 @@ export function RelatedDocSearchModal({
               </thead>
               <tbody className="divide-y divide-border/60">
                 {displayDocs.map((doc) => {
-                  const isAlreadyAdded = selectedDocIds.includes(doc.id);
+                  const isAlreadyAdded = blocked(doc);
                   const isChecked = isAlreadyAdded || tempSelected.some((x) => x.id === doc.id);
 
                   return (
@@ -298,7 +315,7 @@ export function RelatedDocSearchModal({
                       <td className="px-3 py-2.5 font-semibold text-ink2">{doc.docType}</td>
                       <td className="px-3 py-2.5 font-bold text-ink truncate">
                         {doc.title}
-                        {isAlreadyAdded && (
+                        {(isAlreadyAdded || (importMode && selectedDocIds.includes(doc.id))) && (
                           <span className="ml-1.5 text-[10px] font-normal text-ink3">(이미 추가됨)</span>
                         )}
                         {doc.attachments && doc.attachments.length > 0 && (
@@ -323,9 +340,21 @@ export function RelatedDocSearchModal({
 
         {/* 푸터 버튼 */}
         <div className="flex items-center justify-between border-t border-border bg-panel-alt/30 px-5 py-3.5 shrink-0">
-          <span className="text-[11px] text-ink3">
-            목록에서 클릭하여 연동할 문서를 선택하세요. (첨부파일도 함께 기안문에 연동 복사됩니다.)
-          </span>
+          {importMode ? (
+            <label className="flex cursor-pointer items-center gap-1.5 text-[11px] text-ink2">
+              <input
+                type="checkbox"
+                checked={linkToo}
+                onChange={(e) => setLinkToo(e.target.checked)}
+                className="rounded border-border text-[#4ea8de] focus:ring-[#4ea8de]/40"
+              />
+              관련 문서로도 연결 (결재자가 값을 어디서 가져왔는지 볼 수 있어요)
+            </label>
+          ) : (
+            <span className="text-[11px] text-ink3">
+              목록에서 클릭하여 연동할 문서를 선택하세요. (첨부파일도 함께 기안문에 연동 복사됩니다.)
+            </span>
+          )}
           <div className="flex items-center gap-2">
             <button
               type="button"
@@ -340,7 +369,7 @@ export function RelatedDocSearchModal({
               disabled={tempSelected.length === 0}
               className="rounded-xl bg-[#4ea8de] hover:bg-[#358ab8] active:scale-95 px-4 py-1.5 text-[12px] font-bold text-white shadow-md shadow-[#4ea8de]/20 disabled:opacity-40 disabled:scale-100 disabled:shadow-none transition-all"
             >
-              선택 완료 ({tempSelected.length})
+              {importMode ? '값 가져오기' : `선택 완료 (${tempSelected.length})`}
             </button>
           </div>
         </div>

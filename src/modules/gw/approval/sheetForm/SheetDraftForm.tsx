@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { DEFAULT_COL_WIDTH, SheetEditor, SheetView, cellKey, displayValue, parseNumber, recalculate, setCellValue, shrinkFontSize, type Sheet } from '@/lib/sheet';
-import { Building2, CalendarDays, Download, Minus, Plus, Table2, Trash2, X } from 'lucide-react';
+import { Building2, CalendarDays, Download, Minus, Plus, Search, Table2, Trash2, X } from 'lucide-react';
 import { SHEET_OWN_KEY, canDraftDelete, draftCanMerge, draftInsertCol, draftEditIssues, draftEditPaste, draftEditSetValue, isProtectedCell, keepRefsAfterEdit, readOwnSheet } from '@/domain/approvalForm/sheet/ownSheet';
 import { DateInput } from '@/shared/ui/form/DateInput';
 import { nowLocalIso } from '@/shared/lib/datetime';
@@ -489,6 +489,8 @@ export interface SheetDraftFormProps {
   systemValues?: (link: string, linked: Record<string, string>) => Record<string, string>;
   /** 값을 가져올 수 있는 관련 문서 — load 는 그 문서의 이름 값(없으면 null) */
   relatedSources?: RelatedSource[];
+  /** 관련 문서로 걸지 않은 문서에서 가져오기 — 문서 고르기 창을 띄우고 고른 문서를 돌려준다(닫으면 null) */
+  searchSource?: () => Promise<RelatedSource | null>;
   /** 문서 항목 칸(제목·보존연한·공개범위)에 보일 문서 값과 바꾸기 — 없으면 그 칸은 비어 보인다 */
   docFields?: DocFields;
   onDocField?: (patch: Partial<DocFields>) => void;
@@ -513,6 +515,8 @@ export interface RelatedSource {
   label: string;
   /** 가져올 이름 값 — 원본 문서의 틀을 읽어야 해서 기다린다. 못 읽으면 null */
   load: () => Promise<NamedValues | null>;
+  /** 기안자가 확인 창에서 가져오기를 고른 뒤 — 검색으로 고른 문서를 관련 문서로도 걸 때 */
+  onImported?: () => void;
 }
 
 export function SheetDraftForm({
@@ -524,6 +528,7 @@ export function SheetDraftForm({
   onFormulaErrors,
   template,
   relatedSources = [],
+  searchSource,
   link: linkProp = null,
   systemValues,
   draftInfo,
@@ -671,8 +676,15 @@ export function SheetDraftForm({
     if (!confirm(`'${src.label}'에서 ${res.captions.join(', ')} 값을 가져옵니다.
 이미 쓴 값은 가져온 값으로 바뀝니다.`)) return;
     emit(sheetWith(tpl, res), res.extras, res.refs);
+    src.onImported?.();
   };
-  const canImport = !!tplSheet && canImportRelated(tplSheet) && relatedSources.length > 0;
+  /** [문서 찾아 가져오기] — 관련 문서로 걸지 않은 문서도 검색해서 고르면 같은 확인 창을 거쳐 채운다 */
+  const importFromSearch = async () => {
+    if (!searchSource || importing.current) return;
+    const src = await searchSource();
+    if (src) await importFrom(src);
+  };
+  const canImport = !!tplSheet && canImportRelated(tplSheet) && (relatedSources.length > 0 || !!searchSource);
 
   /**
    * 반복 구간 줄 수 바꾸기 — 값 자리를 옮기고 다시 펼친다. at 이 있으면 그 줄 아래에 넣기(+)·그 줄 지우기(−),
@@ -719,9 +731,20 @@ export function SheetDraftForm({
     <LogoMarkProvider markId={sheetLogoMarkId(sheet)}>
     <div className="relative">
       {canImport && (
-        // 관련 문서 값 가져오기 — 관련 문서로 고른 문서의 같은 이름 칸 값을 복사(§11.4). 인쇄에는 안 나옴
+        // 다른 문서 값 가져오기 — 관련 문서로 고른 문서, 또는 검색해서 고른 문서의 같은 이름(칸 옆 글자) 칸 값을 복사(§11.4). 인쇄에는 안 나옴
         <div className="mb-2 flex flex-wrap items-center gap-1.5 rounded border border-dashed border-teal/40 bg-teal-soft/20 px-2 py-1.5 text-[11px] print:hidden">
-          <span className="font-semibold text-[#444]">관련 문서 값 가져오기</span>
+          <span className="font-semibold text-[#444]">다른 문서 값 가져오기</span>
+          {searchSource && (
+            <button
+              type="button"
+              onClick={importFromSearch}
+              className="flex items-center gap-1 rounded border border-teal/40 bg-white px-2 py-0.5 font-semibold text-teal shadow-xs hover:bg-teal-soft/60"
+              title="결재가 끝난 문서 중 볼 수 있는 문서를 찾아 같은 칸 값을 가져옵니다"
+            >
+              <Search className="h-3 w-3 shrink-0" />
+              문서 찾아 가져오기
+            </button>
+          )}
           {relatedSources.map((src) => (
             <button
               key={src.id}
