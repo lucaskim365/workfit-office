@@ -47,7 +47,7 @@ import {
   type CellInput,
 } from '@/domain/approvalForm/sheet/approvalSheet';
 import { SHEET_NAMED_KEY, collectNamed, sheetWith, type NamedValues } from '@/domain/approvalForm/sheet/relatedImport';
-import { SHEET_LABELED_KEY, canImportRelated, collectLabeled, importRelated } from '@/domain/approvalForm/sheet/labelMatch';
+import { RELATED_IMPORT_ENABLED, SHEET_LABELED_KEY, canImportRelated, collectLabeled, importRelated } from '@/domain/approvalForm/sheet/labelMatch';
 import { SHEET_ROWS_KEY, addRepeatRow, expandRepeats, healRepeatSections, insertRepeatRowAfter, readRowExtras, removeRepeatRow, removeRepeatRowAt, repeatSections } from '@/domain/approvalForm/sheet/repeatRows';
 import { extrasAnchorRow, extrasHiddenRows } from '@/domain/approvalForm/sheet/docExtras';
 import { LogoMarkProvider } from '../components/CompanyLetterhead';
@@ -684,7 +684,7 @@ export function SheetDraftForm({
     const src = await searchSource();
     if (src) await importFrom(src);
   };
-  const canImport = !!tplSheet && canImportRelated(tplSheet) && (relatedSources.length > 0 || !!searchSource);
+  const canImport = RELATED_IMPORT_ENABLED && !!tplSheet && canImportRelated(tplSheet) && (relatedSources.length > 0 || !!searchSource);
 
   /**
    * 반복 구간 줄 수 바꾸기 — 값 자리를 옮기고 다시 펼친다. at 이 있으면 그 줄 아래에 넣기(+)·그 줄 지우기(−),

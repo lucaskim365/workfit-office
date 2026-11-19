@@ -19,6 +19,13 @@ import { APPROVAL_NS, applyValues, approvalCellProps, isSecretCell, namedCaption
 import { importNamed, legacyFieldValue, type ImportResult, type NamedValues } from './relatedImport';
 import { SHEET_ROWS_KEY, expandRepeats, readRowExtras, repeatSections, type RepeatSection, type RowExtras } from './repeatRows';
 
+/**
+ * 기안 화면의 [다른 문서 값 가져오기] 줄과 가이드북 설명을 보일지 — 지금은 숨긴다.
+ * 서식끼리 라벨이 달라 실제로 이어지는 칸이 적다(계약보고서 ↔ 발주서 0칸). 프로젝트 정보에서 값을 가져오게 될 때 다시 정한다.
+ * 상신 때 __named·__labeled 를 남기는 것은 그대로 — 켜면 그동안 쓴 문서에서도 가져올 수 있다
+ */
+export const RELATED_IMPORT_ENABLED = false;
+
 /** 문서 fieldValues 에 라벨 값을 담는 키 — 저장 데이터의 키이므로 바꾸지 말 것 */
 export const SHEET_LABELED_KEY = '__labeled';
 
