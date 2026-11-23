@@ -4,7 +4,7 @@ import { cellKey, createSheet, exportXlsx, importXlsx, insertRow, recalculate, s
 import { APPROVAL_NS, applyValues, extractValues, type SheetValues } from './approvalSheet';
 import { draftXlsxExport, fillFromXlsx, hasXlsxFillCells } from './draftExcel';
 import { expandRepeats, type RowExtras } from './repeatRows';
-import { unzip } from '@/lib/sheet/zip';
+import { unzip, zip } from '@/lib/sheet/zip';
 
 const KEY = 'expense@v3';
 
@@ -255,4 +255,138 @@ test('표 가운데에 줄을 넣어도 화면에서 고른 사람은 제 줄을
   assert.deepEqual([s.rows[4][s.cols[1]], s.rows[4][s.cols[4]]], ['점심', ''], '새 줄엔 사람이 없다');
   assert.deepEqual([s.rows[5][s.cols[1]], s.rows[5][s.cols[4]]], ['택시', '홍길동 (영업팀)']);
   assert.deepEqual(res.refs, { [cellKey(5, tpl.cols[4])]: 'U001' });
+});
+
+// ── 검토에서 나온 경우들 ──
+
+/** 표(반복 구간)가 시트 맨 끝인 서식 — 0 제목, 1~3 내용 줄(번호·내역) */
+function tailTemplate(): Sheet {
+  let s = createSheet(4, 2);
+  s = setCellValue(s, 0, 0, '목록');
+  for (let r = 1; r <= 3; r++) {
+    s = setCellValue(s, r, 0, String(r));
+    s = setCellMeta(s, APPROVAL_NS.input, r, 0, { type: 'text' });
+    s = setCellMeta(s, APPROVAL_NS.input, r, 1, { type: 'text' });
+    s = setRowMeta(s, APPROVAL_NS.repeat, r, { id: 'tail', label: '목록' });
+  }
+  return recalculate(s);
+}
+
+test('표가 시트 맨 끝일 때 — 표에 이어 쓴 줄만 받고, 한참 아래에 쓴 메모는 표의 줄로 받지 않는다', async () => {
+  const tpl = tailTemplate();
+  const got = await roundTrip(tpl, {}, {});
+  let x = got.xlsx;
+  for (let i = 0; i < 5; i++) x = insertRow(x, x.rows.length);
+  x = setX(x, 4, 1, '이어 쓴 줄');
+  x = setX(x, 8, 1, '아래 메모');
+  const res = fillFromXlsx({ template: tpl, formKey: KEY, extras: {}, values: {}, refs: {}, xlsx: x, names: got.names });
+  assert.ok(res.ok);
+  assert.deepEqual(res.extras, { tail: 1 });
+  assert.equal(Object.values(res.values).includes('아래 메모'), false);
+  assert.ok(res.notes.some((n) => n.includes('표 밖')));
+});
+
+test('반복 구간 둘이 붙어 있을 때 — 그 사이에 넣은 줄은 위 구간에만 들어간다', async () => {
+  let tpl = createSheet(4, 1);
+  for (let r = 0; r < 4; r++) {
+    tpl = setCellMeta(tpl, APPROVAL_NS.input, r, 0, { type: 'text' });
+    tpl = setRowMeta(tpl, APPROVAL_NS.repeat, r, r < 2 ? { id: 'a', label: 'A' } : { id: 'b', label: 'B' });
+  }
+  const values = Object.fromEntries(['a1', 'a2', 'b1', 'b2'].map((v, r) => [cellKey(r, tpl.cols[0]), v]));
+  const got = await roundTrip(tpl, {}, values);
+  const cur = excelInsertRow(got.xlsx, got.names, 2);
+  const res = fillFromXlsx({ template: tpl, formKey: KEY, extras: {}, values, refs: {}, xlsx: setX(cur.xlsx, 2, 0, 'NEW'), names: cur.names });
+  assert.ok(res.ok);
+  assert.deepEqual(res.extras, { a: 1 });
+  const s = applyValues(expandRepeats(tpl, res.extras), res.values, { recalc: true });
+  assert.deepEqual(s.rows.map((r) => r[s.cols[0]]), ['a1', 'a2', 'NEW', 'b1', 'b2']);
+});
+
+test('긴 숫자 글(카드번호 등)은 엑셀에 글자로 — 엑셀은 숫자를 15자리까지만 지킨다', async () => {
+  const tpl = template();
+  const values = { [cellKey(3, tpl.cols[1])]: '1234567890123456' };
+  const out = draftXlsxExport({ sheet: applyValues(tpl, values, { recalc: true }), template: tpl, extras: {}, formKey: KEY });
+  const xml = new TextDecoder().decode((await unzip(await exportXlsx(out.sheet, out.options))).get('xl/worksheets/sheet1.xml')!);
+  assert.match(xml, /<c r="B4"[^>]*t="inlineStr"><is><t[^>]*>1234567890123456</);
+});
+
+test('번호 열 — 기안자가 바꿔 둔 번호는 그대로, 엑셀에서 줄을 넣은 표만 다시 매긴다', async () => {
+  const tpl = template();
+  // 화면에서 번호를 10·20·30 으로 바꿔 두었다 → 다른 칸만 고쳐 올려도 번호는 그대로
+  const custom = Object.fromEntries([10, 20, 30].map((n, i) => [cellKey(3 + i, tpl.cols[0]), String(n)]));
+  const a = await roundTrip(tpl, {}, custom);
+  const kept = fillFromXlsx({ template: tpl, formKey: KEY, extras: {}, values: custom, refs: {}, xlsx: setX(a.xlsx, 3, 1, '점심'), names: a.names });
+  assert.ok(kept.ok);
+  assert.deepEqual([3, 4, 5].map((r) => kept.values[cellKey(r, tpl.cols[0])]), ['10', '20', '30']);
+  // 줄을 넣어도 바꿔 둔 번호는 다시 매기지 않는다(새 줄 번호는 빈 칸)
+  const ins = excelInsertRow(a.xlsx, a.names, 4);
+  const added = fillFromXlsx({ template: tpl, formKey: KEY, extras: {}, values: custom, refs: {}, xlsx: ins.xlsx, names: ins.names });
+  assert.ok(added.ok);
+  assert.deepEqual([3, 4, 5, 6].map((r) => added.values[cellKey(r, tpl.cols[0])]), ['10', '', '20', '30']);
+  // 한 줄을 지우고 한 줄을 넣어 줄 수가 같아도, 차례였던 번호는 다시 1, 2, 3
+  const b = await roundTrip(tpl, {}, {});
+  const rows = Object.fromEntries(Object.entries(b.names.rows).filter(([k]) => k !== '_wf_r4'));
+  const swapped = fillFromXlsx({ template: tpl, formKey: KEY, extras: {}, values: {}, refs: {}, xlsx: setX(b.xlsx, 4, 0, ''), names: { ...b.names, rows } });
+  assert.ok(swapped.ok);
+  const s = applyValues(expandRepeats(tpl, swapped.extras), swapped.values, { recalc: true });
+  assert.deepEqual([3, 4, 5].map((r) => s.rows[r][s.cols[0]]), ['1', '2', '3']);
+});
+
+test('받은 그대로면 칸 종류로 못 읽는 글도 건드리지 않는다 — 날짜 칸에 미리 쓴 연도, 시작일만 고른 기간', async () => {
+  let tpl = template();
+  tpl = setCellMeta(tpl, APPROVAL_NS.input, 3, 1, { type: 'date' });
+  tpl = setCellValue(tpl, 3, 1, '2026.', { allowFormula: false });
+  const values = extractValues(applyValues(tpl, { [cellKey(1, tpl.cols[1])]: '2026-11-20 ~ ' }, { recalc: true }));
+  const { xlsx, names } = await roundTrip(tpl, {}, values);
+  const res = fillFromXlsx({ template: tpl, formKey: KEY, extras: {}, values, refs: {}, xlsx, names });
+  assert.ok(res.ok);
+  assert.equal(res.changed, 0);
+  assert.deepEqual(res.notes, []);
+  assert.equal(res.values[cellKey(1, tpl.cols[1])], '2026-11-20 ~ ', '화면 글자 그대로');
+});
+
+test('받은 뒤 화면에서 넣은 줄은 엑셀에 없어 빠진다고 알린다', async () => {
+  const tpl = template();
+  const { xlsx, names } = await roundTrip(tpl, {}, {});
+  const res = fillFromXlsx({ template: tpl, formKey: KEY, extras: { items: 2 }, values: {}, refs: {}, xlsx, names });
+  assert.ok(res.ok && res.notes.some((n) => n.includes('화면에서 넣은 줄 2줄')));
+});
+
+test("엑셀에서 앞에 다른 시트를 넣어도 양식이 든 시트를 가리킨다 — 시트 이름의 작은따옴표 포함", async () => {
+  const tpl = template();
+  const out = draftXlsxExport({ sheet: tpl, template: tpl, extras: {}, formKey: KEY, sheetName: "김's 경비" });
+  const bytes = await exportXlsx(out.sheet, out.options);
+  assert.equal((await xlsxDefinedNames(bytes)).sheetIndex, 0);
+  const files = await unzip(bytes);
+  const book = new TextDecoder().decode(files.get('xl/workbook.xml')!).replace('<sheets>', '<sheets><sheet name="메모" sheetId="9" r:id="rId9"/>');
+  const moved = await zip([...files].map(([k, v]): [string, string | Uint8Array] => [k, k === 'xl/workbook.xml' ? book : v]));
+  const names = await xlsxDefinedNames(moved);
+  assert.equal(names.sheetIndex, 1);
+  assert.equal(names.rows._wf_r3, 3);
+});
+
+test('엑셀에서 번호 칸에 직접 쓴 번호(2-1)는 줄을 넣어도 다시 매기지 않는다', async () => {
+  const tpl = template();
+  const got = await roundTrip(tpl, {}, {});
+  const cur = excelInsertRow(got.xlsx, got.names, 5);
+  const res = fillFromXlsx({ template: tpl, formKey: KEY, extras: {}, values: {}, refs: {}, xlsx: setX(cur.xlsx, 5, 0, '2-1'), names: cur.names });
+  assert.ok(res.ok);
+  const s = applyValues(expandRepeats(tpl, res.extras), res.values, { recalc: true });
+  assert.deepEqual([3, 4, 5, 6].map((r) => s.rows[r][s.cols[0]]), ['1', '2', '2-1', '3']);
+});
+
+test('양식이 든 시트가 지워진 파일 — 줄 표시를 버려 다른 시트의 글자를 읽지 않는다', async () => {
+  const tpl = template();
+  const out = draftXlsxExport({ sheet: tpl, template: tpl, extras: {}, formKey: KEY, sheetName: '경비' });
+  const files = await unzip(await exportXlsx(out.sheet, out.options));
+  const book = new TextDecoder().decode(files.get('xl/workbook.xml')!).split("'경비'!").join('#REF!');
+  const broken = await zip([...files].map(([k, v]): [string, string | Uint8Array] => [k, k === 'xl/workbook.xml' ? book : v]));
+  const names = await xlsxDefinedNames(broken);
+  assert.deepEqual([names.rows, names.cols, names.sheetIndex], [{}, {}, undefined]);
+  // 값은 하나도 받지 않고, 줄을 찾지 못했다고 알린다
+  const xlsx = (await importXlsx(broken, { ignorePrintArea: true })).sheet;
+  const res = fillFromXlsx({ template: tpl, formKey: KEY, extras: {}, values: {}, refs: {}, xlsx: setX(xlsx, 3, 1, '딴 글자'), names });
+  assert.ok(res.ok);
+  assert.equal(res.changed, 0);
+  assert.ok(res.notes.length > 0);
 });

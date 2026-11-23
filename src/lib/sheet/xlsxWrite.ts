@@ -92,10 +92,13 @@ function safeSheetName(name: string | undefined): string {
 }
 
 /** 숫자로 담을 글자인가 — '0123'·'010-…' 같은 번호는 글자로(앞 0이 지워지지 않게) */
-function asNumber(text: string): number | null {
+function asNumber(text: string, numeric = false): number | null {
   const t = text.trim();
-  // '2026.'처럼 점으로 끝나는 글은 글자로(숫자로 담으면 점이 지워진다)
-  if (!t || t.endsWith('.')) return null;
+  if (!t) return null;
+  // '2026.'처럼 점으로 끝나는 글은 글자로(숫자로 담으면 점이 지워진다) — 금액·백분율로 보이는 칸은 숫자 그대로(엑셀 합계에 들어가게)
+  if (t.endsWith('.') && !numeric) return null;
+  // 엑셀은 숫자를 15자리까지만 지킨다 — 카드번호·계좌번호 같은 긴 숫자 글은 글자로
+  if (t.replace(/\D/g, '').length > 15) return null;
   if (/^[+-]?0\d/.test(t.replace(/,/g, ''))) return null;
   const n = parseNumber(t);
   return n !== null && Number.isFinite(n) ? n : null;
@@ -281,7 +284,7 @@ export async function exportXlsx(s: Sheet, opts: XlsxExportOptions = {}): Promis
       const style = s.styles[key];
       const text = opts.cellText?.(src, c) ?? String(s.rows[src]?.[col] ?? '');
       const formula = withFormulas ? s.formulas[key] : undefined;
-      const n = opts.textCell?.(src, c) ? null : asNumber(text);
+      const n = opts.textCell?.(src, c) ? null : asNumber(text, style?.numFmt === 'currency' || style?.numFmt === 'percent');
       const xf = book.xf(style, numFmtCode(style, n), n === null ? fitOf(src, c, text, style) : null);
       const sAttr = xf ? ` s="${xf}"` : '';
       if (formula) {

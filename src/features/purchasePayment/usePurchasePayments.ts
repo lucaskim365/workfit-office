@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { purchasePaymentRepo } from '@/data/purchasePayment/purchasePayment.repo';
-import { paymentsFromDoc } from '@/domain/purchasePayment/fromDoc';
+import { PURCHASE_LEDGER_SYNC_ENABLED, paymentsFromDoc } from '@/domain/purchasePayment/fromDoc';
 import { toLedgerRows, vendorKey, type PurchasePayment, type VendorAccount } from '@/domain/purchasePayment/ledger';
 import type { PurchasePaymentPatch, PurchasePaymentRecord } from '@/domain/purchasePayment/schema';
 import { useAllApprovals } from '@/features/gw/useApprovals';
@@ -42,7 +42,8 @@ export function usePurchaseOrderSync(enabled: boolean): { failed: number; retry:
   const busy = useRef(false);
 
   useEffect(() => {
-    if (!enabled || !records || docs.isLoading || busy.current) return;
+    // 발주서 → 대장 올리기는 지금 꺼 두었다(PURCHASE_LEDGER_SYNC_ENABLED) — 대장을 열어도 줄을 만들지 않는다
+    if (!PURCHASE_LEDGER_SYNC_ENABLED || !enabled || !records || docs.isLoading || busy.current) return;
     const have = new Set(records.map((r) => r.id));
     const now = new Date().toISOString();
     const missing = docs.data.flatMap((doc) => paymentsFromDoc(doc, now)).filter((line) => !have.has(line.id) && !failedIds.has(line.id));

@@ -22,6 +22,7 @@ import {
 } from '@/domain/purchasePayment/ledger';
 import { useAuthz } from '@/features/authz/useAuthz';
 import { usePatchPurchasePayment, usePurchaseLedger, usePurchaseOrderSync, useVendorAccounts } from '@/features/purchasePayment/usePurchasePayments';
+import { PURCHASE_LEDGER_SYNC_ENABLED } from '@/domain/purchasePayment/fromDoc';
 
 const won = (n: number) => n.toLocaleString('ko-KR');
 const ALL = 'all';
@@ -97,7 +98,9 @@ export default function BizPurchaseScreen() {
             !ledger.isLoading &&
             ledger.rows.length === 0 && (
               <p className="rounded-[10px] border border-border bg-panel px-4 py-2.5 text-[12px] text-ink2">
-                대장에 올라온 발주서가 아직 없습니다. 발주 연동을 켠 시트 서식 발주서의 결재가 끝난 뒤, 매입 결제 관리 권한이 있는 사람이 이 화면을 열면 올라옵니다. 화면은 목록 위의 [예시 데이터]로 둘러볼 수 있습니다.
+                {PURCHASE_LEDGER_SYNC_ENABLED
+                  ? '대장에 올라온 발주서가 아직 없습니다. 발주 연동을 켠 시트 서식 발주서의 결재가 끝난 뒤, 매입 결제 관리 권한이 있는 사람이 이 화면을 열면 올라옵니다. 화면은 목록 위의 [예시 데이터]로 둘러볼 수 있습니다.'
+                  : '매입 결제 대장은 준비 중입니다. 발주서와는 아직 이어져 있지 않아 결재가 끝난 발주서가 올라오지 않습니다. 화면은 목록 위의 [예시 데이터]로 둘러볼 수 있습니다.'}
               </p>
             )
           )}

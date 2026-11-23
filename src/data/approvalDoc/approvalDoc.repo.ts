@@ -1,3 +1,4 @@
+import { DOC_DRAFT_LIMIT, DOC_PAYLOAD_LIMIT, assertDocSize } from '@/domain/approvalDoc/docSize';
 import { onSessionReset } from '@/shared/lib/sessionReset';
 import { collection, deleteDoc, doc, getDocs, setDoc, query, onSnapshot, type QuerySnapshot } from 'firebase/firestore';
 import { SHEET_OWN_KEY, readOwnSheet } from '@/domain/approvalForm/sheet/ownSheet';
@@ -328,8 +329,11 @@ async function loadAll(): Promise<ApprovalDoc[]> {
   return backend.loadAll();
 }
 
-async function persist(item: ApprovalDoc): Promise<void> {
-  await backend.persist(approvalDocSchema.parse(item));
+async function persist(item: ApprovalDoc, limit = DOC_PAYLOAD_LIMIT): Promise<void> {
+  const doc = approvalDocSchema.parse(item);
+  // 한도를 넘는 문서는 저장소가 영어 오류로 거절한다 — 보내기 전에 알아볼 수 있는 말로 막는다
+  assertDocSize(doc, limit);
+  await backend.persist(doc);
 }
 
 async function getOrThrow(id: string): Promise<ApprovalDoc> {
@@ -648,7 +652,7 @@ export const approvalDocRepo = {
       company: input.company ?? null,
     });
 
-    await persist(created);
+    await persist(created, DOC_DRAFT_LIMIT);
     return created;
   },
 
@@ -659,7 +663,7 @@ export const approvalDocRepo = {
       throw new Error('임시저장·반려·회수 상태에서만 수정할 수 있습니다');
     }
     const merged = approvalDocSchema.parse({ ...cur, ...patch });
-    await persist(merged);
+    await persist(merged, DOC_DRAFT_LIMIT);
     return merged;
   },
 

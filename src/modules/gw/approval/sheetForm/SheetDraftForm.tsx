@@ -764,7 +764,9 @@ export function SheetDraftForm({
     let read: { xlsx: Sheet; names: Awaited<ReturnType<typeof xlsxDefinedNames>> };
     try {
       const bytes = new Uint8Array(await file.arrayBuffer());
-      read = { xlsx: (await importXlsx(bytes, { ignorePrintArea: true, maxRows: 1000 })).sheet, names: await xlsxDefinedNames(bytes) };
+      const names = await xlsxDefinedNames(bytes);
+      // 엑셀에서 앞에 다른 시트를 넣었어도 받은 양식이 든 시트를 읽는다
+      read = { xlsx: (await importXlsx(bytes, { ignorePrintArea: true, maxRows: 1000, sheet: names.sheetIndex })).sheet, names };
     } catch (e) {
       return alert(e instanceof XlsxError ? e.message : '엑셀 파일을 읽지 못했습니다.');
     }

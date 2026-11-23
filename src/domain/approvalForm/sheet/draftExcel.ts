@@ -155,7 +155,8 @@ function toIsoDate(text: string): string | null {
   return `${m[1]}-${String(mo).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
 }
 
-const CHECKED = new Set([CHECK_MARK, 'v', 'o', 'x', '○', '●', '√', 'true', '1', 'y', 'yes', '예']);
+/** 체크로 보는 글자 — 'x' 는 '아님' 표시로도 쓰여 넣지 않는다 */
+const CHECKED = new Set([CHECK_MARK, 'v', 'o', '○', '●', '√', 'true', '1', 'y', 'yes', '예']);
 
 /** 엑셀 칸 글자 → 칸 종류에 맞는 값. 그 종류로 읽을 수 없으면 null(선택 칸의 목록 검사는 값을 다 얹은 뒤 따로) */
 function convert(input: CellInput, text: string): string | null {
@@ -257,15 +258,22 @@ export function fillFromXlsx({ template, formKey, extras, values, refs, xlsx, na
   /** 구간 id → 올린 파일의 줄 번호들(위에서부터) */
   const sectionRows = new Map<string, number[]>();
   let rowDelta = 0;
+  const hasContent = (x: number) => Object.values(xlsx.rows[x] ?? {}).some((v) => String(v ?? '').trim() !== '');
+  /** 앞 구간이 차지한 마지막 줄 — 구간 둘이 붙어 있을 때 그 사이에 넣은 줄은 위 구간에만 넣는다 */
+  let taken = -1;
   for (const sec of sections) {
     const tplLen = sec.last - sec.first + 1;
     const first = got.indexOf(`s${sec.id}:0`);
     const len = tplLen + extraRowCount(gotExtras, sec);
     const own = Array.from({ length: len }, (_, k) => xRow(first + k)).filter((x): x is number => x !== undefined);
     const above = first > 0 ? xRow(first - 1) : -1;
-    const below = first + len < got.length ? xRow(first + len) : Math.max(lastXRow, ...own) + 1;
-    const from = above !== undefined ? above + 1 : own.length ? Math.min(...own) : undefined;
-    const to = below !== undefined ? below - 1 : own.length ? Math.max(...own) : undefined;
+    const atEnd = first + len >= got.length;
+    const below = atEnd ? undefined : xRow(first + len);
+    const start = above !== undefined ? above + 1 : own.length ? Math.min(...own) : undefined;
+    const from = start === undefined ? undefined : Math.max(start, taken + 1);
+    let to = below !== undefined ? below - 1 : own.length ? Math.max(...own) : undefined;
+    // 구간이 시트 맨 끝이면 아래 경계가 없다 — 구간에 붙어 이어진 줄까지만(한참 아래에 쓴 메모를 표의 줄로 받지 않게)
+    if (atEnd && to !== undefined) while (to + 1 <= lastXRow && hasContent(to + 1)) to++;
     if (from === undefined || to === undefined || to < from) {
       // 구간을 찾을 수 없다 — 줄 수·값을 화면 그대로 둔다
       if (extras[sec.id]) nextExtras[sec.id] = extras[sec.id];
@@ -279,6 +287,7 @@ export function fillFromXlsx({ template, formKey, extras, values, refs, xlsx, na
     }
     if (rows.length !== tplLen) nextExtras[sec.id] = rows.length - tplLen;
     sectionRows.set(sec.id, rows);
+    taken = rows[rows.length - 1];
     rowDelta += rows.length - (tplLen + extraRowCount(extras, sec));
   }
 
@@ -300,7 +309,7 @@ export function fillFromXlsx({ template, formKey, extras, values, refs, xlsx, na
   const xRowOf = (r: number): number | undefined => {
     const key = next[r];
     const id = sectionOf(key);
-    if (id !== undefined && sectionRows.has(id)) return sectionRows.get(id)![Number(key.slice(key.lastIndexOf(':') + 1))];
+    if (id !== undefined) return sectionRows.get(id)?.[Number(key.slice(key.lastIndexOf(':') + 1))];
     const g = gotAt.get(key);
     return g === undefined ? undefined : xRow(g);
   };
@@ -340,6 +349,9 @@ export function fillFromXlsx({ template, formKey, extras, values, refs, xlsx, na
       const text = xr !== undefined && xc !== undefined ? String(xlsx.rows[xr]?.[xlsx.cols[xc]] ?? '') : undefined;
       const cellInput = fillable(shape, r, c, skipNames);
       if (!cellInput) continue;
+      // 줄을 찾지 못해 화면대로 두기로 한 표 — 값을 읽지 않는다(위에서 이미 알렸다)
+      const secId = sectionOf(next[r]);
+      if (secId !== undefined && !sectionRows.has(secId)) continue;
       if (text === undefined) {
         if (xr === undefined) lostRows.add(r);
         else lostCols.add(c);
@@ -350,9 +362,10 @@ export function fillFromXlsx({ template, formKey, extras, values, refs, xlsx, na
         if (src[r] === undefined) out[key] = '';
         continue;
       }
+      // 화면 값과 같은 글 — 그대로 둔다(날짜 칸에 미리 쓴 '2026.', 시작일만 고른 기간처럼 칸 종류로는 못 읽는 글도 받은 그대로면 건드리지 않는다)
+      if (text.trim() === prev.trim()) continue;
       // 사람·부서 칸 — 엑셀에 쓴 이름으로 조직도에서 찾는다
       if (cellInput.type === 'user' || cellInput.type === 'users' || cellInput.type === 'dept') {
-        if (text.trim() === prev.trim()) continue;
         const caption = `${cellCaption(before, r, c)}(${text.trim()})`;
         if (!people) {
           skipped.push(caption);
@@ -409,20 +422,37 @@ export function fillFromXlsx({ template, formKey, extras, values, refs, xlsx, na
     if (v !== s.prev) changed--;
   }
 
-  // 번호 열 — 서식에 1, 2, 3…을 미리 적어 둔 열은 엑셀에서 넣은 줄이 비어 있다. 손대지 않은 번호(빈 칸 빼고 차례대로)면 다시 1, 2, 3…
+  /*
+    번호 열 — 엑셀에서 줄을 넣거나 지운 구간만 다시 1, 2, 3…. 작성 화면의 [행 추가]·[행 삭제]와 같은 기준이다:
+    서식에 1, 2, 3…을 미리 적어 둔 열이고, 올리기 전 화면에서도 빠짐없이 차례였을 때만(기안자가 10·20·30 으로 바꿔 둔 번호는 손대지 않는다)
+  */
+  const screen = applyValues(expandRepeats(template, extras), values, { recalc: false });
+  /** 받은 뒤 화면에서 넣어, 엑셀에 없어 빠지는 줄 수 */
+  let screenOnly = 0;
   for (const sec of sections) {
-    const first = next.indexOf(`s${sec.id}:0`);
-    const len = next.filter((k) => k.startsWith(`s${sec.id}:`)).length;
-    if (!sectionRows.has(sec.id) || len === sec.last - sec.first + 1) continue;
+    if (!sectionRows.has(sec.id)) continue;
+    const prefix = `s${sec.id}:`;
+    const nowFirst = now.indexOf(`${prefix}0`);
+    const nowLen = now.filter((k) => k.startsWith(prefix)).length;
+    const first = next.indexOf(`${prefix}0`);
+    const len = next.filter((k) => k.startsWith(prefix)).length;
+    const from = src.slice(first, first + len);
+    const gotLen = got.filter((k) => k.startsWith(prefix)).length;
+    const kept = new Set(from);
+    for (let k = gotLen; k < nowLen; k++) if (!kept.has(`${prefix}${k}`)) screenOnly++;
+    // 줄이 그대로면(같은 줄이 같은 차례) 번호를 건드리지 않는다
+    if (len === nowLen && from.every((k, i) => k === `${prefix}${i}`)) continue;
     template.cols.forEach((col, c) => {
       for (let r = sec.first; r <= sec.last; r++) {
         if (!draftInputOf(template, r, c) || String(template.rows[r]?.[col] ?? '').trim() !== String(r - sec.first + 1)) return;
       }
-      const cur = Array.from({ length: len }, (_, k) => (out[cellKey(first + k, col)] ?? '').trim()).filter(Boolean);
-      if (cur.some((v, i) => !/^\d+$/.test(v) || (i > 0 && Number(v) <= Number(cur[i - 1])))) return;
+      for (let k = 0; k < nowLen; k++) if (String(screen.rows[nowFirst + k]?.[col] ?? '').trim() !== String(k + 1)) return;
+      // 엑셀에서 번호를 직접 고쳐 썼으면('2-1' 등) 그 번호를 둔다 — 빈 칸·숫자뿐일 때만 다시 매긴다
+      for (let k = 0; k < len; k++) if (!/^\d*$/.test((out[cellKey(first + k, col)] ?? '').trim())) return;
       for (let k = 0; k < len; k++) out[cellKey(first + k, col)] = String(k + 1);
     });
   }
+  if (screenOnly) notes.push(`양식을 받은 뒤 화면에서 넣은 줄 ${screenOnly}줄은 엑셀에 없어 빠집니다. 필요하면 [엑셀로 받기]로 다시 받아 써 주세요.`);
 
   if (unreadable.length) notes.push(`칸 종류(숫자·날짜 등)에 맞지 않는 값이라 받지 않았습니다: ${listOf(unreadable)}`);
   if (badSelect.length) notes.push(`고를 수 있는 항목이 아니라 받지 않았습니다: ${listOf(badSelect)}`);

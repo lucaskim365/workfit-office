@@ -235,6 +235,15 @@ test('연동 칸 — 기간 칸은 period·period__end 로 나누고, 사람 칸
   assert.deepEqual(linkFieldValues(s, null), {}); // 대체 서식이 없으면 아무것도 안 넣음
 });
 
+test('대체 서식 검사 — 휴일근무 근무 일자는 날짜 칸(글자·기간 칸이면 상신이 막히므로 저장 때 알린다)', () => {
+  let s = createSheet(1, 1);
+  s = setCellName(s, 0, 0, 'workDate');
+  s = setCellMeta(s, APPROVAL_NS.input, 0, 0, { type: 'text' });
+  assert.deepEqual(linkIssues(s, '휴일근무'), ["'근무 일자' 칸은 날짜 칸이어야 합니다."]);
+  assert.equal(linkIssues(setCellMeta(s, APPROVAL_NS.input, 0, 0, { type: 'dateRange' }), '휴일근무').length, 1);
+  assert.deepEqual(linkIssues(setCellMeta(s, APPROVAL_NS.input, 0, 0, { type: 'date' }), '휴일근무'), []);
+});
+
 test('대체 서식 검사 — 꼭 있어야 할 연동 칸', () => {
   let s = createSheet(2, 2);
   assert.equal(linkIssues(s, '휴가').length, 2); // 휴가 종류·휴가 기간

@@ -1301,6 +1301,12 @@ export function linkIssues(s: Sheet, link: string | null | undefined): string[] 
   }
   // 기간 이름(휴가 기간·외근 일자·출장 기간)은 날짜를 고르는 칸이어야 연동이 날짜로 읽는다
   def.names.filter((n) => n.range).forEach((n) => errors.push(...rangeCellIssues(s, n)));
+  // 휴일근무 근무 일자는 하루 — 날짜 칸이어야 주말·공휴일 검사와 근태 기록 채우기가 된다(글자·기간 칸이면 상신이 막힌다)
+  if (def.code === '휴일근무') {
+    const key = Object.entries(s.cellMeta[APPROVAL_NS.name] ?? {}).find(([, n]) => n === 'workDate')?.[0];
+    const type = key ? (s.cellMeta[APPROVAL_NS.input]?.[key] as CellInput | undefined)?.type : undefined;
+    if (key && s.formulas[key] === undefined && type !== 'date') errors.push(`'근무 일자' 칸은 날짜 칸이어야 합니다.`);
+  }
   // 목록 이름(줄마다 값)은 반복 구간의 열이어야 하고, 같은 줄끼리 한 묶음이 되게 한 구간에 둔다
   const sectionOf = new Map<string, string | null>();
   Object.entries(s.cellMeta[APPROVAL_NS.name] ?? {}).forEach(([key, name]) => {

@@ -184,9 +184,12 @@ test('끊긴 조건 — 고를 항목 이름을 고치면 옛 값에 걸린 행�
   assert.match(issues[0], /^3행: .*식대.*보이지 않습니다/);
   assert.match(issues[1], /분류\(B2\).*식대.*쓰이지 않습니다/);
 
-  // 직접 입력을 받는 기준 칸은 목록 밖 값도 나오므로 행 조건은 알리지 않는다
+  // 직접 입력을 받는 기준 칸도 알린다 — 기안자가 그 값을 똑같이 쳐야만 보이므로(항목 이름을 고친 뒤 남은 옛 값일 수 있다)
   const open = setApprovalProp(s, at(0, 1), APPROVAL_NS.input, { type: 'select', options: ['식비', '직접입력'] });
-  assert.equal(valueRuleIssues(open).some((x) => x.startsWith('3행')), false);
+  const openIssues = valueRuleIssues(open);
+  assert.equal(openIssues.length, 2);
+  assert.match(openIssues[0], /^3행: .*식대.*직접 입력으로 그 값을 똑같이 써야만 보입니다/);
+  assert.match(openIssues[1], /분류\(B2\).*식대.*직접 입력으로 그 값을 똑같이 써야만 쓰입니다/);
 });
 
 test('끊긴 조건 — 기준 칸에서 부품을 빼면(이름은 남음) 고르는 칸이 아니고, 이름까지 지우면 없는 칸', () => {

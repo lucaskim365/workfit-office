@@ -3,7 +3,8 @@ import type { ApprovalRouteRule, Resolver, RouteStep } from '@/domain/approvalRo
 import type { ApprovalForm } from '@/domain/approvalForm/schema';
 import { RoutePreview } from './RoutePreview';
 import { routeConditionFields } from './conditionFields';
-import { useFormVersionSheet, useSheetFormVersions } from '@/features/gw/useApprovalFormVersions';
+import { useFormVersionSheet, useSheetFormVersions, useSheetSwitches } from '@/features/gw/useApprovalFormVersions';
+import { sheetApplied } from '@/domain/approvalForm/sheetSwitch';
 import type { ApprovalStep, StepKind } from '@/domain/approvalDoc/schema';
 import { ApprovalLineBuilder } from '@/modules/gw/approval/ApprovalLineBuilder';
 import {
@@ -120,7 +121,13 @@ export function ApprovalRouteRuleEditor({
   const { latest: sheetVersions } = useSheetFormVersions();
   const sheetFormId = selectedForm?.id || null;
   const { data: sheetVersion } = useFormVersionSheet(sheetFormId, sheetFormId ? (sheetVersions.get(sheetFormId) ?? null) : null);
-  const dropdownFields = useMemo(() => routeConditionFields(selectedForm, sheetVersion?.sheet), [selectedForm, sheetVersion]);
+  // '시트로 기안'이 꺼진 서식은 기존 양식으로 기안되므로 시트에만 있는 칸은 문서에 없다 — 그 칸으로 조건을 만들면 규칙이 걸리지 않는다
+  const { switches: sheetSwitches } = useSheetSwitches();
+  const sheetInUse = !!selectedForm && sheetApplied(selectedForm, sheetSwitches);
+  const dropdownFields = useMemo(() => routeConditionFields(selectedForm, sheetInUse ? sheetVersion?.sheet : undefined), [selectedForm, sheetVersion, sheetInUse]);
+
+  /** 규칙에 조건 칸이 있는데 지금 후보에 없다 — 시트 스위치가 꺼졌거나 그 칸이 서식에서 빠졌다 */
+  const conditionKeyMissing = !!rule.conditionKey && !dropdownFields.some((df) => df.key === rule.conditionKey);
 
   // 서식 대상 (전사 공통 vs 특정 서식)
   const isGlobalForm = !rule.docType || rule.docType === '전체';
@@ -233,7 +240,7 @@ export function ApprovalRouteRuleEditor({
             </div>
 
             {/* 서식 내부 구분키 (옵션이 있는 경우) */}
-            {dropdownFields.length > 0 && (
+            {(dropdownFields.length > 0 || conditionKeyMissing) && (
               <div>
                 <label className="block text-[11px] font-bold text-ink3 mb-1">
                   서식 세부 구분 조건 (선택)
@@ -244,6 +251,8 @@ export function ApprovalRouteRuleEditor({
                   className={inp}
                 >
                   <option value="">(전체 구분)</option>
+                  {/* 규칙에 든 칸이 지금 후보에 없다 — 고르기 상자가 (전체 구분)으로 보여 조건 없는 규칙으로 오해하지 않게 */}
+                  {conditionKeyMissing && <option value={rule.conditionKey ?? ''}>(지금 양식에 없는 칸: {rule.conditionKey})</option>}
                   {dropdownFields.map((df) => (
                     <option key={df.key} value={df.key}>
                       {df.label} 필드 기준
@@ -253,8 +262,14 @@ export function ApprovalRouteRuleEditor({
               </div>
             )}
 
+            {conditionKeyMissing && (
+              <div className="col-span-full rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-2 text-[11px] leading-relaxed text-amber-800">
+                이 규칙의 조건 칸이 지금 기안에 쓰는 양식에 없습니다(조건 값: {rule.conditionValues.join(', ') || '없음'}). 이대로는 이 규칙이 걸리지 않습니다.
+                시트 서식의 칸이면 그 서식의 '시트로 기안'을 켜야 하고, 아니면 조건을 (전체 구분)이나 다른 칸으로 바꿔 주세요.
+              </div>
+            )}
             {/* 세부 구분 값 체크박스 */}
-            {rule.conditionKey && (
+            {rule.conditionKey && !conditionKeyMissing && (
               <div className="col-span-full rounded-lg bg-panel-alt p-2.5 border border-border">
                 <div className="text-[11px] font-bold text-ink2 mb-1.5">세부 조건 값 선택:</div>
                 <div className="flex flex-wrap gap-2">

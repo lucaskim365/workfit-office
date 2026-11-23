@@ -55,6 +55,13 @@ function dateOf(raw: string | undefined): string {
   return d.getUTCMonth() === Number(m[2]) - 1 && d.getUTCDate() === Number(m[3]) ? m[0] : '';
 }
 
+/**
+ * 결재가 끝난 발주서를 대장에 올리기 — 지금은 끔(2026-11-23 사용자 결정).
+ * 매입 결제 관리는 기업 정보(도입 기업·사업 구분 등)·프로젝트 정보가 들어온 뒤에 발주서와 잇는다. 그 전에 시트 발주서를 써도 대장에 줄이 생기지 않게 한다.
+ * 줄을 만드는 규칙(paymentsFromDoc)과 화면은 그대로 두었으니, 이을 때 true 로 바꾸면 그때까지 결재가 끝난 발주서가 한꺼번에 올라온다 — 켜기 전에 사용자에게 확인할 것
+ */
+export const PURCHASE_LEDGER_SYNC_ENABLED = false;
+
 /** 대장에 올릴 발주서인가 — 결재가 끝났고, 발주 연동으로 쓴 시트 문서 */
 export function isLedgerPurchaseOrder(doc: PoDocLike): boolean {
   return doc.status === '완료' && docLinkType(doc) === PO_LINK && typeof doc.fieldValues?.[SHEET_NAMED_KEY] === 'string';

@@ -287,6 +287,8 @@ export interface XlsxNames {
   rows: Record<string, number>;
   cols: Record<string, number>;
   texts: Record<string, string>;
+  /** 행·열 이름이 가리키는 시트(0부터, 통합 문서의 시트 차례) — 엑셀에서 앞에 다른 시트를 넣어도 이 시트를 읽게(importXlsx 의 sheet). 이름이 없으면 undefined */
+  sheetIndex?: number;
 }
 
 /**
@@ -303,7 +305,9 @@ export async function xlsxDefinedNames(bytes: Uint8Array): Promise<XlsxNames> {
   }
   const workbook = files.get('xl/workbook.xml');
   if (!workbook) return out;
-  for (const n of children(find(parseXml(new TextDecoder().decode(workbook)), 'definedNames'), 'definedName')) {
+  const book = parseXml(new TextDecoder().decode(workbook));
+  const sheetNames = children(find(book, 'sheets'), 'sheet').map((x) => x.attrs.name ?? '');
+  for (const n of children(find(book, 'definedNames'), 'definedName')) {
     const name = n.attrs.name;
     const body = textOf(n).trim();
     if (!name || !body) continue;
@@ -315,8 +319,14 @@ export async function xlsxDefinedNames(bytes: Uint8Array): Promise<XlsxNames> {
     const ref = body.slice(body.lastIndexOf('!') + 1).replace(/\$/g, '');
     const row = ref.match(/^(\d+):(\d+)$/);
     const col = ref.match(/^([A-Z]{1,3}):([A-Z]{1,3})$/i);
-    if (row && row[1] === row[2]) out.rows[name] = Number(row[1]) - 1;
-    else if (col && col[1].toUpperCase() === col[2].toUpperCase()) out.cols[name] = colIndex(col[1]);
+    if (!(row && row[1] === row[2]) && !(col && col[1].toUpperCase() === col[2].toUpperCase())) continue;
+    // 이름이 가리키는 시트 — '시트 이름'!… (이름 안의 작은따옴표는 겹쳐 쓴다). 시트를 못 찾거나(지워진 시트는 #REF!) 다른 시트의 이름이면 버린다
+    const raw = body.includes('!') ? body.slice(0, body.lastIndexOf('!')) : '';
+    const at = sheetNames.indexOf(/^'.*'$/.test(raw) ? raw.slice(1, -1).replace(/''/g, "'") : raw);
+    if (at < 0 || (out.sheetIndex !== undefined && out.sheetIndex !== at)) continue;
+    out.sheetIndex = at;
+    if (row) out.rows[name] = Number(row[1]) - 1;
+    else if (col) out.cols[name] = colIndex(col[1]);
   }
   return out;
 }

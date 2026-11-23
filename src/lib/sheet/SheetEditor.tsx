@@ -346,7 +346,14 @@ export function SheetEditor({
     const cell = editing;
     // 틀을 그릴 때만 — 기안자가 쓰는 글자는 손대지 않는다
     const text = design ? closeParens(draft) : draft;
-    if (text !== rawOf(cell.r, cell.c)) update((s) => setValue(s, cell.r, cell.c, text));
+    // 괄호를 채워 달라졌어도 쓴 글이 원래 글과 같고 수식이 안 되는 칸이면 바뀐 것이 없다(아래에서 쓴 글로 되돌린다) — 그때도 기록을 남기지 않게 결과를 견준다
+    if (text !== rawOf(cell.r, cell.c))
+      update((s) => {
+        const next = setValue(s, cell.r, cell.c, text);
+        // 괄호를 채운 것은 수식을 위한 것 — 수식이 되지 않은 칸(이름 붙은 칸은 '='로 시작해도 글자)은 쓴 글자 그대로
+        if (text === draft || next.formulas[`${cell.r}:${s.cols[cell.c]}`] !== undefined) return next;
+        return draft === rawOf(cell.r, cell.c) ? s : setValue(s, cell.r, cell.c, draft);
+      });
     setEditing(null);
     setPicked(null);
     pickRef.current = null;

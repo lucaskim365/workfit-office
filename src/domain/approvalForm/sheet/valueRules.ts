@@ -221,11 +221,16 @@ export function valueRuleIssues(s: Sheet): string[] {
     if (kind === 'missing') out.push(`${rowsLabel(all)}: 보이기 조건의 기준 칸 '${name}'이(가) 시트에 없어 항상 보입니다. 조건을 풀거나 기준 칸을 다시 정해 주세요.`);
     if (kind === 'plain') out.push(`${rowsLabel(all)}: 보이기 조건의 기준 칸 '${name}'이(가) 선택·체크 칸이 아닙니다. 기안 화면에서 이 줄이 보이지 않을 수 있습니다.`);
     const src = sources.find((x) => x.name === name);
-    if (!src || openEnded(src)) return;
+    if (!src) return;
     const dead = rows.filter((x) => !x.values.some((v) => src.options.includes(v)));
     if (dead.length) {
       const values = [...new Set(dead.flatMap((x) => x.values))].join('·');
-      out.push(`${rowsLabel(dead.map((x) => x.r))}: '${src.label}'의 고를 항목에 없는 값(${values})에만 걸려 있어 기안 화면에서 보이지 않습니다.`);
+      // 직접 입력을 받는 칸은 기안자가 그 값을 똑같이 쳐야만 보인다 — 항목 이름을 고친 뒤 남은 옛 값일 수 있다
+      out.push(
+        openEnded(src)
+          ? `${rowsLabel(dead.map((x) => x.r))}: '${src.label}'의 고를 항목에 없는 값(${values})에만 걸려 있어, 기안자가 직접 입력으로 그 값을 똑같이 써야만 보입니다.`
+          : `${rowsLabel(dead.map((x) => x.r))}: '${src.label}'의 고를 항목에 없는 값(${values})에만 걸려 있어 기안 화면에서 보이지 않습니다.`
+      );
     }
   });
 
@@ -240,9 +245,14 @@ export function valueRuleIssues(s: Sheet): string[] {
     const where = `${cellCaption(s, r, c)}(${cellAddress(r, c)})`;
     const src = sources.find((x) => x.name === dep.name);
     if (!src) return void out.push(`${where}: 고를 항목의 기준 칸 '${dep.name}'이(가) 없거나 선택 칸이 아닙니다. 기안 화면에서 항목이 뜻대로 나오지 않습니다.`);
-    if (openEnded(src)) return;
     const dead = dep.branches.filter((b) => b.options.length && !src.options.includes(b.when)).map((b) => b.when);
-    if (dead.length) out.push(`${where}: '${src.label}'의 고를 항목에 없는 값(${dead.join('·')})에 적어 둔 항목은 쓰이지 않습니다.`);
+    if (dead.length) {
+      out.push(
+        openEnded(src)
+          ? `${where}: '${src.label}'의 고를 항목에 없는 값(${dead.join('·')})에 적어 둔 항목은 기안자가 직접 입력으로 그 값을 똑같이 써야만 쓰입니다.`
+          : `${where}: '${src.label}'의 고를 항목에 없는 값(${dead.join('·')})에 적어 둔 항목은 쓰이지 않습니다.`
+      );
+    }
   });
   return out;
 }
