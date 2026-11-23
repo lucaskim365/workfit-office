@@ -31,7 +31,18 @@ export interface XlsxExportOptions {
   rowHeight?: (r: number) => number | undefined;
   /** 칸 위치에 띄울 그림 — 빼는 행에 걸린 그림은 뺀다 */
   pictures?: XlsxPicture[];
+  /** 숫자처럼 보여도 글자로 담을 칸 — 제목·번호처럼 숫자가 아닌 글(숫자로 담으면 엑셀이 오른쪽에 붙이고 '1,000'의 콤마 같은 글자를 버린다) */
+  textCell?: (r: number, c: number) => boolean;
+  /** 숨겨 담을 행 — 빼지 않고 엑셀에서 숨김(행 번호·수식이 그대로라, 채워서 다시 읽을 파일에 쓴다) */
+  hiddenRow?: (r: number) => boolean;
+  /**
+   * 엑셀 '이름'(숨김) — 행 전체(row)·열 전체(col)를 가리키는 이름은 엑셀에서 행·열을 넣고 지워도 그 행·열을 따라간다.
+   * text 는 글자 값 그대로. 다시 읽을 때(xlsxDefinedNames) 어느 줄이 어디로 갔는지 찾는 표시로 쓴다. 뺀 행을 가리키는 이름은 담지 않는다
+   */
+  definedNames?: XlsxDefinedName[];
 }
+
+export type XlsxDefinedName = { name: string; row: number } | { name: string; col: number } | { name: string; text: string };
 
 /**
  * 칸 위치에 띄우는 그림. 자리는 (r, c) 칸의 왼쪽 위에서 x·y(px, 시트 기준)만큼 — 음수나 칸보다 큰 값이면 옆·위·아래 칸으로 넘어간다.
@@ -83,7 +94,8 @@ function safeSheetName(name: string | undefined): string {
 /** 숫자로 담을 글자인가 — '0123'·'010-…' 같은 번호는 글자로(앞 0이 지워지지 않게) */
 function asNumber(text: string): number | null {
   const t = text.trim();
-  if (!t) return null;
+  // '2026.'처럼 점으로 끝나는 글은 글자로(숫자로 담으면 점이 지워진다)
+  if (!t || t.endsWith('.')) return null;
   if (/^[+-]?0\d/.test(t.replace(/,/g, ''))) return null;
   const n = parseNumber(t);
   return n !== null && Number.isFinite(n) ? n : null;
@@ -269,7 +281,7 @@ export async function exportXlsx(s: Sheet, opts: XlsxExportOptions = {}): Promis
       const style = s.styles[key];
       const text = opts.cellText?.(src, c) ?? String(s.rows[src]?.[col] ?? '');
       const formula = withFormulas ? s.formulas[key] : undefined;
-      const n = asNumber(text);
+      const n = opts.textCell?.(src, c) ? null : asNumber(text);
       const xf = book.xf(style, numFmtCode(style, n), n === null ? fitOf(src, c, text, style) : null);
       const sAttr = xf ? ` s="${xf}"` : '';
       if (formula) {
@@ -284,7 +296,7 @@ export async function exportXlsx(s: Sheet, opts: XlsxExportOptions = {}): Promis
       }
     });
     const ht = ` ht="${Math.round(heightOf(r) * 0.75 * 10) / 10}" customHeight="1"`;
-    rowXml.push(`<row r="${i + 1}"${ht}>${cells.join('')}</row>`);
+    rowXml.push(`<row r="${i + 1}"${ht}${opts.hiddenRow?.(r) ? ' hidden="1"' : ''}>${cells.join('')}</row>`);
   });
 
   // 열 너비 — 픽셀 → 엑셀 글자 수(불러오기 charsToPx 의 반대)
@@ -353,6 +365,17 @@ export async function exportXlsx(s: Sheet, opts: XlsxExportOptions = {}): Promis
     '</worksheet>';
 
   const name = safeSheetName(opts.sheetName);
+  // 이름 — 행은 '시트'!$5:$5(남긴 행 기준), 열은 '시트'!$C:$C, 글자는 "…"(따옴표는 겹쳐 쓴다)
+  const quotedSheet = `'${name.replace(/'/g, "''")}'`;
+  const namesXml = (opts.definedNames ?? [])
+    .map((d) => {
+      const tag = (body: string) => `<definedName name="${esc(d.name)}" hidden="1">${esc(body)}</definedName>`;
+      if ('text' in d) return tag(`"${d.text.replace(/"/g, '""')}"`);
+      if ('col' in d) return d.col >= 0 && d.col < s.cols.length ? tag(`${quotedSheet}!$${colLetter(d.col)}:$${colLetter(d.col)}`) : '';
+      const row = newRow.get(d.row);
+      return row === undefined ? '' : tag(`${quotedSheet}!$${row + 1}:$${row + 1}`);
+    })
+    .join('');
 
   const files: [string, string | Uint8Array][] = [
     [
@@ -380,6 +403,7 @@ export async function exportXlsx(s: Sheet, opts: XlsxExportOptions = {}): Promis
       XML_HEAD +
         `<workbook xmlns="${NS_MAIN}" xmlns:r="${NS_REL}">` +
         `<sheets><sheet name="${esc(name)}" sheetId="1" r:id="rId1"/></sheets>` +
+        (namesXml ? `<definedNames>${namesXml}</definedNames>` : '') +
         (withFormulas ? '<calcPr calcId="191029" fullCalcOnLoad="1"/>' : '') +
         '</workbook>',
     ],

@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
-import { DEFAULT_COL_WIDTH, SheetEditor, SheetView, cellKey, displayValue, parseNumber, recalculate, setCellValue, shrinkFontSize, type Sheet } from '@/lib/sheet';
-import { Building2, CalendarDays, Download, Minus, Plus, Search, Table2, Trash2, X } from 'lucide-react';
+import { DEFAULT_COL_WIDTH, SheetEditor, SheetView, XlsxError, cellKey, displayValue, downloadXlsx, exportXlsx, importXlsx, parseNumber, recalculate, setCellValue, shrinkFontSize, xlsxDefinedNames, type Sheet } from '@/lib/sheet';
+import { Building2, CalendarDays, Download, Minus, Plus, Search, Table2, Trash2, Upload, X } from 'lucide-react';
 import { SHEET_OWN_KEY, canDraftDelete, draftCanMerge, draftInsertCol, draftEditIssues, draftEditPaste, draftEditSetValue, isProtectedCell, keepRefsAfterEdit, readOwnSheet } from '@/domain/approvalForm/sheet/ownSheet';
 import { DateInput } from '@/shared/ui/form/DateInput';
 import { nowLocalIso } from '@/shared/lib/datetime';
@@ -50,6 +50,7 @@ import { SHEET_NAMED_KEY, collectNamed, sheetWith, type NamedValues } from '@/do
 import { RELATED_IMPORT_ENABLED, SHEET_LABELED_KEY, canImportRelated, collectLabeled, importRelated } from '@/domain/approvalForm/sheet/labelMatch';
 import { SHEET_ROWS_KEY, addRepeatRow, expandRepeats, healRepeatSections, insertRepeatRowAfter, readRowExtras, removeRepeatRow, removeRepeatRowAt, repeatSections } from '@/domain/approvalForm/sheet/repeatRows';
 import { extrasAnchorRow, extrasHiddenRows } from '@/domain/approvalForm/sheet/docExtras';
+import { draftXlsxExport, fillFromXlsx, hasXlsxFillCells } from '@/domain/approvalForm/sheet/draftExcel';
 import { LogoMarkProvider } from '../components/CompanyLetterhead';
 
 /**
@@ -632,6 +633,11 @@ export function SheetDraftForm({
   // 관련 문서 값 가져오기가 쓰는 것 — 훅이라 아래 조기 반환보다 위에 둔다(틀을 읽기 전·후 렌더의 훅 개수가 같아야 한다)
   const latest = useRef<{ tplSheet: typeof tplSheet; extras: typeof extras; rawValues: typeof rawValues; refs: typeof refs } | null>(null);
   const importing = useRef(false);
+  // 엑셀로 받아 채운 뒤 올리기(draftExcel.ts) — 올릴 파일 고르기 창
+  const xlsxFile = useRef<HTMLInputElement>(null);
+  // 엑셀로 주고받지 않는 이름 붙은 칸 — 시스템이 채우는 칸과 선택 창으로 고르는 칸
+  const xlsxSkip = useMemo(() => [...(lockedNames ?? []), ...(pickers?.names ?? [])], [lockedNames, pickers?.names]);
+  const canXlsx = useMemo(() => !template && !!tplSheet && hasXlsxFillCells(tplSheet, xlsxSkip), [template, tplSheet, xlsxSkip]);
   /** 선택 창 칸에 보일 글 — 넘겨받은 것이 있으면 그것(값이 있을 때만) */
   const shownValue = (name: string) => (pickers?.labels?.[name] ?? "");
 
@@ -725,6 +731,57 @@ export function SheetDraftForm({
   };
   const canEditShape = !template && !!loaded?.sheet;
 
+  /** [엑셀로 받기] — 지금 화면 모양 그대로(쓴 값·수식 포함). 머리(기안자·문서번호 등)는 보이는 글자로만 담고, 올릴 때는 읽지 않는다 */
+  const downloadDraftXlsx = async () => {
+    if (!tplSheet) return;
+    const title = draftInfoValue('doc.formTitle', draftInfo) || '결재서식';
+    const out = draftXlsxExport({
+      sheet,
+      template: tplSheet,
+      extras,
+      formKey: key,
+      skipNames: xlsxSkip,
+      sheetName: title,
+      hiddenRows: (r) => completedRows.has(r) || condHidden.has(r) || extrasHidden.has(r),
+      cellText: (r, c) => {
+        const props = approvalCellProps(sheet, r, c);
+        if (props.autoNo) return undefined;
+        // 결재란·로고·서명·첨부 자리는 화면이 그리는 것이라 비운다
+        if (slotOf(props.bind)) return '';
+        if (props.bind === 'doc.title') return docFields?.title ?? '';
+        if (props.bind === 'doc.preservation') return docFields?.preservationPeriod ?? '';
+        if (props.bind === 'doc.visibility') return docFields ? (VISIBILITY_LABEL[docFields.visibility] ?? docFields.visibility) : '';
+        const auto = draftInfoValue(props.bind, draftInfo);
+        if (auto !== undefined) return auto;
+        return props.name && pickers?.names.includes(props.name) ? shownValue(props.name) || undefined : undefined;
+      },
+    });
+    downloadXlsx(await exportXlsx(out.sheet, out.options), `${title}_작성용`);
+  };
+
+  /** [엑셀 올리기] — 받은 파일에 쓴 값을 입력 칸에 채운다. 줄은 받을 때 심은 표시로 찾고, 못 받은 것은 확인 창에서 알린다 */
+  const uploadDraftXlsx = async (file: File) => {
+    let read: { xlsx: Sheet; names: Awaited<ReturnType<typeof xlsxDefinedNames>> };
+    try {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      read = { xlsx: (await importXlsx(bytes, { ignorePrintArea: true, maxRows: 1000 })).sheet, names: await xlsxDefinedNames(bytes) };
+    } catch (e) {
+      return alert(e instanceof XlsxError ? e.message : '엑셀 파일을 읽지 못했습니다.');
+    }
+    // 파일을 읽는 동안 화면에서 쓴 값이 있을 수 있다 — 읽고 난 뒤의 값(latest)에 얹는다
+    if (!latest.current?.tplSheet) return;
+    const { tplSheet: tpl, extras: ex, rawValues: raw, refs: rf } = latest.current;
+    // 사람·부서 칸은 엑셀에 쓴 이름으로 조직도에서 찾는다
+    const people = { users: org.users.map((u) => ({ id: u.id, name: u.name, dept: u.dept })), depts: org.depts.map((d) => d.name) };
+    const res = fillFromXlsx({ template: tpl, formKey: key, extras: ex, values: readSheetValues(raw), refs: rf, skipNames: xlsxSkip, people, ...read });
+    if (!res.ok) return alert(res.error);
+    const notes = res.notes.length ? `\n\n받지 않은 것\n- ${res.notes.join('\n- ')}` : '';
+    if (!res.changed && !res.rowDelta) return alert(`엑셀 파일에 화면과 다른 값이 없습니다.${notes}`);
+    const rows = res.rowDelta ? ` 표의 줄은 ${Math.abs(res.rowDelta)}줄 ${res.rowDelta > 0 ? '늘어납니다' : '줄어듭니다'}.` : '';
+    if (!confirm(`엑셀 파일의 값으로 ${res.changed}칸을 채웁니다.${rows}\n이미 쓴 값은 엑셀의 값으로 바뀝니다.${notes}`)) return;
+    emit(applyValues(expandRepeats(tpl, res.extras), res.values, { recalc: true }), res.extras, res.refs);
+  };
+
   return (
     // 서식이 A4보다 넓으면 작성 중에는 줄이지 않고 옆으로 밀어 본다(글씨가 작아지지 않게). 문서 보기·인쇄는 맞춰 줄임
     // 로고 칸이 고른 로고 — 없으면 대표 로고
@@ -766,13 +823,46 @@ export function SheetDraftForm({
           {own && (
             <span className="rounded bg-amber-50 px-1.5 py-0.5 font-semibold text-amber-700">기안자가 표 모양을 고친 문서입니다</span>
           )}
+          {/* 엑셀로 받아 채운 뒤 올리기 — 노란 칸(기안자가 쓰는 칸)의 값만 다시 받는다 */}
+          {canXlsx && (
+            <>
+              <button
+                type="button"
+                onClick={downloadDraftXlsx}
+                className="ml-auto flex items-center gap-1 rounded border border-border bg-white px-2 py-0.5 font-semibold text-ink2 hover:border-teal hover:text-teal"
+                title="지금 화면 그대로 엑셀 파일로 받습니다. 엑셀에서 노란 칸을 채운 뒤 [엑셀 올리기]로 올리세요"
+              >
+                <Download className="h-3 w-3" />엑셀로 받기
+              </button>
+              <button
+                type="button"
+                onClick={() => xlsxFile.current?.click()}
+                className="flex items-center gap-1 rounded border border-border bg-white px-2 py-0.5 font-semibold text-ink2 hover:border-teal hover:text-teal"
+                title="[엑셀로 받기]로 받아 채운 파일을 올리면 노란 칸의 값이 채워집니다. 표에 줄을 넣었으면 줄도 늘어납니다"
+              >
+                <Upload className="h-3 w-3" />엑셀 올리기
+              </button>
+              <input
+                ref={xlsxFile}
+                type="file"
+                accept=".xlsx"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  // 같은 파일을 고쳐서 다시 올릴 수 있게 비운다
+                  e.target.value = '';
+                  if (file) void uploadDraftXlsx(file);
+                }}
+              />
+            </>
+          )}
           <button
             type="button"
             onClick={() => {
               setEditNotice('');
               setEditing({ start: sheet, sheet });
             }}
-            className="ml-auto flex items-center gap-1 rounded border border-border bg-white px-2 py-0.5 font-semibold text-ink2 hover:border-teal hover:text-teal"
+            className={`${canXlsx ? '' : 'ml-auto '}flex items-center gap-1 rounded border border-border bg-white px-2 py-0.5 font-semibold text-ink2 hover:border-teal hover:text-teal`}
             title="열·행 넣기·지우기, 병합, 수식 고치기 — 금액·연동 칸, 문서 정보, 결재란 등은 고칠 수 없습니다"
           >
             <Table2 className="h-3 w-3" />표 모양 고치기

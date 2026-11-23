@@ -52,5 +52,5 @@ export {
   type PasteOptions,
 } from './ops';
 export { cellCss, cellBorder, renderStyle, displayValue, defaultAlign, shrinkFontSize, stretchedColWidths, SHEET_COLORS } from './style';
-export { importXlsx, xlsxSheetImages, XlsxError, type XlsxImage, type XlsxImport, type XlsxOptions } from './xlsx';
-export { exportXlsx, downloadXlsx, type XlsxExportOptions, type XlsxPicture } from './xlsxWrite';
+export { importXlsx, xlsxSheetImages, xlsxDefinedNames, XlsxError, type XlsxImage, type XlsxImport, type XlsxNames, type XlsxOptions } from './xlsx';
+export { exportXlsx, downloadXlsx, type XlsxExportOptions, type XlsxPicture, type XlsxDefinedName } from './xlsxWrite';

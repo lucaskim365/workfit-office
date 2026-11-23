@@ -282,6 +282,45 @@ function printAreaOf(workbook: XmlNode | undefined, sheetIndex = 0): { rows: num
   return { rows: end[0] + 1, cols: end[1] + 1, ref: ref.replace(/\$/g, '') };
 }
 
+/** 엑셀 '이름' — 행 하나($5:$5)를 가리키는 이름은 rows, 열 하나($C:$C)는 cols(둘 다 0부터), 글자 값("…")은 texts. 지워진 것(#REF!)·그 밖의 범위·식은 뺀다 */
+export interface XlsxNames {
+  rows: Record<string, number>;
+  cols: Record<string, number>;
+  texts: Record<string, string>;
+}
+
+/**
+ * 통합 문서의 이름 읽기 — exportXlsx 의 definedNames 로 심은 표시를 되찾는다.
+ * 엑셀에서 행·열을 넣고 지운 뒤 저장해도 이름은 그 칸을 따라가므로, 어느 줄이 어디로 갔는지 알 수 있다
+ */
+export async function xlsxDefinedNames(bytes: Uint8Array): Promise<XlsxNames> {
+  const out: XlsxNames = { rows: {}, cols: {}, texts: {} };
+  let files: Map<string, Uint8Array>;
+  try {
+    files = await unzip(bytes);
+  } catch {
+    return out;
+  }
+  const workbook = files.get('xl/workbook.xml');
+  if (!workbook) return out;
+  for (const n of children(find(parseXml(new TextDecoder().decode(workbook)), 'definedNames'), 'definedName')) {
+    const name = n.attrs.name;
+    const body = textOf(n).trim();
+    if (!name || !body) continue;
+    const quoted = body.match(/^"([\s\S]*)"$/);
+    if (quoted) {
+      out.texts[name] = quoted[1].replace(/""/g, '"');
+      continue;
+    }
+    const ref = body.slice(body.lastIndexOf('!') + 1).replace(/\$/g, '');
+    const row = ref.match(/^(\d+):(\d+)$/);
+    const col = ref.match(/^([A-Z]{1,3}):([A-Z]{1,3})$/i);
+    if (row && row[1] === row[2]) out.rows[name] = Number(row[1]) - 1;
+    else if (col && col[1].toUpperCase() === col[2].toUpperCase()) out.cols[name] = colIndex(col[1]);
+  }
+  return out;
+}
+
 /** .xlsx 바이트 → 시트 */
 export async function importXlsx(bytes: Uint8Array, opts: XlsxOptions = {}): Promise<XlsxImport> {
   const maxRows = opts.maxRows ?? 300;
