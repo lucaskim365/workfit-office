@@ -7,6 +7,7 @@ import { useApprovalForms } from '@/features/gw/useApprovalForms';
 import type { ApprovalDoc, RelatedDoc } from '@/domain/approvalDoc/schema';
 import { resolveSignatureSnapshot } from '@/domain/approvalDoc/signatureSnapshot';
 import { getEffectiveRecipients } from '@/domain/approvalDoc/engine';
+import { staleDocKeys } from '@/domain/approvalDoc/staleValues';
 import { RESERVED_BODY_KEY, amountFieldOf, documentBodyKeyOf, type ApprovalForm, type FormField } from '@/domain/approvalForm/schema';
 import { fieldText } from '@/modules/gw/approval/formFields';
 import { SheetView, hasSealCell, resolveViewSheet } from '@/modules/gw/approval/formFields/SheetView';
@@ -338,6 +339,8 @@ export function ApprovalDocumentView({
 
 
   const form = formOverride ?? forms.find((f) => f.code === doc.docType);
+  // 서식 칸이 통째로 바뀌기 전에 낸 문서 — 지금 서식의 칸을 끼워 넣지 않고 낸 그대로(본문만) 보여 준다
+  const oldShape = staleDocKeys(form?.fields, doc).length > 0;
   // 공문(직인 서식) — 인쇄·PDF 에서 하단 첨부파일·수신처 칸을 뺀다
   const sealForm = isSealForm(form?.fields);
   const docTitle = form?.docTitle || form?.name || FALLBACK_TITLE[doc.docType] || doc.docType;
@@ -354,7 +357,10 @@ export function ApprovalDocumentView({
   const amountField = form ? amountFieldOf(form) : undefined;
   // 'body' 키를 표 등 다른 종류가 쓰는 서식은 본문이 별도 키에 있다(그 전에 상신된 문서의 doc.body 에 섞여 들어간 표 데이터는 본문으로 보이지 않게 한다)
   const bodyKey = documentBodyKeyOf(form?.fields);
-  const bodyText = bodyKey === RESERVED_BODY_KEY ? doc.body : String(doc.fieldValues?.[bodyKey] ?? '');
+  const bodyText =
+    bodyKey === RESERVED_BODY_KEY
+      ? doc.body || (oldShape ? String(doc.fieldValues?.[RESERVED_BODY_KEY] ?? '') : '')
+      : String(doc.fieldValues?.[bodyKey] ?? '');
   const amountLabel = amountField?.label ?? '금 액';
   const steps = useMemo(() =>
     [...(doc.steps || [])]
@@ -371,7 +377,7 @@ export function ApprovalDocumentView({
 
   const { blocks, isAmountInDetails, effectiveFieldProps, longTextFields } = useMemo(() => {
     const act = (form?.fields ?? []).filter((f) => {
-      if (f.type === '안내문' || f.key.endsWith('__days')) return false;
+      if (oldShape || f.type === '안내문' || f.key.endsWith('__days')) return false;
       // 대외 문서에서 숨기기로 한 필드
       if (externalDoc && f.hideOnExternal) return false;
       if (f.visibleIf) {
@@ -463,7 +469,7 @@ export function ApprovalDocumentView({
       effectiveFieldProps: getEffectiveProps,
       longTextFields: longTexts,
     };
-  }, [form, doc.fieldValues, amountField, externalDoc]);
+  }, [form, doc.fieldValues, amountField, externalDoc, oldShape]);
 
   useDocumentNotificationRead(currentUser?.id, !isPreview && canAccessDocument ? doc.id : undefined);
 
