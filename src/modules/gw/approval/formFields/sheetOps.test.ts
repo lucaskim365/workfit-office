@@ -3,6 +3,8 @@ import type { SheetPayload } from './sheetModel';
 import {
   insertRow,
   deleteRow,
+  addDataRow,
+  removeLastDataRow,
   insertCol,
   deleteCol,
   mergeRange,
@@ -181,7 +183,50 @@ export function runSheetOpsTests() {
     );
     assert.equal(byKey.ty.cellFormulas['0:A'].expression, '=[tx]!A2');
     assert.equal(out.tx, x, '바뀐 표 자신은 그대로');
-    console.log('✓ 10. propagateStructureChange 통과\n');
+    console.log('✓ 10. propagateStructureChange 통과');
+  }
+
+  // 11. addDataRow / removeLastDataRow — 합계 줄 위에 넣고 빼며 합계 범위가 따라 바뀜
+  {
+    // 개인 경비 사용 신청서 모양: 제목 줄, 내용 3줄(번호·금액), 합계 줄(병합 + SUM)
+    const p: SheetPayload = {
+      ...sheet(5, ['no', 'memo', 'amt']),
+      rows: [
+        { no: 'NO', memo: '내역', amt: '금액' },
+        { no: '1', memo: '', amt: '100' },
+        { no: '2', memo: '', amt: '200' },
+        { no: '3', memo: '', amt: '300' },
+        { no: '합계', memo: '', amt: '600' },
+      ],
+      cellFormulas: { '4:amt': { expression: '=SUM(C2:C4)', format: 'currency' } },
+      cellStyles: { '3:amt': { numFmt: 'currency', align: 'right', seal: true }, '4:amt': { align: 'right' } },
+      merges: [{ startRow: 4, startCol: 0, rowSpan: 1, colSpan: 2 }],
+    };
+    const { sheet: n, at } = addDataRow(p);
+    assert.equal(at, 4);
+    assert.deepEqual(n.rows[4], { no: '4', memo: '', amt: '' }, '새 줄은 합계 위, 번호는 이어서');
+    assert.equal(n.rows[5].no, '합계');
+    assert.deepEqual(n.cellFormulas, { '5:amt': { expression: '=SUM(C2:C5)', format: 'currency' } });
+    assert.deepEqual(n.cellStyles['4:amt'], { numFmt: 'currency', align: 'right' }, '윗줄 서식을 물려받되 직인은 빼고');
+    assert.deepEqual(n.merges, [{ startRow: 5, startCol: 0, rowSpan: 1, colSpan: 2 }]);
+
+    const back = removeLastDataRow(n);
+    assert.equal(back?.at, 4);
+    assert.equal(back?.sheet.rows[4].no, '합계', '합계 줄은 남는다');
+    assert.equal(back?.sheet.cellFormulas['4:amt'].expression, '=SUM(C2:C4)');
+
+    // 합계 줄이 없으면 맨 끝에, 줄마다 있는 식(같은 줄 계산)은 합계로 보지 않음
+    const plain = sheet(3, ['A', 'B', 'C'], { cellFormulas: { '2:C': { expression: '=A3*B3', format: 'number' } } });
+    assert.equal(addDataRow(plain).at, 3);
+    assert.equal(removeLastDataRow(plain)?.at, 2);
+    // SUM(ABOVE)·예전 합계 칸도 합계 줄
+    assert.equal(addDataRow(sheet(3, ['A'], { cellFormulas: { '2:A': { expression: '=SUM(ABOVE)' } } })).at, 2);
+    assert.equal(addDataRow(sheet(3, ['A'], { sumCell: { rIdx: 2, col: 'A' } })).at, 2);
+    // 다른 표의 범위는 이 표의 합계가 아님
+    assert.equal(addDataRow(sheet(3, ['A'], { cellFormulas: { '2:A': { expression: '=[다른표]!A1' } } })).at, 3);
+    // 제목 줄만 남으면 더 지우지 않음
+    assert.equal(removeLastDataRow(sheet(2, ['A'], { cellFormulas: { '1:A': { expression: '=SUM(ABOVE)' } } })), null);
+    console.log('✓ 11. addDataRow / removeLastDataRow 통과\n');
   }
 
   console.log('🎉 모든 sheetOps 테스트 통과!');

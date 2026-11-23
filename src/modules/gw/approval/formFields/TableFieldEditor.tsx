@@ -13,7 +13,8 @@ import {
   sheetSignature,
   type SheetPayload,
 } from './sheetModel';
-import { deleteRow, insertRow } from './sheetOps';
+import { addDataRow, propagateStructureChange, removeLastDataRow } from './sheetOps';
+import type { ShiftAction } from './formulaEngine';
 import { cellCss, defaultAlign, displayCellValue } from './sheetStyle';
 
 interface TableFieldEditorProps {
@@ -122,11 +123,25 @@ export function TableFieldEditor({
     save({ ...effective, rows: effective.rows.map((r, idx) => (idx === rIdx ? { ...r, [col]: val } : r)) });
   };
 
-  const handleAddRow = () => save(insertRow(effective, effective.rows.length));
+  /** 줄을 넣거나 뺀 뒤 저장 — 이 표를 가리키는 다른 표의 수식도 따라 옮겨 함께 저장 */
+  const saveStructural = (next: SheetPayload, action: ShiftAction) => {
+    const moved = propagateStructureChange({ ...otherSheets, [field.key]: next }, labels, field.key, action);
+    const patch: Record<string, FieldValue> = { [field.key]: toValue(next) };
+    Object.entries(otherSheets).forEach(([key, before]) => {
+      if (JSON.stringify(moved[key].cellFormulas) !== JSON.stringify(before.cellFormulas)) patch[key] = serializeSheet(moved[key]);
+    });
+    set(patch);
+  };
 
+  // 합계 줄이 있으면 그 위에 넣고 뺀다 — 합계 수식 범위가 따라 바뀜
+  const handleAddRow = () => {
+    const { sheet: next, at } = addDataRow(effective);
+    saveStructural(next, { type: 'row_add', atIndex: at });
+  };
+
+  const removable = removeLastDataRow(effective);
   const handleDeleteRow = () => {
-    if (effective.rows.length <= 1) return;
-    save(deleteRow(effective, effective.rows.length - 1));
+    if (removable) saveStructural(removable.sheet, { type: 'row_del', atIndex: removable.at });
   };
 
   // 표 편집기에서 적용 — 다른 표 참조가 따라 움직였으면 그 표도 함께 저장
@@ -249,12 +264,12 @@ export function TableFieldEditor({
           {effective.legacyHeaderRow ? rows.length - 1 : rows.length}개 행
         </span>
         <div className="flex items-center gap-1.5">
-          {rows.length > 1 && (
+          {removable && (
             <button
               type="button"
               onClick={handleDeleteRow}
               className="flex items-center gap-1 text-[10.5px] font-semibold text-rose-500 hover:text-rose-700 transition-colors cursor-pointer px-2 py-0.5 rounded hover:bg-rose-50"
-              title="마지막 행 삭제"
+              title="마지막 내용 행 삭제 (합계 행은 남김)"
             >
               <Trash2 className="h-3 w-3" />
               <span>행 삭제</span>
