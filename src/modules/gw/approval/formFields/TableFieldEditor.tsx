@@ -135,7 +135,7 @@ export function TableFieldEditor({
 
   // 합계 줄이 있으면 그 위에 넣고 뺀다 — 합계 수식 범위가 따라 바뀜
   const handleAddRow = () => {
-    // 서식 틀의 내용 줄마다 미리 든 글자(날짜 열의 "2026." 등)는 새 줄에도 넣는다 — 연도는 올해로
+    // 서식 틀의 내용 줄마다 연도만 미리 든 칸(날짜 열의 "2026.")은 새 줄에도 올해 연도로 넣는다
     const defaults = field.placeholder
       ? rowDefaults(normalizeTablePayload(field.placeholder, field.options), new Date().getFullYear())
       : {};

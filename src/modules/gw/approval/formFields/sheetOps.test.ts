@@ -230,7 +230,7 @@ export function runSheetOpsTests() {
     console.log('✓ 11. addDataRow / removeLastDataRow 통과');
   }
 
-  // 12. rowDefaults — 서식 틀의 내용 줄마다 미리 든 글자는 새 줄에도, 연도만 든 값은 올해로
+  // 12. rowDefaults — 서식 틀의 내용 줄마다 연도만 든 칸은 새 줄에도 올해 연도로
   {
     const tpl: SheetPayload = {
       ...sheet(5, ['no', 'date', 'kind', 'amt']),
@@ -243,11 +243,11 @@ export function runSheetOpsTests() {
       ],
       cellFormulas: { '4:amt': { expression: '=SUM(D2:D4)', format: 'currency' } },
     };
-    assert.deepEqual(rowDefaults(tpl, 2027), { date: '2027.', kind: '식대' }, '번호·빈 칸은 빼고, 연도는 올해로');
+    assert.deepEqual(rowDefaults(tpl, 2027), { date: '2027.' }, '연도만 든 칸만 — 번호·빈 칸·그 밖의 같은 글자는 빼고');
     // 기안자가 날짜를 채운 문서에 줄을 추가해도 틀 기준으로 넣는다
     const doc = { ...tpl, rows: tpl.rows.map((r, i) => (i === 3 ? { ...r, date: '2026.11.20', kind: '교통' } : r)) };
     const { sheet: n } = addDataRow(doc, rowDefaults(tpl, 2027));
-    assert.deepEqual(n.rows[4], { no: '4', date: '2027.', kind: '식대', amt: '' });
+    assert.deepEqual(n.rows[4], { no: '4', date: '2027.', kind: '', amt: '' });
     // 내용 줄이 한 줄뿐인 틀은 미리 든 글자로 보지 않음
     assert.deepEqual(rowDefaults({ ...tpl, rows: [tpl.rows[0], tpl.rows[1], tpl.rows[4]], cellFormulas: { '2:amt': { expression: '=SUM(D2:D2)' } } }, 2027), {});
     console.log('✓ 12. rowDefaults 통과\n');
