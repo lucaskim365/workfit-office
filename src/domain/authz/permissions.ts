@@ -15,6 +15,7 @@ export const AUTHZ_AREAS = [
   { id: 'adminConsole', name: '관리자 콘솔' },
   { id: 'adminPeople', name: '관리자 · 구성원·조직' },
   { id: 'adminApproval', name: '관리자 · 전자결재' },
+  { id: 'adminLeave', name: '관리자 · 근태·휴가' },
   { id: 'adminCompany', name: '관리자 · 회사·운영' },
   { id: 'adminSystem', name: '관리자 · 시스템' },
 ] as const;
@@ -54,7 +55,7 @@ export const PERMISSIONS: PermissionDef[] = [
   // 근태·휴가
   P({ key: 'commute.self', name: '내 근태·휴가', desc: '내 출퇴근 기록을 보고 휴가를 신청한다', area: 'commute' }),
   P({ key: 'commute.view', name: '다른 사람 근태·휴가 열람', desc: '범위 안 직원의 출퇴근·휴가 현황을 본다', area: 'commute', scoped: true }),
-  P({ key: 'commute.manage', name: '근태 수정·연차 대장 관리', desc: '범위 안 직원의 근태를 고치고 연차 대장을 관리한다', area: 'commute', implies: ['commute.view'] }),
+  P({ key: 'commute.manage', name: '근태 기록 정정', desc: '다른 직원의 외근 기록을 고치거나 지우고, 결재로 잡힌 외근·출장 일정을 대신 바꾼다(연차 가감은 관리자 콘솔 연차 관리)', area: 'commute', implies: ['commute.view'] }),
 
   // 업무계획·프로젝트
   P({ key: 'workplan.use', name: '업무계획·프로젝트', desc: '내 업무계획을 쓰고 프로젝트에 참여한다', area: 'workplan' }),
@@ -73,7 +74,7 @@ export const PERMISSIONS: PermissionDef[] = [
   P({ key: 'calendar.use', name: '캘린더', desc: '개인·부서 일정을 쓰고 본다', area: 'schedule' }),
   P({ key: 'calendar.company', name: '전사 일정 관리', desc: '전사 일정을 등록·수정·삭제한다', area: 'schedule', implies: ['calendar.use'] }),
   P({ key: 'resource.use', name: '자원 예약', desc: '회의실·차량·비품을 예약한다', area: 'schedule' }),
-  P({ key: 'resource.manage', name: '자원 등록·관리', desc: '예약할 자원을 등록하고 다른 사람 예약을 정리한다', area: 'schedule', implies: ['resource.use'] }),
+  P({ key: 'resource.manage', name: '예약 관리', desc: '모든 자원의 예약을 승인·반려·취소한다(자원 등록은 관리자 콘솔 자원 관리)', area: 'schedule', implies: ['resource.use'] }),
 
   // 조직
   P({ key: 'org.view', name: '조직도·인명', desc: '조직도와 직원 연락처를 본다', area: 'org' }),
@@ -89,7 +90,8 @@ export const PERMISSIONS: PermissionDef[] = [
   P({ key: 'admin.console', name: '관리자 콘솔 접속', desc: '관리자 콘솔에 들어간다(안에서는 받은 관리자 권한의 메뉴만 보인다)', area: 'adminConsole', adminConsole: true }),
 
   // 관리자 · 구성원·조직
-  ...pair('admin.user', '사용자', 'adminPeople', '직원 목록과 계정 정보를 본다', '직원을 등록·수정하고 퇴사 처리한다', { adminConsole: true }),
+  ...pair('admin.user', '사용자', 'adminPeople', '로그인 계정 목록과 계정 정보를 본다', '로그인 계정을 등록·수정한다', { adminConsole: true }),
+  ...pair('admin.people', '인사 정보', 'adminPeople', '인사 기록과 개인 신상 정보를 본다', '발령·입사일·근태 관리 대상·개인 신상을 고치고 퇴직을 처리한다', { adminConsole: true }),
   ...pair('admin.org', '부서·조직', 'adminPeople', '부서 구조를 본다', '부서를 만들고 구조와 부서장을 바꾼다', { adminConsole: true }),
   ...pair('admin.position', '직급·직책', 'adminPeople', '직급과 직책을 본다', '직급·직책을 추가하고 순서를 바꾼다', { adminConsole: true }),
 
@@ -99,9 +101,13 @@ export const PERMISSIONS: PermissionDef[] = [
   ...pair('admin.approval.process', '결재 프로세스', 'adminApproval', '결재 프로세스 설정을 본다', '프로세스 옵션을 켜고 끈다', { adminConsole: true }),
   P({ key: 'admin.approval.monitor', name: '결재문서 모니터링', desc: '전사 결재문서 진행 상황을 본다', area: 'adminApproval', adminConsole: true }),
 
+  // 관리자 · 근태·휴가 — 현황 조회는 업무 화면(commute.view)에서, 콘솔은 조정·정책만
+  ...pair('admin.leave', '연차·근무 정책', 'adminLeave', '콘솔에서 전사 연차와 근무 정책을 본다', '연차를 가감하고 근무 정책(출퇴근·휴게·지각 기준)을 고친다', { adminConsole: true }),
+
   // 관리자 · 회사·운영
   ...pair('admin.company', '회사 정보', 'adminCompany', '법인·사업장 정보를 본다', '회사 정보·로고·직인을 고친다', { adminConsole: true }),
   ...pair('admin.holiday', '공휴일', 'adminCompany', '공휴일 목록을 본다', '공휴일과 회사 지정 휴일을 등록한다', { adminConsole: true }),
+  ...pair('admin.resource', '자원', 'adminCompany', '예약 자원 목록을 본다', '회의실·차량·비품을 등록·수정·삭제한다', { adminConsole: true }),
   ...pair('admin.code', '공통코드', 'adminCompany', '공통코드를 본다', '공통코드를 추가하고 고친다', { adminConsole: true }),
 
   // 관리자 · 시스템

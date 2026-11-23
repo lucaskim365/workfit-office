@@ -20,7 +20,8 @@ import { useApprovalForms } from '@/features/gw/useApprovalForms';
 import { activeSteps, isActiveApprover } from '@/domain/approvalDoc/engine';
 import type { ApprovalDoc, ApprovalStep } from '@/domain/approvalDoc/schema';
 import type { ApprovalForm, FormField, FieldValue } from '@/domain/approvalForm/schema';
-import { documentBodyKeyOf } from '@/domain/approvalForm/schema';
+import { RESERVED_BODY_KEY, documentBodyKeyOf } from '@/domain/approvalForm/schema';
+import { staleDocKeys } from '@/domain/approvalDoc/staleValues';
 import { fieldText, type OrgLite } from '@/modules/gw/approval/formFields';
 import { ScheduleChangeNotice } from '@/modules/gw/approval/components/ScheduleChangeNotice';
 import { SheetView, hasSealCell, resolveViewSheet } from '@/modules/gw/approval/formFields/SheetView';
@@ -798,7 +799,11 @@ function ApprovalBody({
 
   const rows: React.ReactNode[] = [];
 
-  if (form && form.fields.length > 0) {
+  // 서식 칸이 통째로 바뀌기 전에 낸 문서 — 지금 서식의 칸 대신 낸 그대로(본문만) 보여 준다
+  const oldShape = staleDocKeys(form?.fields, doc).length > 0;
+  const plainBody = doc.body || (oldShape ? String(doc.fieldValues?.[RESERVED_BODY_KEY] ?? '') : '');
+
+  if (form && form.fields.length > 0 && !oldShape) {
     let lastSection = '';
     const isVisible = (f: FormField) => {
       if (!f.visibleIf) return true;
@@ -876,10 +881,10 @@ function ApprovalBody({
         );
       }
     }
-  } else if (doc.body) {
+  } else if (plainBody) {
     rows.push(
       <div key="body" className="whitespace-pre-line break-words text-[13px] leading-relaxed text-ink" style={{ overflowWrap: 'anywhere' }}>
-        {doc.body}
+        {plainBody}
       </div>,
     );
   }

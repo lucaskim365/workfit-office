@@ -117,6 +117,80 @@ export function deleteRow(p: SheetPayload, at: number): SheetPayload {
   return shiftRows(p, at, false);
 }
 
+/** 위쪽 줄들을 모아 셈하는 식인지 — SUM(ABOVE)이거나, r행보다 위에서 시작해 여러 줄에 걸친 범위(E2:E16) */
+function aggregatesRowsAbove(expression: string, r: number): boolean {
+  if (/\(\s*ABOVE\s*\)/i.test(expression)) return true;
+  // 다른 표 참조([표]!D4, [표]![2:금액])와 같은 표 괄호 참조는 뺀다
+  const own = expression.replace(/\[[^\]]*\](\s*!\s*(\[[^\]]*\]|[A-Z]+\d+))?/gi, '');
+  for (const m of own.matchAll(/[A-Z]+(\d+):[A-Z]+(\d+)/gi)) {
+    const a = Number(m[1]) - 1;
+    const b = Number(m[2]) - 1;
+    if (a !== b && Math.min(a, b) < r) return true;
+  }
+  return false;
+}
+
+/** 합계 줄 — 위 줄들을 모아 셈하는 칸이 있는 줄(예전 표의 합계 칸 포함) */
+function isTotalRow(p: SheetPayload, r: number): boolean {
+  if (p.sumCell?.rIdx === r) return true;
+  return Object.entries(p.cellFormulas).some(
+    ([key, f]) => Number(key.slice(0, key.indexOf(':'))) === r && aggregatesRowsAbove(f.expression, r)
+  );
+}
+
+/** [행 추가]가 새 줄을 넣는 자리 — 표 끝에 붙은 합계 줄(들) 바로 위, 합계 줄이 없으면 맨 끝 */
+export function dataEndIndex(p: SheetPayload): number {
+  let at = p.rows.length;
+  while (at > 1 && isTotalRow(p, at - 1)) at--;
+  return at;
+}
+
+/**
+ * 서식 틀에서 내용 줄마다 미리 들어 있는 연도 — 내용 줄(첫 줄과 합계 줄 사이) 전부에 똑같이 연도만 든 칸(날짜 열의 "2026.")을 올해(year)로.
+ * 그 밖의 같은 글자(계산된 "0.0%" 등)는 미리 든 글자로 보지 않는다
+ */
+export function rowDefaults(template: SheetPayload, year: number): Record<string, string> {
+  const dataRows = template.rows.slice(1, dataEndIndex(template));
+  const out: Record<string, string> = {};
+  if (dataRows.length < 2) return out;
+  template.cols.forEach((col) => {
+    const first = (dataRows[0][col] ?? '').trim();
+    if (!/^\d{4}\.$/.test(first) || dataRows.some((r) => (r[col] ?? '').trim() !== first)) return;
+    out[col] = `${year}.`;
+  });
+  return out;
+}
+
+/**
+ * 내용 줄 하나 추가 — 합계 줄 위에 넣어 합계 범위가 따라 늘어나게 하고(엑셀과 같음),
+ * 윗줄의 칸 서식(금액 표시·정렬 등)과 이어지는 번호(1, 2, 3 …)를 물려받는다. 윗줄이 맨 첫 줄(제목)이면 물려받지 않는다.
+ * defaults(rowDefaults)를 주면 그 칸에는 그 글자를 넣는다
+ */
+export function addDataRow(p: SheetPayload, defaults: Record<string, string> = {}): { sheet: SheetPayload; at: number } {
+  const at = dataEndIndex(p);
+  const next = insertRow(p, at);
+  const above = at - 1;
+  if (above < 1) return { sheet: next, at };
+  const cellStyles = { ...next.cellStyles };
+  const row = { ...next.rows[at] };
+  p.cols.forEach((col) => {
+    if (defaults[col]) row[col] = defaults[col];
+    const { seal: _seal, ...style } = p.cellStyles[`${above}:${col}`] ?? {};
+    if (Object.keys(style).length > 0) cellStyles[`${at}:${col}`] = style;
+    const cur = (p.rows[above][col] ?? '').trim();
+    const prev = (p.rows[above - 1]?.[col] ?? '').trim();
+    if (/^\d+$/.test(cur) && /^\d+$/.test(prev) && Number(cur) === Number(prev) + 1) row[col] = String(Number(cur) + 1);
+  });
+  return { sheet: { ...next, cellStyles, rows: next.rows.map((r, i) => (i === at ? row : r)) }, at };
+}
+
+/** 마지막 내용 줄(합계 줄 바로 위) 삭제 — 지울 내용 줄이 없으면 null. 맨 첫 줄은 지우지 않는다 */
+export function removeLastDataRow(p: SheetPayload): { sheet: SheetPayload; at: number } | null {
+  const at = dataEndIndex(p) - 1;
+  if (at < 1) return null;
+  return { sheet: deleteRow(p, at), at };
+}
+
 function newColKey(existing: string[]): string {
   for (;;) {
     const key = `c_${Math.random().toString(36).slice(2, 8).padEnd(6, '0')}`;

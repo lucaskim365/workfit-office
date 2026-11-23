@@ -7,6 +7,7 @@ import { useApprovalForms } from '@/features/gw/useApprovalForms';
 import type { ApprovalDoc, RelatedDoc } from '@/domain/approvalDoc/schema';
 import { resolveSignatureSnapshot } from '@/domain/approvalDoc/signatureSnapshot';
 import { getEffectiveRecipients } from '@/domain/approvalDoc/engine';
+import { staleDocKeys } from '@/domain/approvalDoc/staleValues';
 import { RESERVED_BODY_KEY, amountFieldOf, documentBodyKeyOf, type ApprovalForm, type FormField } from '@/domain/approvalForm/schema';
 import { fieldText } from '@/modules/gw/approval/formFields';
 import { SheetView, hasSealCell, resolveViewSheet } from '@/modules/gw/approval/formFields/SheetView';
@@ -365,6 +366,8 @@ export function ApprovalDocumentView({
   const headForm = withBodyHeader(formOverride ?? forms.find((f) => f.code === doc.docType), sheetHeaderItems(sheetTpl?.sheet));
   // 시트 문서는 기존 양식 항목을 그리지 않는다 — 기존 서식에 시트를 붙여도 항목 목록(옛 문서용)은 남아 있으므로
   const form = headForm && sheetVer ? { ...headForm, fields: [] } : headForm;
+  // 서식 칸이 통째로 바뀌기 전에 낸 문서 — 지금 서식의 칸을 끼워 넣지 않고 낸 그대로(본문만) 보여 준다(시트 문서는 해당 없음)
+  const oldShape = staleDocKeys(form?.fields, doc).length > 0;
   const docTitle = form?.docTitle || form?.name || FALLBACK_TITLE[doc.docType] || doc.docType;
   // 거래처용 모양 — 상단 바·문서 정보·제목·결재란·첨부·관련 문서·맺음말·기안일·기안자 서명과 '대외 문서에서 숨김' 항목을 뺀다
   const externalDoc = externalView;
@@ -385,7 +388,10 @@ export function ApprovalDocumentView({
   const bodyKey = documentBodyKeyOf(form?.fields);
   // 시트 서식 문서 — 본문은 시트 안에 있으므로 따로 그리지 않는다
   const sheetDoc = isSheetDoc(doc.fieldValues);
-  const bodyText = bodyKey === RESERVED_BODY_KEY ? doc.body : String(doc.fieldValues?.[bodyKey] ?? '');
+  const bodyText =
+    bodyKey === RESERVED_BODY_KEY
+      ? doc.body || (oldShape ? String(doc.fieldValues?.[RESERVED_BODY_KEY] ?? '') : '')
+      : String(doc.fieldValues?.[bodyKey] ?? '');
   const amountLabel = amountField?.label ?? '금 액';
   const steps = useMemo(() =>
     [...(doc.steps || [])]
@@ -402,7 +408,7 @@ export function ApprovalDocumentView({
 
   const { blocks, isAmountInDetails, effectiveFieldProps, longTextFields } = useMemo(() => {
     const act = (form?.fields ?? []).filter((f) => {
-      if (f.type === '안내문' || f.key.endsWith('__days')) return false;
+      if (oldShape || f.type === '안내문' || f.key.endsWith('__days')) return false;
       // 대외 문서에서 숨기기로 한 필드
       if (externalDoc && f.hideOnExternal) return false;
       if (f.visibleIf) {
@@ -494,7 +500,7 @@ export function ApprovalDocumentView({
       effectiveFieldProps: getEffectiveProps,
       longTextFields: longTexts,
     };
-  }, [form, doc.fieldValues, amountField, externalDoc]);
+  }, [form, doc.fieldValues, amountField, externalDoc, oldShape]);
 
   useDocumentNotificationRead(currentUser?.id, !isPreview && canAccessDocument ? doc.id : undefined);
 

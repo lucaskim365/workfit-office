@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { findHolidayWorkDuplicate, holidayWorkDateOf, holidayWorkDuplicateMessage } from '@/domain/approvalDoc/holidayWorkDuplicate';
 import { TITLE_MODE_JOB_TITLE } from '@/domain/approvalDoc/stampTitle';
 import { parseCompany, type ApprovalCompany } from '@/domain/approvalDoc/company';
+import { staleDocKeys } from '@/domain/approvalDoc/staleValues';
 import { useNavigate, useSearchParams, useParams } from 'react-router-dom';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { shouldSeedRecipients } from './recipientSeed';
@@ -1139,6 +1140,13 @@ function ApprovalDraftInner({
     importPick?.resolve(src);
     setImportPick(null);
   };
+  // 서식 칸이 통째로 바뀌기 전에 낸 문서를 다시 쓸 때 — 지금 서식에 없는 옛 칸의 값을 버리고 새 모양으로 쓴다(시트 문서는 해당 없음)
+  useEffect(() => {
+    if (!editDoc || editDoc.docType !== code) return;
+    const stale = staleDocKeys(form?.fields, editDoc);
+    if (stale.length === 0) return;
+    setValues((prev) => Object.fromEntries(Object.entries(prev).filter(([k]) => !stale.includes(k))));
+  }, [form, editDoc, code]);
   // 휴일근로 신청서 자동 입력 — 서식에 출근 시각 칸이 있을 때만
   // 기존 양식 휴일근무의 자동 채우기 — 시트로 쓰는 문서는 해당 없음(기존 서식에 시트를 붙여도 항목 목록은 남아 있음)
   const isOvertimeAutoFill = sheetVersion === null && !!form?.fields.some((f) => f.key === OVERTIME_AUTOFILL_FIELD);

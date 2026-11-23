@@ -11,12 +11,14 @@ import { useMemo, useState, useEffect } from 'react';
 import { useAllApprovals } from '@/features/gw/useApprovals';
 import { useEmployeeProfiles } from '@/features/employeeProfile/useEmployeeProfiles';
 import type { ApprovalDoc } from '@/domain/approvalDoc/schema';
-import type { StatutoryLeaveResult, AdvanceOffsetResult } from '@/domain/leave/accrualEngine';
+import type { StatutoryLeaveResult, AdvanceOffsetResult, LeaveYearWindow } from '@/domain/leave/accrualEngine';
 import { SUBSTITUTE_LEDGER_UPDATED_EVENT, substituteLedgerStore } from '@/data/substituteLedger/substituteLedger.repo';
 import { getStoredAdjustments } from '@/domain/leave/adjustmentStore';
 import type { SubstituteSummary } from '@/domain/leave/substituteLedger';
 import {
+  calculatePastLeaveYears,
   calculateUserLeaveBalance,
+  type PastLeaveYear,
   type SubstituteHolidayDetailItem,
 } from '@/domain/leave/userLeaveBalance';
 import { useHolidays } from '@/features/holiday/useHolidays';
@@ -45,6 +47,12 @@ export interface LeaveBalance {
   advanceOffset?: AdvanceOffsetResult;
   /** 입사일자 (YYYY-MM-DD) */
   hireDate?: string;
+  /** 지금 연차 기간 — 잔여는 이 기간에 생긴 연차에서 이 기간 사용만 뺀 값 */
+  leaveYear?: LeaveYearWindow;
+  /** 지난 연차 기간(최근 것부터) */
+  pastYears?: PastLeaveYear[];
+  /** 입사 1년 미만(월별 발생) */
+  isUnderOneYear?: boolean;
 
   /** 대체휴무(대휴) 현황 — 분 단위(totalMin·usedMin·pendingMin·remainingMin), 선입선출 */
   substituteHoliday: SubstituteSummary;
@@ -85,7 +93,7 @@ export function useLeave(userId: string | undefined): LeaveBalance {
     const hireDate = userProfile?.hireDate || undefined;
 
     // 단일 공식 도메인 연차 계산 엔진 호출 (SSOT)
-    const balance = calculateUserLeaveBalance({
+    const balanceInput = {
       user: {
         userId,
         empNo: userProfile?.empNo ? String(userProfile.empNo) : null,
@@ -99,7 +107,8 @@ export function useLeave(userId: string | undefined): LeaveBalance {
       adjustments,
       holidays: holidayList,
       substituteLedger: substituteLedgerStore.getAll(),
-    });
+    };
+    const balance = calculateUserLeaveBalance(balanceInput);
 
     return {
       grant: balance.totalGrantedDays,
@@ -111,6 +120,9 @@ export function useLeave(userId: string | undefined): LeaveBalance {
       statutory: balance.statutory,
       advanceOffset: balance.advanceStatus,
       hireDate: balance.hireDate,
+      leaveYear: balance.leaveYear,
+      pastYears: calculatePastLeaveYears(balanceInput),
+      isUnderOneYear: balance.isUnderOneYear,
       substituteHoliday: balance.substituteHoliday,
       myDocs: balance.myDocs,
       isLoading: q.isLoading || profilesQ.isLoading,

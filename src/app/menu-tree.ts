@@ -30,7 +30,6 @@ export const MENU_TREE: MenuNode[] = [
           { id: 'S_BIZ_PROJECT', name: '사업 현황', url: '/biz/project', icon: '⊞', order: 10, use: true },
           { id: 'S_BIZ_PO', name: '발주 현황', url: '/biz/po', icon: '▦', order: 20, use: true },
           { id: 'S_BIZ_PURCHASE', name: '매입 결제 관리', url: '/biz/purchase', icon: '₩', order: 25, use: true },
-          { id: 'S_BIZ_CATEGORY', name: '사업구분', url: '/biz/category', icon: '⌗', order: 30, use: true },
         ]
       },
     ]
@@ -62,6 +61,7 @@ export const MENU_TREE: MenuNode[] = [
       {
         id: 'G_ADM_MEMBER', name: '구성원·조직', icon: '◫', order: 10, use: true, children: [
           { id: 'S_BASE_USER', name: '사용자 관리', url: '/base/user', icon: '◫', order: 10, use: true },
+          { id: 'S_ADM_HR', name: '인사 정보', url: '/base/hr', icon: '👥', order: 15, use: true },
           { id: 'S_BASE_DEPT', name: '부서·조직 관리', url: '/base/department', icon: '▤', order: 20, use: true },
           { id: 'S_BASE_POSITION', name: '직급·직책 관리', url: '/base/position', icon: '◫', order: 30, use: true },
           // 사업관리 > 도입기업 정보로 옮김(같은 vendors 데이터). 숨김.
@@ -85,11 +85,19 @@ export const MENU_TREE: MenuNode[] = [
         ]
       },
       {
+        id: 'G_ADM_LEAVE', name: '근태·휴가', icon: '⏱', order: 35, use: true, children: [
+          { id: 'S_ADM_LEAVE', name: '연차 관리', url: '/base/leave', icon: '📅', order: 10, use: true },
+          { id: 'S_ADM_COMMUTE_POLICY', name: '근무 정책', url: '/base/commute-policy', icon: '⏱', order: 20, use: true },
+        ]
+      },
+      {
         id: 'G_ADM_COMPANY', name: '회사·운영', icon: '◎', order: 40, use: true, children: [
           { id: 'S_SYS_COMPANY', name: '회사 정보', url: '/sys/company', icon: '◎', order: 10, use: true },
           { id: 'S_BASE_HOLIDAY', name: '공휴일 관리', url: '/base/holiday', icon: '📅', order: 20, use: true },
+          { id: 'S_ADM_RESOURCE', name: '자원 관리', url: '/base/resource', icon: '📦', order: 25, use: true },
           { id: 'S_BASE_CODE', name: '공통코드', url: '/base/code', icon: '⌗', order: 30, use: true },
           { id: 'S_ADM_COMPANY_CLASS', name: '기업분류', url: '/base/company-class', icon: '◫', order: 40, use: true },
+          { id: 'S_ADM_BIZ_CATEGORY', name: '사업구분', url: '/base/biz-category', icon: '⌗', order: 45, use: true },
         ]
       },
       {
