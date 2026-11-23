@@ -146,10 +146,27 @@ export function dataEndIndex(p: SheetPayload): number {
 }
 
 /**
- * 내용 줄 하나 추가 — 합계 줄 위에 넣어 합계 범위가 따라 늘어나게 하고(엑셀과 같음),
- * 윗줄의 칸 서식(금액 표시·정렬 등)과 이어지는 번호(1, 2, 3 …)를 물려받는다. 윗줄이 맨 첫 줄(제목)이면 물려받지 않는다
+ * 서식 틀에서 내용 줄마다 미리 들어 있는 글자 — 내용 줄(첫 줄과 합계 줄 사이) 전부에 똑같이 든 값(예: 날짜 열의 "2026.").
+ * 연도만 든 값("2026.")은 올해(year)로 바꾼다
  */
-export function addDataRow(p: SheetPayload): { sheet: SheetPayload; at: number } {
+export function rowDefaults(template: SheetPayload, year: number): Record<string, string> {
+  const dataRows = template.rows.slice(1, dataEndIndex(template));
+  const out: Record<string, string> = {};
+  if (dataRows.length < 2) return out;
+  template.cols.forEach((col) => {
+    const first = (dataRows[0][col] ?? '').trim();
+    if (first === '' || dataRows.some((r) => (r[col] ?? '').trim() !== first)) return;
+    out[col] = /^\d{4}\.$/.test(first) ? `${year}.` : first;
+  });
+  return out;
+}
+
+/**
+ * 내용 줄 하나 추가 — 합계 줄 위에 넣어 합계 범위가 따라 늘어나게 하고(엑셀과 같음),
+ * 윗줄의 칸 서식(금액 표시·정렬 등)과 이어지는 번호(1, 2, 3 …)를 물려받는다. 윗줄이 맨 첫 줄(제목)이면 물려받지 않는다.
+ * defaults(rowDefaults)를 주면 그 칸에는 미리 든 글자를 넣는다
+ */
+export function addDataRow(p: SheetPayload, defaults: Record<string, string> = {}): { sheet: SheetPayload; at: number } {
   const at = dataEndIndex(p);
   const next = insertRow(p, at);
   const above = at - 1;
@@ -157,6 +174,7 @@ export function addDataRow(p: SheetPayload): { sheet: SheetPayload; at: number }
   const cellStyles = { ...next.cellStyles };
   const row = { ...next.rows[at] };
   p.cols.forEach((col) => {
+    if (defaults[col]) row[col] = defaults[col];
     const { seal: _seal, ...style } = p.cellStyles[`${above}:${col}`] ?? {};
     if (Object.keys(style).length > 0) cellStyles[`${at}:${col}`] = style;
     const cur = (p.rows[above][col] ?? '').trim();

@@ -13,7 +13,7 @@ import {
   sheetSignature,
   type SheetPayload,
 } from './sheetModel';
-import { addDataRow, propagateStructureChange, removeLastDataRow } from './sheetOps';
+import { addDataRow, propagateStructureChange, removeLastDataRow, rowDefaults } from './sheetOps';
 import type { ShiftAction } from './formulaEngine';
 import { cellCss, defaultAlign, displayCellValue } from './sheetStyle';
 
@@ -135,7 +135,11 @@ export function TableFieldEditor({
 
   // 합계 줄이 있으면 그 위에 넣고 뺀다 — 합계 수식 범위가 따라 바뀜
   const handleAddRow = () => {
-    const { sheet: next, at } = addDataRow(effective);
+    // 서식 틀의 내용 줄마다 미리 든 글자(날짜 열의 "2026." 등)는 새 줄에도 넣는다 — 연도는 올해로
+    const defaults = field.placeholder
+      ? rowDefaults(normalizeTablePayload(field.placeholder, field.options), new Date().getFullYear())
+      : {};
+    const { sheet: next, at } = addDataRow(effective, defaults);
     saveStructural(next, { type: 'row_add', atIndex: at });
   };
 
