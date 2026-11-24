@@ -28,6 +28,7 @@ import {
   invalidNumberCells,
   formulaErrorCells,
   requiredMissing,
+  requiredCells,
   completedDateRows,
   conditionHiddenRows,
   clearConditionHidden,
@@ -44,6 +45,7 @@ import {
   sheetDocFields,
   sheetLogoMarkId,
   placeholderOf,
+  titleHintOf,
   type CellInput,
 } from '@/domain/approvalForm/sheet/approvalSheet';
 import { SHEET_NAMED_KEY, collectNamed, sheetWith, type NamedValues } from '@/domain/approvalForm/sheet/relatedImport';
@@ -54,6 +56,9 @@ import { draftXlsxExport, fillFromXlsx, hasXlsxFillCells, isDraftXlsx } from '@/
 import { fillFromListXlsx, type ListXlsxAliases } from '@/domain/approvalForm/sheet/listExcel';
 import { LogoMarkProvider } from '../components/CompanyLetterhead';
 import { XlsxUploadPreview, type XlsxUploadResult } from './XlsxUploadPreview';
+
+/** 필수 칸 가운데 비어 있는 칸의 별표에만 붙는 표식 — 상신이 막혔을 때 그 칸으로 화면을 옮기는 데 쓴다 */
+export const REQUIRED_EMPTY_CLASS = 'wf-required-empty';
 
 /**
  * 시트 서식 기안 작성 — 서식 버전의 틀 위에 기안자가 입력 칸만 채운다(§11.3).
@@ -174,13 +179,13 @@ export interface DocFields {
 }
 
 /** 문서 항목 칸 — 문서 머리의 제목 줄·보존연한·공개범위와 같은 입력 */
-function DocFieldCell({ bind, doc, onChange }: { bind: DocFieldBind; doc: DocFields; onChange: (patch: Partial<DocFields>) => void }) {
+function DocFieldCell({ bind, doc, onChange, titleHint }: { bind: DocFieldBind; doc: DocFields; onChange: (patch: Partial<DocFields>) => void; /** 서식이 정한 제목 입력 예시 */ titleHint?: string }) {
   if (bind === 'doc.title') {
     return (
       <input
         value={doc.title}
         onChange={(e) => onChange({ title: e.target.value })}
-        placeholder="문서 제목을 입력하세요 (필수)"
+        placeholder={titleHint ?? '문서 제목을 입력하세요 (필수)'}
         className={`${FIELD} placeholder:font-normal placeholder:text-[#aaa]`}
         style={INHERIT}
       />
@@ -618,6 +623,8 @@ export function SheetDraftForm({
   const extrasHidden = useMemo(() => (sheet ? extrasHiddenRows(sheet, false) : new Set<number>()), [sheet]);
   // 행 보이기 조건 — 조건 칸(예: 지출 항목) 값에 맞지 않는 행은 숨긴다(기존 서식 '식대일 때만 보이기')
   const condHidden = useMemo(() => (sheet ? conditionHiddenRows(sheet) : new Set<number>()), [sheet]);
+  // 필수 칸('행:열' → 지금 비어 있는가) — 비어 있는 칸에 별표를 보인다
+  const required = useMemo(() => new Map((sheet ? requiredCells(sheet) : []).map((x) => [`${x.r}:${x.c}`, x.missing])), [sheet]);
 
   // 처음 열 때 서식 버전·수식 결과를 문서 값에 남긴다(아무것도 안 쓰고 저장해도 어느 틀인지 알게)
   const needsInit = !!sheet && values['__formVersion'] !== key;
@@ -1020,7 +1027,7 @@ export function SheetDraftForm({
             if (slot) return <SlotCell node={slots?.[slot]} slot={slot} />;
             if (bind === 'doc.formTitle') return <SheetFormTitle text={draftInfoValue(bind, draftInfo) ?? ''} />;
             // 문서 항목 칸 — 문서의 제목·보존연한·공개범위를 여기서 쓴다
-            if (isDocFieldBind(bind)) return docFields && onDocField ? <DocFieldCell bind={bind} doc={docFields} onChange={onDocField} /> : '';
+            if (isDocFieldBind(bind)) return docFields && onDocField ? <DocFieldCell bind={bind} doc={docFields} onChange={onDocField} titleHint={titleHintOf(sheet, r, c)} /> : '';
             // 기안 정보 칸 — 시스템 값(입력 칸이어도 고칠 수 없음)
             const auto = draftInfoValue(bind, draftInfo);
             if (auto !== undefined) return auto;
@@ -1102,6 +1109,19 @@ export function SheetDraftForm({
                     <Minus className="h-2 w-2" />
                   </button>
                 )}
+              </span>
+            );
+          }}
+          renderOverlay={(r, c) => {
+            // 필수 칸 — 오른쪽 위에 늘 빨간 별표(화면에서만, 값을 써도 남는다). 비어 있는 칸에는 표식을 붙여 상신이 막혔을 때 찾아간다
+            const missing = required.get(`${r}:${c}`);
+            if (missing === undefined) return null;
+            return (
+              <span
+                title="꼭 써야 하는 칸입니다"
+                className={`${missing ? REQUIRED_EMPTY_CLASS : ''} pointer-events-none absolute -right-0.5 -top-1 z-10 text-[15px] font-extrabold leading-none text-rose-600 print:hidden`}
+              >
+                *
               </span>
             );
           }}

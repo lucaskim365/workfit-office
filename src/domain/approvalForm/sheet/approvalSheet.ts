@@ -35,6 +35,8 @@ export const APPROVAL_NS = {
    * (기존 서식 visibleIf '지출 항목이 식대일 때만'과 같음). 숨은 행은 작성·결재·인쇄 모두 빠지고 필수 검사·연동 값에서도 빠진다
    */
   showIf: 'showIf',
+  /** 문서 제목 칸의 입력 예시 — 값 글자. 입력 칸의 예시는 칸 종류 설정(input.placeholder)에 있고, 문서 제목 칸은 입력 칸이 아니라 여기에 둔다 */
+  titleHint: 'titleHint',
 } as const;
 
 export type CellInputType =
@@ -69,6 +71,14 @@ export interface CellInput {
 export const PLACEHOLDER_INPUTS: ReadonlySet<CellInputType> = new Set<CellInputType>(['text', 'multiline', 'number', 'currency']);
 /** 입력 예시 최대 길이 */
 export const PLACEHOLDER_MAX = 60;
+
+/** 문서 제목 칸에 서식이 정한 입력 예시 — 없으면 undefined(작성 화면이 기본 문구를 보인다) */
+export function titleHintOf(s: Sheet, r: number, c: number): string | undefined {
+  const col = s.cols[c];
+  const v = col === undefined ? undefined : s.cellMeta[APPROVAL_NS.titleHint]?.[cellKey(r, col)];
+  const p = typeof v === 'string' ? v.trim() : '';
+  return p ? p.slice(0, PLACEHOLDER_MAX) : undefined;
+}
 
 /** 이 칸의 입력 예시 — 쓸 수 없는 칸 종류거나 비었으면 undefined */
 export function placeholderOf(input: CellInput | undefined): string | undefined {
@@ -599,7 +609,8 @@ export function setApprovalProp(
     | typeof APPROVAL_NS.autoNo
     | typeof APPROVAL_NS.sealMark
     | typeof APPROVAL_NS.logoMark
-    | typeof APPROVAL_NS.required,
+    | typeof APPROVAL_NS.required
+    | typeof APPROVAL_NS.titleHint,
   value: CellInput | AutoNumberConfig | string | boolean | undefined
 ): Sheet {
   const v = value === false || value === '' ? undefined : value;
@@ -812,9 +823,12 @@ export function cellCaption(s: Sheet, r: number, c: number): string {
   return cellAddress(r, c);
 }
 
-/** 필수 입력 칸 중 비어 있는 칸의 이름표 — 상신 전 검사(기안자가 쓰는 칸만) */
-export function requiredMissing(s: Sheet): string[] {
-  const out: string[] = [];
+/**
+ * 필수 입력 칸(기안자가 쓰는 칸, 조건으로 숨은 행 제외)과 지금 비어 있는지 — 작성 화면의 별표와 상신 전 검사가 같이 쓴다.
+ * 고를 항목이 없는 종속 선택 칸은 비어 있어도 채울 수 없으니 빈 칸으로 치지 않는다
+ */
+export function requiredCells(s: Sheet): { r: number; c: number; missing: boolean }[] {
+  const out: { r: number; c: number; missing: boolean }[] = [];
   const hiddenRows = conditionHiddenRows(s);
   Object.entries(s.cellMeta[APPROVAL_NS.required] ?? {}).forEach(([key, v]) => {
     if (v !== true) return;
@@ -823,10 +837,16 @@ export function requiredMissing(s: Sheet): string[] {
     const c = s.cols.indexOf(key.slice(i + 1));
     if (c < 0 || r >= s.rows.length || hiddenRows.has(r)) return;
     const input = draftInputOf(s, r, c);
-    if (!input || (input.depends && draftOptions(s, input).length === 0)) return;
-    if (String(s.rows[r]?.[s.cols[c]] ?? '').trim() === '') out.push(cellCaption(s, r, c));
+    if (!input) return;
+    const fillable = !(input.depends && draftOptions(s, input).length === 0);
+    out.push({ r, c, missing: fillable && String(s.rows[r]?.[s.cols[c]] ?? '').trim() === '' });
   });
-  return [...new Set(out)];
+  return out;
+}
+
+/** 필수 입력 칸 중 비어 있는 칸의 이름표 — 상신 전 검사(기안자가 쓰는 칸만) */
+export function requiredMissing(s: Sheet): string[] {
+  return [...new Set(requiredCells(s).filter((x) => x.missing).map((x) => cellCaption(s, x.r, x.c)))];
 }
 
 /**

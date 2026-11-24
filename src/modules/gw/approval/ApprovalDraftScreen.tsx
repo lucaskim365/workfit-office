@@ -35,7 +35,7 @@ import { DraftRecipientSection } from './components/DraftRecipientSection';
 import { DraftApprovalLineModal } from './components/DraftApprovalLineModal';
 import { DraftSubmitConfirmDialog } from './components/DraftSubmitConfirmDialog';
 import { ApprovalDraftDocumentSheet } from './components/ApprovalDraftDocumentSheet';
-import { SheetDraftForm, type RelatedSource } from './sheetForm/SheetDraftForm';
+import { REQUIRED_EMPTY_CLASS, SheetDraftForm, type RelatedSource } from './sheetForm/SheetDraftForm';
 import { sheetDraftTouched } from '@/domain/approvalForm/sheet/draftTouched';
 import { listXlsxAliasesOf } from '@/domain/approvalForm/sheet/listExcel';
 import { isSheetDoc } from './sheetForm/SheetDocView';
@@ -1386,6 +1386,8 @@ function ApprovalDraftInner({
     };
   };
 
+  /** 필수 칸이 비어 상신을 막을 때의 안내 머리말 — 이 안내면 비어 있는 칸으로 화면을 옮긴다 */
+  const REQUIRED_MESSAGE = '필수 칸을 채워 주세요';
   const validate = (forSubmit: boolean): string | null => {
     if (!title.trim()) return '제목을 입력하세요.';
     // 기안부서를 모르면 상신하지 않는다 — 문서함·공개범위·결재선 규칙이 부서로 움직인다(임시저장은 된다)
@@ -1401,7 +1403,8 @@ function ApprovalDraftInner({
         : `이 문서가 쓴 서식 틀(v${sheetVersion})을 찾지 못해 상신할 수 없습니다. 관리자에게 알려 주세요.`;
     }
     if (forSubmit && sheetVersion !== null && sheetRequiredRef.current.length > 0) {
-      return `필수 칸을 채워 주세요: ${sheetRequiredRef.current.slice(0, 5).join(', ')}${sheetRequiredRef.current.length > 5 ? ' 외' : ''}`;
+      return `${REQUIRED_MESSAGE}: ${sheetRequiredRef.current.slice(0, 5).join(', ')}${sheetRequiredRef.current.length > 5 ? ' 외' : ''}
+빨간 별표(*)가 붙은 칸입니다.`;
     }
     // 계산이 안 되는 칸(#오류)이 있으면 상신하지 않는다 — 금액이 '#오류'인 채로 결재·매입 결제 대장에 들어가지 않게(임시저장은 된다)
     if (forSubmit && sheetVersion !== null && sheetFormulaErrorsRef.current.length > 0) {
@@ -1673,6 +1676,8 @@ function ApprovalDraftInner({
     const err = validate(true);
     if (err) {
       alert(err);
+      // 필수 칸 때문이면 비어 있는 첫 필수 칸(별표)이 보이게 화면을 옮긴다
+      if (err.startsWith(REQUIRED_MESSAGE)) document.querySelector(`.${REQUIRED_EMPTY_CLASS}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' });
       return setError(err);
     }
     // 휴일근로 — 같은 날 이미 낸 신청서가 있으면 확인창 전에 알린다(상신 때 저장소도 한 번 더 막는다)

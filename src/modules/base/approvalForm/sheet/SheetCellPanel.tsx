@@ -20,6 +20,7 @@ import {
   nameLabel,
   PLACEHOLDER_INPUTS,
   PLACEHOLDER_MAX,
+  titleHintOf,
 } from '@/domain/approvalForm/sheet/approvalSheet';
 import {
   clearDependent,
@@ -202,13 +203,19 @@ export function SheetCellPanel({
   const hasOptions = props.input?.type === 'select' || props.input?.type === 'multiSelect';
 
   // 입력 예시(플레이스홀더) — 입력 중엔 글자 그대로 두고, 칸을 벗어날 때 넣는다(고를 항목과 같음)
-  const canPlaceholder = !!props.input && PLACEHOLDER_INPUTS.has(props.input.type);
-  const placeholderText = props.input?.placeholder ?? '';
+  // 문서 제목 칸은 입력 칸이 아니라(문서에 저장) 예시를 따로 둔다 — 비우면 작성 화면의 기본 문구
+  const isTitleCell = props.bind === 'doc.title';
+  const canPlaceholder = isTitleCell || (!!props.input && PLACEHOLDER_INPUTS.has(props.input.type));
+  const placeholderText = isTitleCell ? (titleHintOf(sheet, focus.r, focus.c) ?? '') : (props.input?.placeholder ?? '');
   const [placeholder, setPlaceholder] = useState(placeholderText);
   useEffect(() => setPlaceholder(placeholderText), [placeholderText, focus.r, focus.c]);
   const commitPlaceholder = () => {
-    if (!props.input) return;
     const p = placeholder.trim().slice(0, PLACEHOLDER_MAX);
+    if (isTitleCell) {
+      if (p !== placeholderText) onChange(setApprovalProp(sheet, { r1: focus.r, r2: focus.r, c1: focus.c, c2: focus.c }, APPROVAL_NS.titleHint, p));
+      return;
+    }
+    if (!props.input) return;
     if (p === (props.input.placeholder ?? '')) return;
     patchInputs((input) => {
       const { placeholder: _old, ...rest } = input;
@@ -410,7 +417,7 @@ export function SheetCellPanel({
             onChange={(e) => setPlaceholder(e.target.value)}
             onBlur={commitPlaceholder}
             onKeyDown={(e) => e.key === 'Enter' && (e.currentTarget as HTMLInputElement).blur()}
-            placeholder="기안자에게 보일 예시나 쓰는 법"
+            placeholder={isTitleCell ? '비워 두면 "문서 제목을 입력하세요 (필수)"' : '기안자에게 보일 예시나 쓰는 법'}
           />
         </Row>
       )}
