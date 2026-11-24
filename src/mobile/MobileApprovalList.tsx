@@ -84,8 +84,8 @@ export default function MobileApprovalList() {
   const [todoFilter, setTodoFilter] = useState<'pending' | 'progress' | 'done' | 'all'>('pending');
   const [draftFilter, setDraftFilter] = useState<'all' | 'progress' | 'completed' | 'rejected'>('all');
   const [doneFilter, setDoneFilter] = useState<'all' | 'draft' | 'approved'>('all');
-  // 완료함 서식 — null = 전체 서식. 아래에서 올라오는 목록으로 고른다(PC 완료함의 서식 드롭다운과 같다)
-  const [doneForm, setDoneForm] = useState<string | null>(null);
+  // 완료함·수신함 서식 — null = 전체 서식. 함을 옮기면 비운다. 아래에서 올라오는 목록으로 고른다(PC 완료함의 서식 드롭다운과 같다)
+  const [formFilter, setFormFilter] = useState<string | null>(null);
   const [isFormSheetOpen, setIsFormSheetOpen] = useState(false);
   const { data: approvalForms = [] } = useApprovalForms();
   const formNameOf = (code: string) => approvalForms.find((f) => f.code === code)?.name ?? code;
@@ -220,12 +220,14 @@ export default function MobileApprovalList() {
 
     // 3. 기결재 완료함 필터링
     if (box === '완료') {
-      const byForm = doneForm ? rawDocs.filter((d) => d.docType === doneForm) : rawDocs;
+      const byForm = formFilter ? rawDocs.filter((d) => d.docType === formFilter) : rawDocs;
       if (doneFilter === 'draft') return byForm.filter((d) => d.drafterId === me);
       if (doneFilter === 'approved') return byForm.filter((d) => d.steps.some((s) => s.approverId === me && s.decision === '승인'));
       return byForm;
     }
 
+    // 4. 수신함 — 서식 필터만
+    if (box === '수신') return formFilter ? rawDocs.filter((d) => d.docType === formFilter) : rawDocs;
 
 
     // 4.5 반려함 필터링
@@ -246,9 +248,12 @@ export default function MobileApprovalList() {
     }
 
     return rawDocs;
-  }, [byBox, box, todoFilter, draftFilter, doneFilter, doneForm, rejectFilter, me, deptArchiveDocs]);
+  }, [byBox, box, todoFilter, draftFilter, doneFilter, formFilter, rejectFilter, me, deptArchiveDocs]);
 
-  const doneFormCounts = useMemo(() => formCounts(byBox['완료'] ?? []), [byBox]);
+  // 서식 필터는 완료함·수신함에 — 고를 서식은 지금 보는 함에 문서가 있는 것만
+  const hasFormFilter = box === '완료' || box === '수신';
+  const formFilterDocs = hasFormFilter ? byBox[box] ?? [] : [];
+  const boxFormCounts = useMemo(() => formCounts(formFilterDocs), [formFilterDocs]);
 
   // 검색 — 규칙은 domain/approvalDoc/search(PC 와 공용). 검색어가 있을 때만 결과 목록을 보인다.
   const searchResults = useMemo(
@@ -388,7 +393,7 @@ export default function MobileApprovalList() {
                 setTodoFilter('pending');
                 setDraftFilter('all');
                 setDoneFilter('all');
-                setDoneForm(null);
+                setFormFilter(null);
                 setRejectFilter('all');
               }}
               className={`relative flex-1 shrink-0 px-4 py-2.5 text-[12.5px] font-bold transition-colors ${active ? 'text-ink' : 'text-ink3'}`}
@@ -495,16 +500,16 @@ export default function MobileApprovalList() {
           })}
         </div>
       )}
-      {box === '완료' && (
-        <div className="shrink-0 border-b border-black/5 bg-white px-2.5 pb-2.5 select-none">
+      {hasFormFilter && (
+        <div className={`shrink-0 border-b border-black/5 bg-white px-2.5 pb-2.5 select-none ${box === '수신' ? 'pt-2.5' : ''}`}>
           <button
             type="button"
             onClick={() => setIsFormSheetOpen(true)}
             className={`flex w-full items-center justify-between rounded-xl border px-3 py-2 text-[12px] font-bold transition-all ${
-              doneForm ? 'border-[#3b82f6] bg-[#3b82f6]/10 text-[#2563eb]' : 'border-black/10 bg-white text-ink2'
+              formFilter ? 'border-[#3b82f6] bg-[#3b82f6]/10 text-[#2563eb]' : 'border-black/10 bg-white text-ink2'
             }`}
           >
-            <span className="truncate">서식: {doneForm ? formNameOf(doneForm) : '전체'}</span>
+            <span className="truncate">서식: {formFilter ? formNameOf(formFilter) : '전체'}</span>
             <ChevronDown size={15} className="shrink-0" />
           </button>
         </div>
@@ -701,14 +706,14 @@ export default function MobileApprovalList() {
               </button>
             </div>
             <div className="flex-1 overflow-y-auto overscroll-contain px-2 py-2">
-              {[{ code: null as string | null, count: (byBox['완료'] ?? []).length }, ...doneFormCounts].map((f) => {
-                const active = doneForm === f.code;
+              {[{ code: null as string | null, count: formFilterDocs.length }, ...boxFormCounts].map((f) => {
+                const active = formFilter === f.code;
                 return (
                   <button
                     key={f.code ?? '__all'}
                     type="button"
                     onClick={() => {
-                      setDoneForm(f.code);
+                      setFormFilter(f.code);
                       setIsFormSheetOpen(false);
                     }}
                     className={`flex w-full items-center gap-2.5 rounded-xl px-3 py-3 text-left text-[13.5px] ${active ? 'bg-[#3b82f6]/10 font-bold text-[#2563eb]' : 'text-ink active:bg-black/5'}`}

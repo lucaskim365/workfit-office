@@ -145,8 +145,8 @@ export default function ApprovalScreen() {
   const [rejectFilter, setRejectFilter] = useState<'all' | 'rejected' | 'chain'>('all');
   const [draftFilter, setDraftFilter] = useState<'all' | 'progress' | 'rejected' | 'completed'>('all');
 
-  // 완료함 아래 서식 바로가기 — 고른 서식(null = 완료함 전체)
-  const [completedForm, setCompletedForm] = useState<string | null>(null);
+  // 서식 필터(완료함·수신함) — 고른 서식(null = 그 함 전체). 함을 옮기면 비운다. 완료함은 사이드바 바로가기와 같은 값
+  const [formFilter, setFormFilter] = useState<string | null>(null);
   const [savedPinned, setSavedPinned] = useState<string[] | null>(() => loadPinnedForms(me));
   const [showCompletedFormsSettings, setShowCompletedFormsSettings] = useState(false);
   const { data: approvalForms = [] } = useApprovalForms();
@@ -170,7 +170,7 @@ export default function ApprovalScreen() {
 
   const handleSelectBox = (newBox: ScreenBox, formCode: string | null = null) => {
     setBox(newBox);
-    setCompletedForm(formCode);
+    setFormFilter(formCode);
     setSelId(null);
     if (newBox === '대기') setTodoFilter('pending');
     const nextUrl = new URL(window.location.href);
@@ -209,7 +209,7 @@ export default function ApprovalScreen() {
     if ('draftFilter' in t) setDraftFilter(t.draftFilter);
     if ('rejectFilter' in t) setRejectFilter(t.rejectFilter);
     if ('todoFilter' in t) setTodoFilter(t.todoFilter);
-    setCompletedForm(null);
+    setFormFilter(null);
     setBox(t.box);
   };
 
@@ -309,7 +309,7 @@ export default function ApprovalScreen() {
     if (box === '문서함') return deptArchiveDocs.filter((d) => inCompanyView(d, companyView));
 
     if (box === '완료') {
-      const byForm = completedForm ? list.filter((d: ApprovalDoc) => d.docType === completedForm) : list;
+      const byForm = formFilter ? list.filter((d: ApprovalDoc) => d.docType === formFilter) : list;
       if (doneFilter === 'draft') {
         return byForm.filter((d: ApprovalDoc) => d.drafterId === me);
       }
@@ -363,8 +363,9 @@ export default function ApprovalScreen() {
       }
       return list;
     }
+    if (box === '수신') return formFilter ? list.filter((d: ApprovalDoc) => d.docType === formFilter) : list;
     return list;
-  }, [box, list, deptArchiveDocs, doneFilter, todoFilter, rejectFilter, me, draftFilter, completedForm, companyView]);
+  }, [box, list, deptArchiveDocs, doneFilter, todoFilter, rejectFilter, me, draftFilter, formFilter, companyView]);
 
   // 완료함 서식 바로가기 — 서식 이름은 서식 마스터(code)에서, 없으면 docType 그대로
   const completedDocs = useMemo(() => {
@@ -379,6 +380,9 @@ export default function ApprovalScreen() {
     [completedDocs, companyView]
   );
   const pinned = useMemo(() => pinnedForms(savedPinned, completedDocs), [savedPinned, completedDocs]);
+  // 툴바 서식 필터에 고를 서식 — 지금 보는 함(완료함·수신함)에 문서가 있는 서식만
+  const hasFormFilter = box === '완료' || box === '수신';
+  const boxFormCounts = useMemo(() => (hasFormFilter ? formCounts(list) : []), [hasFormFilter, list]);
   const completedFormOptions = useMemo(() => {
     const countOf = new Map(completedFormCounts.map((f) => [f.code, f.count]));
     // 내 완료함에 문서가 있는 서식(많은 순) 다음에 아직 문서가 없는 활성 서식
@@ -415,7 +419,7 @@ export default function ApprovalScreen() {
   // 함이나 필터가 바뀌면 다중 선택 초기화
   useEffect(() => {
     setSelectedIds([]);
-  }, [box, doneFilter, todoFilter, rejectFilter, draftFilter, completedForm]);
+  }, [box, doneFilter, todoFilter, rejectFilter, draftFilter, formFilter]);
 
   // 딥링크(?box=BOX&doc=ID) → 결재함 및 문서 동기화.
   // **주소가 바뀔 때 한 번만** 적용한다. 결재 목록(allDocs)은 실시간으로 갱신되므로 그때마다
@@ -429,7 +433,7 @@ export default function ApprovalScreen() {
   useApplyDeepLinkOnce(deepLinkKey, !deepDocId || deepTargetDoc !== null, () => {
     const urlBox = deepBox;
 
-    setCompletedForm(null);
+    setFormFilter(null);
     // 1. URL에 box만 있는 경우
     if (!deepTargetDoc) {
       if (urlBox) setBox(urlBox);
@@ -730,7 +734,7 @@ export default function ApprovalScreen() {
                     <button
                       key={b}
                       onClick={() => handleSelectBox(b)}
-                      className={`flex w-full items-center justify-between gap-1 rounded-lg pl-5 pr-2.5 py-1.5 text-[12.5px] transition-colors ${box === b && !(b === '완료' && completedForm && pinned.includes(completedForm)) ?'bg-teal-soft font-bold text-teal' : 'text-ink2 hover:bg-panel-alt'}`}
+                      className={`flex w-full items-center justify-between gap-1 rounded-lg pl-5 pr-2.5 py-1.5 text-[12.5px] transition-colors ${box === b && !(b === '완료' && formFilter && pinned.includes(formFilter)) ?'bg-teal-soft font-bold text-teal' : 'text-ink2 hover:bg-panel-alt'}`}
                     >
 
                       {/* 글자가 길어도 줄바꿈하지 않는다 — 넘치면 이름만 말줄임 */}
@@ -766,7 +770,7 @@ export default function ApprovalScreen() {
                         </button>
                       </div>
                       {pinned.map((code) => {
-                        const active = box === '완료' && completedForm === code;
+                        const active = box === '완료' && formFilter === code;
                         const count = completedFormCounts.find((f) => f.code === code)?.count ?? 0;
                         return (
                           <button
@@ -853,7 +857,7 @@ export default function ApprovalScreen() {
                 <span>
                   {companyView !== 'all' && <span className={companyView === 'lumefab' ? 'text-indigo-600' : 'text-teal'}>{COMPANY_VIEW_TITLE[companyView]}</span>}
                   {box === '문서함' ? '문서함' : BOX_LABEL[box as ApprovalBox]}
-                  {box === '완료' && completedForm && <span> · {formNameOf(completedForm)}</span>}
+                  {hasFormFilter && formFilter && <span> · {formNameOf(formFilter)}</span>}
                   <span className="text-ink3"> · {displayedList.length}</span>
                 </span>
               )}
@@ -995,19 +999,19 @@ export default function ApprovalScreen() {
                   ]}
                 />
               )}
-              {box === '완료' && (
-                // 서식 — 사이드바 바로가기와 같은 값. 여기서는 내 완료함에 있는 서식을 모두 고를 수 있다
+              {hasFormFilter && (
+                // 서식 — 지금 보는 함(완료함·수신함)에 있는 서식을 모두 고를 수 있다. 완료함은 사이드바 바로가기와 같은 값
                 <select
-                  value={completedForm ?? ''}
-                  onChange={(e) => setCompletedForm(e.target.value || null)}
+                  value={formFilter ?? ''}
+                  onChange={(e) => setFormFilter(e.target.value || null)}
                   title="서식"
-                  className={`h-[26px] max-w-[160px] rounded-lg border px-2 text-[11.5px] font-bold outline-none cursor-pointer transition-colors ${completedForm ? 'border-teal bg-teal-soft text-teal' : 'border-border bg-panel text-ink2 hover:border-teal'}`}
+                  className={`h-[26px] max-w-[160px] rounded-lg border px-2 text-[11.5px] font-bold outline-none cursor-pointer transition-colors ${formFilter ? 'border-teal bg-teal-soft text-teal' : 'border-border bg-panel text-ink2 hover:border-teal'}`}
                 >
                   <option value="">전체 서식</option>
-                  {completedForm && !completedFormCounts.some((f) => f.code === completedForm) && (
-                    <option value={completedForm}>{formNameOf(completedForm)} 0</option>
+                  {formFilter && !boxFormCounts.some((f) => f.code === formFilter) && (
+                    <option value={formFilter}>{formNameOf(formFilter)} 0</option>
                   )}
-                  {completedFormCounts.map((f) => (
+                  {boxFormCounts.map((f) => (
                     <option key={f.code} value={f.code}>
                       {formNameOf(f.code)} {f.count}
                     </option>
@@ -1237,7 +1241,7 @@ export default function ApprovalScreen() {
           setSavedPinned(codes);
           setShowCompletedFormsSettings(false);
           // 보고 있던 서식을 뺐으면 완료함 전체로
-          if (completedForm && !codes.includes(completedForm)) setCompletedForm(null);
+          if (box === '완료' && formFilter && !codes.includes(formFilter)) setFormFilter(null);
         }}
       />
     </div>
