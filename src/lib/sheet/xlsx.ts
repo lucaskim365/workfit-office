@@ -144,10 +144,10 @@ function numKindOf(id: number, code: string | undefined): NumKind {
   return 'general';
 }
 
-/** 엑셀 날짜 일련번호 → 'YYYY-MM-DD' (1900 날짜 체계) */
+/** 엑셀 날짜 일련번호 → 'YYYY-MM-DD' (1900 날짜 체계). 날짜가 될 수 없는 큰 숫자(날짜 서식이 걸린 카드번호 등)는 숫자 글자 그대로 */
 function serialToDate(serial: number): string {
-  const ms = Math.round((serial - 25569) * 86400000);
-  return new Date(ms).toISOString().slice(0, 10);
+  const date = new Date(Math.round((serial - 25569) * 86400000));
+  return Number.isNaN(date.getTime()) ? valueText(serial) : date.toISOString().slice(0, 10);
 }
 
 interface XfStyle {

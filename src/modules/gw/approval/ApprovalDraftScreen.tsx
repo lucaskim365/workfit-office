@@ -37,6 +37,7 @@ import { DraftSubmitConfirmDialog } from './components/DraftSubmitConfirmDialog'
 import { ApprovalDraftDocumentSheet } from './components/ApprovalDraftDocumentSheet';
 import { SheetDraftForm, type RelatedSource } from './sheetForm/SheetDraftForm';
 import { sheetDraftTouched } from '@/domain/approvalForm/sheet/draftTouched';
+import { listXlsxAliasesOf } from '@/domain/approvalForm/sheet/listExcel';
 import { isSheetDoc } from './sheetForm/SheetDocView';
 import { SHEET_NAMED_KEY, namedFromLegacy, readNamed, secretNames, withoutNames, type NamedValues } from '@/domain/approvalForm/sheet/relatedImport';
 import { SHEET_LABELED_KEY, labeledFromDoc, labeledFromLegacy } from '@/domain/approvalForm/sheet/labelMatch';
@@ -1158,13 +1159,14 @@ function ApprovalDraftInner({
   const amountField = form ? amountFieldOf(form) : undefined;
 
   const amountNum = useMemo(() => {
-    if (amountField && values[amountField.key] != null && values[amountField.key] !== '') {
+    // 시트로 쓰는 문서의 금액은 시트 금액 칸(amount)에서만 — 기존 양식으로 쓰다 만 보관본을 불러와도 옛 금액 항목 값이 문서 금액이 되지 않게
+    if (sheetVersion === null && amountField && values[amountField.key] != null && values[amountField.key] !== '') {
       const n = Number(String(values[amountField.key]).replace(/,/g, ''));
       if (!isNaN(n)) return n;
     }
     const n = Number(amount.replace(/,/g, ''));
     return isNaN(n) || !amount ? null : n;
-  }, [amount, amountField, values]);
+  }, [amount, amountField, values, sheetVersion]);
 
   // 실시간 결재선 규칙 엔진 연동 + 서식 기본 참조자 연동
   const lastAutoSteps = useRef<string>('');
@@ -1969,6 +1971,8 @@ function ApprovalDraftInner({
                     if (p.preservationPeriod !== undefined) setPreservationPeriod(p.preservationPeriod);
                     if (p.visibility !== undefined) setVisibility(p.visibility === '비공개' ? '비공개' : '부서');
                   }}
+                  // 카드 이용내역 엑셀을 올리는 서식(법인카드·개인 경비) — 카드사 열 제목을 표 머리글에 맞춘다
+                  xlsxAliases={listXlsxAliasesOf(form)}
                   // 문서 머리를 시트에 넣은 서식 — 결재란(누르면 결재선 편집)·로고·기안자 서명
                   slots={slots}
                   draftInfo={{

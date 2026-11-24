@@ -351,7 +351,7 @@ export function mergeApprovalRange(s: Sheet, range: CellRange): Sheet {
   return { ...merged, cellMeta };
 }
 
-/** 문서에 저장할 값 — 칸 키 → 보이는 글자(수식 칸은 계산 결과). 빈 칸은 뺀다 */
+/** 문서에 저장할 값 — 칸 키 → 보이는 글자(수식 칸은 계산 결과). 입력·수식 칸은 빈 값도 담는다(extractValues) */
 export type SheetValues = Record<string, string>;
 
 /**
@@ -367,14 +367,12 @@ export function extractValues(s: Sheet): SheetValues {
       const c = s.cols.indexOf(col);
       // 입력·불러오기·수식 칸 + 이름 붙은 칸(시스템이 계산해 넣는 휴가 일수 등 — 입력 칸이 아니어도 값이 있다)
       // + 자동번호 칸(상신 때 받은 번호 — 반려 뒤 고쳐서 다시 올려도 같은 번호를 쓰게)
-      const keep =
-        s.formulas[cellKey(r, col)] !== undefined ||
-        hasMeta(s, APPROVAL_NS.input, r, c) ||
-        hasMeta(s, APPROVAL_NS.bind, r, c) ||
-        hasMeta(s, APPROVAL_NS.name, r, c) ||
-        hasMeta(s, APPROVAL_NS.autoNo, r, c);
-      if (v !== undefined && v !== '' && keep) {
-        out[cellKey(r, col)] = v;
+      // 입력 칸·수식 칸은 빈 값도 남긴다 — 빼면 다시 얹을 때 틀의 글자가 비쳐 나온다:
+      // 기안자가 지운 기본값('2026.'·번호·수량 1)이 되살아나고, 빈 칸이 된 수식 결과 자리에 틀의 옛 결과가 보인다
+      const blankable = s.formulas[cellKey(r, col)] !== undefined || hasMeta(s, APPROVAL_NS.input, r, c);
+      const keep = blankable || hasMeta(s, APPROVAL_NS.bind, r, c) || hasMeta(s, APPROVAL_NS.name, r, c) || hasMeta(s, APPROVAL_NS.autoNo, r, c);
+      if (keep && (blankable || (v !== undefined && v !== ''))) {
+        out[cellKey(r, col)] = v ?? '';
       }
     });
   });

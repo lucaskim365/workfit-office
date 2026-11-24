@@ -48,10 +48,12 @@ import {
 } from '@/domain/approvalForm/sheet/approvalSheet';
 import { SHEET_NAMED_KEY, collectNamed, sheetWith, type NamedValues } from '@/domain/approvalForm/sheet/relatedImport';
 import { RELATED_IMPORT_ENABLED, SHEET_LABELED_KEY, canImportRelated, collectLabeled, importRelated } from '@/domain/approvalForm/sheet/labelMatch';
-import { SHEET_ROWS_KEY, addRepeatRow, expandRepeats, healRepeatSections, insertRepeatRowAfter, readRowExtras, removeRepeatRow, removeRepeatRowAt, repeatSections } from '@/domain/approvalForm/sheet/repeatRows';
+import { type RowExtras, SHEET_ROWS_KEY, addRepeatRow, expandRepeats, healRepeatSections, insertRepeatRowAfter, readRowExtras, removeRepeatRow, removeRepeatRowAt, repeatSections } from '@/domain/approvalForm/sheet/repeatRows';
 import { extrasAnchorRow, extrasHiddenRows } from '@/domain/approvalForm/sheet/docExtras';
-import { draftXlsxExport, fillFromXlsx, hasXlsxFillCells } from '@/domain/approvalForm/sheet/draftExcel';
+import { draftXlsxExport, fillFromXlsx, hasXlsxFillCells, isDraftXlsx } from '@/domain/approvalForm/sheet/draftExcel';
+import { fillFromListXlsx, type ListXlsxAliases } from '@/domain/approvalForm/sheet/listExcel';
 import { LogoMarkProvider } from '../components/CompanyLetterhead';
+import { XlsxUploadPreview, type XlsxUploadResult } from './XlsxUploadPreview';
 
 /**
  * 시트 서식 기안 작성 — 서식 버전의 틀 위에 기안자가 입력 칸만 채운다(§11.3).
@@ -508,6 +510,8 @@ export interface SheetDraftFormProps {
    * 이 칸들은 기안자가 직접 고치지 않고, 고른 값은 systemValues 로 들어온다
    */
   pickers?: { names: readonly string[]; open: () => void; placeholder: string; /** 칸 대신 보일 글(이름별) — 예: 사용기간에 요일·시각까지 */ labels?: Record<string, string> };
+  /** 목록 엑셀(카드 이용내역 등)을 올릴 때 표 머리글과 같은 열로 볼 엑셀 열 제목 — 서식별로 정한다(listExcel.ts) */
+  xlsxAliases?: ListXlsxAliases;
 }
 
 export interface RelatedSource {
@@ -540,6 +544,7 @@ export function SheetDraftForm({
   lockedNames,
   systemKey,
   pickers,
+  xlsxAliases,
 }: SheetDraftFormProps) {
   const fetched = useFormVersionSheet(template ? null : formId, template ? null : version);
   const loaded = useMemo(() => (template ? { sheet: template } : fetched.data), [template, fetched.data]);
@@ -556,18 +561,26 @@ export function SheetDraftForm({
   // [표 모양 고치기] — 고치는 중인 시트와 시작할 때 모양(끝낼 때 보호 칸 검사·사람 칸 ID 맞추기)
   const [editing, setEditing] = useState<{ start: Sheet; sheet: Sheet } | null>(null);
   const [editNotice, setEditNotice] = useState('');
+  /** 엑셀 올리기 미리보기 — 올린 값을 얹은 결과와, [적용]하면 바뀔 줄 수 */
+  const [xlsxPreview, setXlsxPreview] = useState<(XlsxUploadResult & { tpl: Sheet; extras: RowExtras }) | null>(null);
   const rawRefs = values[SHEET_REFS_KEY];
   const refs = useMemo(() => readSheetValues(rawRefs), [rawRefs]);
   /** fieldValues 로 올려 보내기 — 칸 값·서식 버전·줄 수·이름 붙은 칸 값 + 사람 칸 ID */
   // 대체 서식(연동 유형) — 서식 버전에 묶여 있다(미리보기는 편집 중인 값)
   const link = (template ? linkProp : (fetched.data?.link ?? null)) || null;
   /** ownNext — 문서 시트 바꾸기(Sheet = 고친 모양 저장, null = 지우고 서식 틀로). 없으면 그대로 */
-  const emit = (s0: Sheet, rowExtras: typeof extras, refMap0: Record<string, string>, ownNext?: Sheet | null) => {
+  /** 문서에 남기기 전 정리 — 저장(emit)과 엑셀 올리기 미리보기가 같이 쓴다(미리보기가 적용 결과와 같게) */
+  const settle = (s0: Sheet, refMap0: Record<string, string>) => {
     // 행 보이기 조건으로 숨은 행의 입력 값은 비운다 — 합계·금액·연동 값에 숨은 값이 남지 않게
     // 종속 선택 칸은 기준 칸이 바뀌어 목록에 없게 된 값을 비운다
     const cleared = clearConditionHidden(clearStaleDependent(s0), refMap0);
-    let s = cleared.sheet;
-    const refMap = cleared.refs;
+    // 기준 칸이 숨은 행에 있어 방금 비워졌으면 그 칸을 보는 종속 칸도 비운다
+    return { sheet: clearStaleDependent(cleared.sheet), refs: cleared.refs };
+  };
+  const emit = (s0: Sheet, rowExtras: typeof extras, refMap0: Record<string, string>, ownNext?: Sheet | null) => {
+    const settled = settle(s0, refMap0);
+    let s = settled.sheet;
+    const refMap = settled.refs;
     // 시스템이 계산하는 연동 칸(휴가 일수 등) — 기안 화면이 준 값으로 채운다
     if (link && systemValues) {
       const sys = systemValues(link, linkFieldValues(s, link, refMap));
@@ -731,6 +744,20 @@ export function SheetDraftForm({
   };
   const canEditShape = !template && !!loaded?.sheet;
 
+  /** 화면이 따로 그리는 칸(문서 제목·기안자·결재란 등)의 글자 — 그 밖의 칸은 undefined(시트 값). 엑셀로 받기·올리기 미리보기가 같이 쓴다 */
+  const headText = (s: Sheet, r: number, c: number): string | undefined => {
+    const props = approvalCellProps(s, r, c);
+    if (props.autoNo) return undefined;
+    // 결재란·로고·서명·첨부 자리는 화면이 그리는 것이라 비운다
+    if (slotOf(props.bind)) return '';
+    if (props.bind === 'doc.title') return docFields?.title ?? '';
+    if (props.bind === 'doc.preservation') return docFields?.preservationPeriod ?? '';
+    if (props.bind === 'doc.visibility') return docFields ? (VISIBILITY_LABEL[docFields.visibility] ?? docFields.visibility) : '';
+    const auto = draftInfoValue(props.bind, draftInfo);
+    if (auto !== undefined) return auto;
+    return props.name && pickers?.names.includes(props.name) ? shownValue(props.name) || undefined : undefined;
+  };
+
   /** [엑셀로 받기] — 지금 화면 모양 그대로(쓴 값·수식 포함). 머리(기안자·문서번호 등)는 보이는 글자로만 담고, 올릴 때는 읽지 않는다 */
   const downloadDraftXlsx = async () => {
     if (!tplSheet) return;
@@ -743,30 +770,26 @@ export function SheetDraftForm({
       skipNames: xlsxSkip,
       sheetName: title,
       hiddenRows: (r) => completedRows.has(r) || condHidden.has(r) || extrasHidden.has(r),
-      cellText: (r, c) => {
-        const props = approvalCellProps(sheet, r, c);
-        if (props.autoNo) return undefined;
-        // 결재란·로고·서명·첨부 자리는 화면이 그리는 것이라 비운다
-        if (slotOf(props.bind)) return '';
-        if (props.bind === 'doc.title') return docFields?.title ?? '';
-        if (props.bind === 'doc.preservation') return docFields?.preservationPeriod ?? '';
-        if (props.bind === 'doc.visibility') return docFields ? (VISIBILITY_LABEL[docFields.visibility] ?? docFields.visibility) : '';
-        const auto = draftInfoValue(props.bind, draftInfo);
-        if (auto !== undefined) return auto;
-        return props.name && pickers?.names.includes(props.name) ? shownValue(props.name) || undefined : undefined;
-      },
+      cellText: (r, c) => headText(sheet, r, c),
     });
     downloadXlsx(await exportXlsx(out.sheet, out.options), `${title}_작성용`);
   };
 
-  /** [엑셀 올리기] — 받은 파일에 쓴 값을 입력 칸에 채운다. 줄은 받을 때 심은 표시로 찾고, 못 받은 것은 확인 창에서 알린다 */
+  /**
+   * [엑셀 올리기] — [엑셀로 받기]로 받은 파일이면 쓴 값을 입력 칸에 채운다(줄은 받을 때 심은 표시로 찾는다).
+   * 그 밖의 파일(카드 이용내역 등)이면 열 제목으로 맞춰 표에 줄을 채운다. 못 받은 것은 확인 창에서 알린다
+   */
   const uploadDraftXlsx = async (file: File) => {
     let read: { xlsx: Sheet; names: Awaited<ReturnType<typeof xlsxDefinedNames>> };
+    /** 파일을 읽으며 잘라 낸 것(줄·열이 많아 일부만, 시트가 여럿) — 목록 엑셀은 확인 창에서 알린다 */
+    let cut: string[] = [];
     try {
       const bytes = new Uint8Array(await file.arrayBuffer());
       const names = await xlsxDefinedNames(bytes);
-      // 엑셀에서 앞에 다른 시트를 넣었어도 받은 양식이 든 시트를 읽는다
-      read = { xlsx: (await importXlsx(bytes, { ignorePrintArea: true, maxRows: 1000, sheet: names.sheetIndex })).sheet, names };
+      // 받은 양식은 엑셀에서 앞에 다른 시트를 넣었어도 양식이 든 시트를 읽는다. 그 밖의 파일(목록 엑셀)은 첫 시트
+      const imported = await importXlsx(bytes, { ignorePrintArea: true, maxRows: 1000, sheet: isDraftXlsx(names) ? names.sheetIndex : undefined });
+      read = { xlsx: imported.sheet, names };
+      cut = imported.warnings.filter((w) => w.includes('까지만') || w.startsWith('시트가'));
     } catch (e) {
       return alert(e instanceof XlsxError ? e.message : '엑셀 파일을 읽지 못했습니다.');
     }
@@ -775,20 +798,58 @@ export function SheetDraftForm({
     const { tplSheet: tpl, extras: ex, rawValues: raw, refs: rf } = latest.current;
     // 사람·부서 칸은 엑셀에 쓴 이름으로 조직도에서 찾는다
     const people = { users: org.users.map((u) => ({ id: u.id, name: u.name, dept: u.dept })), depts: org.depts.map((d) => d.name) };
+    if (!isDraftXlsx(read.names)) {
+      const list = fillFromListXlsx({ template: tpl, extras: ex, values: readSheetValues(raw), refs: rf, skipNames: xlsxSkip, people, aliases: xlsxAliases, xlsx: read.xlsx });
+      if (!list.ok) return alert(list.error);
+      const cols = list.columns.map((x) => (x.header && x.header !== x.label ? `${x.label} ← ${x.header}` : x.label)).join(', ');
+      const order = [list.sortedBy ? `줄은 '${list.sortedBy}' 빠른 순으로 놓습니다.` : '', list.numbered ? '번호는 1부터 다시 매깁니다.' : ''].filter(Boolean).join(' ');
+      const delta = list.rowDelta ? ` 표의 줄은 ${Math.abs(list.rowDelta)}줄 ${list.rowDelta > 0 ? '늘어납니다' : '줄어듭니다'}.` : '';
+      return preview(list, [
+        `엑셀의 ${list.rows}줄을 '${list.table}' 표에 채웁니다.${delta} 표에 이미 쓴 내용은 엑셀 내용으로 바뀝니다(엑셀에 없는 열은 빈 칸).`,
+        `맞춘 열: ${cols}`,
+        ...(order ? [order] : []),
+      ], [...list.notes, ...cut]);
+    }
     const res = fillFromXlsx({ template: tpl, formKey: key, extras: ex, values: readSheetValues(raw), refs: rf, skipNames: xlsxSkip, people, ...read });
     if (!res.ok) return alert(res.error);
-    const notes = res.notes.length ? `\n\n받지 않은 것\n- ${res.notes.join('\n- ')}` : '';
-    if (!res.changed && !res.rowDelta) return alert(`엑셀 파일에 화면과 다른 값이 없습니다.${notes}`);
+    if (!res.changed && !res.rowDelta) return alert(`엑셀 파일에 화면과 다른 값이 없습니다.${res.notes.length ? `\n\n받지 않은 것\n- ${res.notes.join('\n- ')}` : ''}`);
     const rows = res.rowDelta ? ` 표의 줄은 ${Math.abs(res.rowDelta)}줄 ${res.rowDelta > 0 ? '늘어납니다' : '줄어듭니다'}.` : '';
-    if (!confirm(`엑셀 파일의 값으로 ${res.changed}칸을 채웁니다.${rows}\n이미 쓴 값은 엑셀의 값으로 바뀝니다.${notes}`)) return;
-    emit(applyValues(expandRepeats(tpl, res.extras), res.values, { recalc: true }), res.extras, res.refs);
+    preview(res, [`[엑셀로 받기]로 받은 파일의 값을 칸 자리 그대로 채웁니다.${rows}`], res.notes);
+
+    /** 미리보기 창을 연다 — [적용]을 눌러야 문서에 들어간다 */
+    function preview(got: { extras: RowExtras; values: Record<string, string>; refs: Record<string, string>; base: Record<string, string>; baseRefs: Record<string, string> }, summary: string[], notes: string[]) {
+      setXlsxPreview({ fileName: file.name, tpl, extras: got.extras, shape: expandRepeats(tpl, got.extras), base: got.base, baseRefs: got.baseRefs, values: got.values, refs: got.refs, summary, notes });
+    }
   };
+  /** 미리보기에서 [적용] — 뺀 칸은 화면 값으로 되돌린 값이 온다 */
+  const applyXlsx = (vals: Record<string, string>, refMap: Record<string, string>) => {
+    if (!xlsxPreview) return;
+    setXlsxPreview(null);
+    emit(applyValues(expandRepeats(xlsxPreview.tpl, xlsxPreview.extras), vals, { recalc: true }), xlsxPreview.extras, refMap);
+  };
+  const previewHiddenRows = (s: Sheet) => new Set([...conditionHiddenRows(s), ...(draftInfo?.completedDate ? [] : completedDateRows(s)), ...extrasHiddenRows(s, false)]);
 
   return (
     // 서식이 A4보다 넓으면 작성 중에는 줄이지 않고 옆으로 밀어 본다(글씨가 작아지지 않게). 문서 보기·인쇄는 맞춰 줄임
     // 로고 칸이 고른 로고 — 없으면 대표 로고
     <LogoMarkProvider markId={sheetLogoMarkId(sheet)}>
     <div className="relative">
+      {xlsxPreview && (
+        <XlsxUploadPreview
+          result={xlsxPreview}
+          skipNames={xlsxSkip}
+          hiddenRowsOf={previewHiddenRows}
+          settle={(s) => recalculate(settle(s, {}).sheet)}
+          renderHead={(s, r, c) => {
+            const props = approvalCellProps(s, r, c);
+            if (props.guide) return '';
+            if (props.bind === 'doc.formTitle') return <SheetFormTitle text={draftInfoValue(props.bind, draftInfo) ?? ''} />;
+            return headText(s, r, c);
+          }}
+          onApply={applyXlsx}
+          onClose={() => setXlsxPreview(null)}
+        />
+      )}
       {canImport && (
         // 다른 문서 값 가져오기 — 관련 문서로 고른 문서, 또는 검색해서 고른 문서의 같은 이름(칸 옆 글자) 칸 값을 복사(§11.4). 인쇄에는 안 나옴
         <div className="mb-2 flex flex-wrap items-center gap-1.5 rounded border border-dashed border-teal/40 bg-teal-soft/20 px-2 py-1.5 text-[11px] print:hidden">
@@ -840,9 +901,11 @@ export function SheetDraftForm({
                 type="button"
                 onClick={() => xlsxFile.current?.click()}
                 className="flex items-center gap-1 rounded border border-border bg-white px-2 py-0.5 font-semibold text-ink2 hover:border-teal hover:text-teal"
-                title="[엑셀로 받기]로 받아 채운 파일을 올리면 노란 칸의 값이 채워집니다. 표에 줄을 넣었으면 줄도 늘어납니다"
+                title="[엑셀로 받기]로 받아 채운 파일을 올리면 노란 칸의 값이 채워집니다. 카드 이용내역 같은 목록 엑셀은 열 제목이 같은 열끼리 표에 채웁니다"
               >
                 <Upload className="h-3 w-3" />엑셀 올리기
+                {/* 목록 엑셀(카드 이용내역 등) 열 맞추기가 시험 단계 */}
+                <span className="font-normal text-ink3">(beta)</span>
               </button>
               <input
                 ref={xlsxFile}

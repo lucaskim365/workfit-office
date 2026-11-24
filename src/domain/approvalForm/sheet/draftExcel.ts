@@ -6,7 +6,8 @@
  * 올리기(fillFromXlsx): 값은 '칸 자리'로 짝짓는다(라벨 글자는 보지 않는다).
  *   - 기안자가 쓰는 칸만 받는다. 머리(결재란·기안자·문서번호 등)·라벨·수식 칸은 엑셀에서 고쳐도 무시 — 수식은 서식 것으로 다시 계산
  *   - 반복 구간 안에 줄을 넣거나 지웠으면 문서의 줄 수도 따라 바꾼다. 그 밖의 자리에 넣은 줄·열은 받지 않고 알린다
- *   - 엑셀에서 비워 둔 칸은 화면 값을 그대로 둔다(화면에서 고른 기간·사람이 지워지지 않게). 지우려면 화면에서 지운다
+ *   - 엑셀에서 비운 칸: 받을 때 값이 있던 자리면 화면에서도 비운다(엑셀에서 지웠거나 표를 정렬한 것).
+ *     받을 때도 비어 있던 자리면 화면 값을 그대로 둔다(받은 뒤 화면에서 고른 기간·사람이 지워지지 않게)
  *   - 사람·부서 칸은 엑셀에 쓴 이름으로 조직도에서 찾아 넣는다('홍길동' 또는 '홍길동 (영업팀)'). 못 찾거나 같은 이름이 여럿이면 받지 않고 알린다
  *   - 엑셀에서 못 받는 칸: 선택 창으로 고르는 칸, 시스템이 채우는 칸 — 화면 값 그대로
  *   - 표에 줄을 넣고 지워도 화면 값(사람 칸의 ID 포함)은 제 줄을 따라간다
@@ -20,15 +21,20 @@ const NAME_FORM = '_wf_form';
 const NAME_ROWS = '_wf_rows';
 const rowName = (r: number) => `_wf_r${r}`;
 const colName = (c: number) => `_wf_c${c}`;
+/** 받을 때 그 줄에서 값이 있던 칸의 열 번호들('1,2,4') — 엑셀 글자 값은 255자까지라 줄마다 나눠 담는다 */
+const filledName = (r: number) => `_wf_v${r}`;
 
 /** 기안자가 쓰는 칸 바탕(작성 화면과 같은 색) */
 const INPUT_BG = '#fffbe8';
+
+/** 이 화면의 [엑셀로 받기]로 받은 파일인가 — 아니면 열 제목으로 맞춰 받는다(listExcel.ts) */
+export const isDraftXlsx = (names: XlsxNames) => names.texts[NAME_FORM] !== undefined;
 
 /** 파일이 어느 틀에서 나왔는지 — 서식 버전 + 틀 모양(기안자가 표 모양을 고친 문서는 모양이 다르다) */
 const markOf = (formKey: string, template: Sheet) => `${formKey}#${sheetSignature(template)}`;
 
 /** 엑셀로 주고받는 칸인가 — 기안자가 직접 쓰는 칸 중 시스템이 채우는 칸·선택 창 칸을 뺀 것 */
-function fillable(s: Sheet, r: number, c: number, skipNames: readonly string[]): CellInput | undefined {
+export function fillable(s: Sheet, r: number, c: number, skipNames: readonly string[]): CellInput | undefined {
   const input = draftInputOf(s, r, c);
   if (!input) return undefined;
   const p = approvalCellProps(s, r, c);
@@ -81,17 +87,30 @@ export function draftXlsxExport({ sheet, template, extras, formKey, hiddenRows, 
       if (cellText?.(r, c) === undefined && !styles[key]?.align && textCell(r, c) && parseNumber(String(row[col] ?? '')) !== null) styles[key] = { ...(styles[key] ?? {}), align: 'right' };
     })
   );
+  /** 글 입력 칸 — 엑셀 '텍스트' 서식으로(빈 칸에 '010…'을 써도 앞자리 0이 남는다) */
+  const textFormat = (r: number, c: number): boolean => {
+    const type = fillable(sheet, r, c, skipNames)?.type;
+    // 여러 줄 글 칸은 뺀다 — 엑셀은 텍스트 서식 칸의 긴 글(255자 넘음)을 '####'으로 보인다
+    return type === 'text';
+  };
+  // 받을 때 값이 있던 칸(줄마다 열 번호) — 올릴 때 엑셀에서 비워 둔 칸이 '지운 것'인지 '원래 빈 칸'인지 가린다
+  const filledNames: XlsxDefinedName[] = [];
+  sheet.rows.forEach((row, r) => {
+    const cols = sheet.cols.flatMap((col, c) => (fillable(sheet, r, c, skipNames) && (cellText?.(r, c) ?? String(row[col] ?? '')).trim() !== '' ? [c] : []));
+    if (cols.length) filledNames.push({ name: filledName(r), text: cols.join(',') });
+  });
   const definedNames: XlsxDefinedName[] = [
     { name: NAME_FORM, text: markOf(formKey, template) },
     { name: NAME_ROWS, text: JSON.stringify(extras) },
     ...sheet.rows.map((_, r) => ({ name: rowName(r), row: r })),
     ...sheet.cols.map((_, c) => ({ name: colName(c), col: c })),
+    ...filledNames,
   ];
-  return { sheet: { ...sheet, styles }, options: { sheetName, formulas: true, hiddenRow: hiddenRows, cellText, textCell, definedNames } };
+  return { sheet: { ...sheet, styles }, options: { sheetName, formulas: true, hiddenRow: hiddenRows, cellText, textCell, textFormat, definedNames } };
 }
 
 /** 펼친 시트의 줄마다 '틀의 어느 줄(구간이면 몇 번째 줄)'인지 — 줄 수가 다른 두 펼침 사이에서 같은 줄을 찾는 열쇠 */
-function rowPlan(template: Sheet, extras: RowExtras): string[] {
+export function rowPlan(template: Sheet, extras: RowExtras): string[] {
   const sections = repeatSections(template);
   const out: string[] = [];
   for (let t = 0; t < template.rows.length; t++) {
@@ -114,14 +133,14 @@ export interface XlsxPeople {
 }
 
 /** 여러 명 칸의 이름 나누기 — 괄호 안 쉼표는 나누지 않는다(작성 화면과 같은 규칙) */
-const splitNames = (text: string) =>
+export const splitNames = (text: string) =>
   text
     .split(/,\s*(?![^()]*\))/)
     .map((x) => x.trim())
     .filter(Boolean);
 
 /** 이름 글자 → 화면에 남기는 글자('이름 (부서)')와 사용자 ID. 없으면 'none', 같은 이름이 여럿이면 'many' */
-function findUser(text: string, people: XlsxPeople): { text: string; id: string } | 'none' | 'many' {
+export function findUser(text: string, people: XlsxPeople): { text: string; id: string } | 'none' | 'many' {
   const m = text.trim().match(/^(.+?)\s*\((.+)\)$/);
   const name = (m ? m[1] : text).trim();
   const dept = m?.[2].trim();
@@ -133,7 +152,7 @@ function findUser(text: string, people: XlsxPeople): { text: string; id: string 
 }
 
 /** 값 키의 줄 번호를 새 줄 번호로 — src[새 줄] 이 그 줄이 온 원래 줄(from 의 열쇠). 없어진 줄의 값은 버린다 */
-function remap(values: SheetValues, from: string[], src: (string | undefined)[]): SheetValues {
+export function remap(values: SheetValues, from: string[], src: (string | undefined)[]): SheetValues {
   const at = new Map<string, number>();
   src.forEach((k, i) => k !== undefined && at.set(k, i));
   const out: SheetValues = {};
@@ -159,7 +178,7 @@ function toIsoDate(text: string): string | null {
 const CHECKED = new Set([CHECK_MARK, 'v', 'o', '○', '●', '√', 'true', '1', 'y', 'yes', '예']);
 
 /** 엑셀 칸 글자 → 칸 종류에 맞는 값. 그 종류로 읽을 수 없으면 null(선택 칸의 목록 검사는 값을 다 얹은 뒤 따로) */
-function convert(input: CellInput, text: string): string | null {
+export function convert(input: CellInput, text: string): string | null {
   const t = text.trim();
   if (t === '') return '';
   switch (input.type) {
@@ -176,7 +195,8 @@ function convert(input: CellInput, text: string): string | null {
       const [a = '', b = ''] = t.split('~').map((x) => x.trim());
       const from = toIsoDate(a);
       const to = b ? toIsoDate(b) : from;
-      return from && to ? `${from} ~ ${to}` : null;
+      // 끝이 시작보다 빠른 기간은 받지 않는다(화면 달력도 고를 수 없는 값)
+      return from && to && from <= to ? `${from} ~ ${to}` : null;
     }
     case 'multiSelect': {
       const picked = t.split(',').map((x) => x.trim());
@@ -217,6 +237,9 @@ export type DraftXlsxFillResult =
       extras: RowExtras;
       values: SheetValues;
       refs: SheetValues;
+      /** 엑셀 값을 얹기 전 — 지금 화면의 값·사람 칸 ID 를 새 줄 번호로 옮긴 것(미리보기에서 칸별로 되돌릴 때 쓴다) */
+      base: SheetValues;
+      baseRefs: SheetValues;
       /** 값이 바뀐 칸 수 */
       changed: number;
       /** 반복 구간에서 늘어난(음수면 줄어든) 줄 수 */
@@ -227,7 +250,7 @@ export type DraftXlsxFillResult =
 
 /** 안내에 칸 이름을 몇 개까지 늘어놓을지 */
 const NOTE_CELLS = 5;
-const listOf = (labels: string[]) => {
+export const listOf = (labels: string[]) => {
   const uniq = [...new Set(labels)];
   return uniq.slice(0, NOTE_CELLS).join(', ') + (uniq.length > NOTE_CELLS ? ` 외 ${uniq.length - NOTE_CELLS}칸` : '');
 };
@@ -325,7 +348,20 @@ export function fillFromXlsx({ template, formKey, extras, values, refs, xlsx, na
   });
   // 지금 값·사람 칸 ID 를 새 줄 번호로 옮겨 놓고 그 위에 엑셀 값을 얹는다
   const baseValues = remap(values, now, src);
-  const nextRefs = remap(refs, now, src);
+  const baseRefs = remap(refs, now, src);
+  const nextRefs = { ...baseRefs };
+  /** 받을 때 그 자리(줄 열쇠·열)에 값이 있었는가 — 표시가 없는 옛 파일은 늘 아니오(비운 칸은 화면 값 그대로) */
+  const filledCols = new Map<string, Set<number>>();
+  const wasFilled = (rowKey: string | undefined, c: number): boolean => {
+    const g = rowKey === undefined ? undefined : gotAt.get(rowKey);
+    if (g === undefined) return false;
+    let cols = filledCols.get(rowKey!);
+    if (!cols) {
+      cols = new Set((names.texts[filledName(g)] ?? '').split(',').filter(Boolean).map(Number));
+      filledCols.set(rowKey!, cols);
+    }
+    return cols.has(c);
+  };
   const before = applyValues(shape, baseValues, { recalc: false });
 
   const out: SheetValues = { ...baseValues };
@@ -358,12 +394,28 @@ export function fillFromXlsx({ template, formKey, extras, values, refs, xlsx, na
         continue;
       }
       if (text.trim() === '') {
-        // 엑셀에서 비워 둔 칸 — 화면 값을 그대로 둔다. 엑셀에서 새로 넣은 줄은 빈 칸(틀에 미리 쓴 글자가 비쳐 보이지 않게)
+        // 엑셀에서 새로 넣은 줄은 빈 칸(틀에 미리 쓴 글자가 비쳐 보이지 않게)
         if (src[r] === undefined) out[key] = '';
+        // 받을 때 값이 있던 자리인데 비어 있다 — 엑셀에서 지웠거나 정렬로 옮겨 간 것이라 화면에서도 비운다.
+        // 받을 때도 비어 있던 자리는 화면 값을 그대로 둔다(받은 뒤 화면에서 고른 기간·사람이 지워지지 않게)
+        else if (wasFilled(src[r], c) && prev.trim() !== '') {
+          out[key] = '';
+          delete nextRefs[key];
+          changed++;
+        }
         continue;
       }
       // 화면 값과 같은 글 — 그대로 둔다(날짜 칸에 미리 쓴 '2026.', 시작일만 고른 기간처럼 칸 종류로는 못 읽는 글도 받은 그대로면 건드리지 않는다)
       if (text.trim() === prev.trim()) continue;
+      // 틀에 미리 써 둔 글자('2026.')가 온 칸 — 칸 종류로는 못 읽어도 안 쓴 칸이라는 뜻이라 그 글자로 되돌린다
+      // (엑셀에서 표를 정렬해 안 쓴 줄이 이 자리로 왔을 때 화면의 다른 줄 값이 남지 않게)
+      const preset = String(shape.rows[r]?.[shape.cols[c]] ?? '').trim();
+      if (preset !== '' && text.trim() === preset) {
+        out[key] = preset;
+        delete nextRefs[key];
+        changed++;
+        continue;
+      }
       // 사람·부서 칸 — 엑셀에 쓴 이름으로 조직도에서 찾는다
       if (cellInput.type === 'user' || cellInput.type === 'users' || cellInput.type === 'dept') {
         const caption = `${cellCaption(before, r, c)}(${text.trim()})`;
@@ -466,7 +518,7 @@ export function fillFromXlsx({ template, formKey, extras, values, refs, xlsx, na
   const extraRows = xlsx.rows.filter((row, i) => !usedRows.has(i) && Object.values(row).some((v) => String(v ?? '').trim() !== '')).length;
   if (extraRows) notes.push(`표 밖에 새로 넣은 줄 ${extraRows}줄은 서식에 자리가 없어 받지 않았습니다.`);
 
-  return { ok: true, extras: nextExtras, values: out, refs: nextRefs, changed: Math.max(0, changed), rowDelta, notes };
+  return { ok: true, extras: nextExtras, values: out, refs: nextRefs, base: baseValues, baseRefs, changed: Math.max(0, changed), rowDelta, notes };
 }
 
 /** 이 서식이 엑셀로 주고받을 칸을 하나라도 가졌는가 — 없으면 [엑셀로 받기]·[엑셀 올리기]를 보이지 않는다 */
