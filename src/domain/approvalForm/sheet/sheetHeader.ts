@@ -40,6 +40,9 @@ export function sheetHeaderItems(s: Sheet | null | undefined): string[] {
 }
 
 /** 시트가 문서 머리 전체를 맡는가(결재란이 시트 안에) */
+/** 시트에 회사 로고 칸이 있는가 — 있으면 회사 표시를 그 칸이 맡는다(문서 상단 바에 한 번 더 그리지 않는다) */
+export const sheetHasLogo = (s: Sheet | null | undefined) => Object.values(s?.cellMeta[APPROVAL_NS.bind] ?? {}).includes('doc.logo');
+
 export const isFullHeaderSheet = (s: Sheet | null | undefined) => sheetHeaderItems(s).includes(STAMP_TABLE);
 
 /** 문서 정보 표 라벨 칸 바탕 — 문서 머리 표와 같은 회색(넣은 뒤 서식에 맞게 바꿔 쓰면 됨) */

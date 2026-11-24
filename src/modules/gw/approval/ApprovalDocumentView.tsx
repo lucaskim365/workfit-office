@@ -30,7 +30,7 @@ import { DEFAULT_LETTERHEAD, headerShown, stampTableInHeader, titleFieldOf, with
 import { parseVersionKey } from '@/domain/approvalForm/sheetVersion';
 import { useFormVersionSheet } from '@/features/gw/useApprovalFormVersions';
 import { SHEET_VERSION_KEY, VISIBILITY_LABEL, korDateText, sheetHasSeal, sheetHasSecret, type SheetSlots } from '@/domain/approvalForm/sheet/approvalSheet';
-import { sheetHeaderItems } from '@/domain/approvalForm/sheet/sheetHeader';
+import { sheetHasLogo, sheetHeaderItems } from '@/domain/approvalForm/sheet/sheetHeader';
 import { CompanyLetterhead, CompanyLetterheadBlock } from './components/CompanyLetterhead';
 import { isLumefabDoc } from '@/domain/approvalDoc/company';
 import { CompanyTopMark, SheetTopMark } from './components/CompanyTopMark';
@@ -691,7 +691,8 @@ export function ApprovalDocumentView({
   // 문서 머리를 시트에 넣은 시트 서식 — 결재란·로고·기안자 서명 칸에 그릴 것
   const sheetSlots: SheetSlots = {
     approvalLine: showStamp ? stampNode : null,
-    logo: <SheetTopMark fallbackSrc={processedLogo} external={externalDoc} />,
+    // 루미팹 문서는 로고 칸에 '루미팹' — 상단 바에는 그리지 않는다(아래 companyBar)
+    logo: isLumefabDoc(doc) ? <CompanyTopMark company="lumefab" external={externalDoc} /> : <SheetTopMark fallbackSrc={processedLogo} external={externalDoc} />,
     letterhead: <CompanyLetterheadBlock config={DEFAULT_LETTERHEAD} />,
     drafterSign: drafterSignNode,
     extras: hasExtras ? extrasBlock : null,
@@ -776,7 +777,7 @@ export function ApprovalDocumentView({
       {/* 문서 폭은 원본(800px) 고정 — 화면이 좁으면 줄이지 않고 바깥 칸에서 가로 스크롤 */}
       <div className="approval-print mx-auto bg-white px-8 py-7 text-[#1a1a1a] w-[800px] shrink-0 shadow-xs box-border">
 
-        {!externalDoc && (headerShown(form, 'topBar') || isLumefabDoc(doc)) && (
+        {!externalDoc && (headerShown(form, 'topBar') || (isLumefabDoc(doc) && !sheetHasLogo(sheetTpl?.sheet))) && (
         <div className="mb-2 flex h-10 items-center justify-between border-b border-[#eee] pb-2">
           {isLumefabDoc(doc) ? (
             <CompanyTopMark company="lumefab" />

@@ -825,7 +825,7 @@ export function cellCaption(s: Sheet, r: number, c: number): string {
 
 /**
  * 필수 입력 칸(기안자가 쓰는 칸, 조건으로 숨은 행 제외)과 지금 비어 있는지 — 작성 화면의 별표와 상신 전 검사가 같이 쓴다.
- * 고를 항목이 없는 종속 선택 칸은 비어 있어도 채울 수 없으니 빈 칸으로 치지 않는다
+ * 고를 항목이 없는 종속 선택 칸은 지금 쓸 수 없는 칸이라 뺀다(별표도 없고 검사도 안 한다)
  */
 export function requiredCells(s: Sheet): { r: number; c: number; missing: boolean }[] {
   const out: { r: number; c: number; missing: boolean }[] = [];
@@ -837,9 +837,8 @@ export function requiredCells(s: Sheet): { r: number; c: number; missing: boolea
     const c = s.cols.indexOf(key.slice(i + 1));
     if (c < 0 || r >= s.rows.length || hiddenRows.has(r)) return;
     const input = draftInputOf(s, r, c);
-    if (!input) return;
-    const fillable = !(input.depends && draftOptions(s, input).length === 0);
-    out.push({ r, c, missing: fillable && String(s.rows[r]?.[s.cols[c]] ?? '').trim() === '' });
+    if (!input || (input.depends && draftOptions(s, input).length === 0)) return;
+    out.push({ r, c, missing: String(s.rows[r]?.[s.cols[c]] ?? '').trim() === '' });
   });
   return out;
 }

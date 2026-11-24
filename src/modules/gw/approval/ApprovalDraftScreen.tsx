@@ -17,7 +17,7 @@ import {
 } from '@/domain/approvalDoc/schema';
 import { CANCEL_FORM_CODE, RESERVED_BODY_KEY, amountFieldOf, documentBodyKeyOf, type ApprovalForm, type FieldValue } from '@/domain/approvalForm/schema';
 import { withBodyHeader, withSealTexts } from '@/domain/approvalForm/headerItems';
-import { sheetHeaderItems } from '@/domain/approvalForm/sheet/sheetHeader';
+import { sheetHasLogo, sheetHeaderItems } from '@/domain/approvalForm/sheet/sheetHeader';
 import { type ApprovalDraftInput } from '@/data/approvalDoc/approvalDoc.repo';
 import { approvalProcessRepo } from '@/data/approvalProcess/approvalProcess.repo';
 import { useCreateDraft, useSaveDraft, useSubmitApproval, useApprovalDoc, useCachedApprovalLookup } from '@/features/gw/useApprovals';
@@ -1893,6 +1893,7 @@ function ApprovalDraftInner({
             form={docForm}
             titleMode={editDoc ? editDoc.titleMode : TITLE_MODE_JOB_TITLE}
             company={company}
+            sheetHasLogo={sheetHasLogo(sheetTpl?.sheet)}
             docCode={code}
             me={me}
             title={title}
