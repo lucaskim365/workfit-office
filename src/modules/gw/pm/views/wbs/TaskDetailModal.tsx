@@ -112,7 +112,7 @@ export function TaskDetailModal({ id, d, people, mut, shortOf, onClose, onEdit }
           </Row>
           <Row h="PM">{t.pmName || '-'}</Row>
           <Row h="기간">
-            <span className={isLate(t, l, today) ? 'font-bold text-danger' : ''}>{t.start || '-'} ~ {t.end || '-'}</span>
+            <span className={isLate(t, l, today) ? 'font-bold text-danger' : ''}>{t.start || t.end ? `${t.start || '-'} ~ ${t.end || '-'}` : '일정 없음'}</span>
             {t.end && !done && <span className="ml-1 text-[11px] text-ink3">({leftText(t.end, today)})</span>}
           </Row>
           <Row h="상태">
