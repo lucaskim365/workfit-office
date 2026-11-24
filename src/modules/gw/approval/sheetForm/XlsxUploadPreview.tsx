@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { FileSpreadsheet, X } from 'lucide-react';
 import { SheetView, displayValue, type Sheet } from '@/lib/sheet';
 import { DOC_SHEET_VIEW, applyValues, type SheetValues } from '@/domain/approvalForm/sheet/approvalSheet';
+import { repeatSections } from '@/domain/approvalForm/sheet/repeatRows';
 import { pickXlsxValues, xlsxChanges, type XlsxCellChange, type XlsxChangeKind } from '@/domain/approvalForm/sheet/xlsxPreview';
 
 /** 올린 엑셀을 얹은 결과 — 올리기 계산(draftExcel·listExcel)이 돌려준 것 그대로 */
@@ -33,10 +34,12 @@ const KINDS: { kind: XlsxChangeKind; label: string; hint: string; color: string;
 const CELL_CLASS = Object.fromEntries(KINDS.map((k) => [k.kind, k.cell])) as Record<XlsxChangeKind, string>;
 const COLOR_VARS = Object.fromEntries(KINDS.map((k) => [`--xlsx-${k.kind}`, k.color])) as CSSProperties;
 /** 적용하지 않기로 한 칸 — 화면 값 그대로(점선 테두리). 칸 색은 배경색으로 — 칸마다 큰 그림자를 쓰면 스크롤이 무겁다 */
+/** 누르면 그 열을 통째로 빼거나 넣는 머리글 칸 */
+const HEAD_CLASS = 'cursor-pointer select-none hover:!bg-[#e8eefc]';
 const EXCLUDED_CLASS = 'outline-dashed outline-2 -outline-offset-2 outline-[#888]';
 
 /**
- * 엑셀 올리기 미리보기 — 적용한 뒤의 서식 모습에 바뀌는 칸을 색으로 보이고, 칸을 눌러 적용할 칸을 고른다.
+ * 엑셀 올리기 미리보기 — 적용한 뒤의 서식 모습에 바뀌는 칸을 색으로 보이고, 칸을 누르거나 끌어서(열 제목을 누르면 열째로) 적용할 칸을 고른다.
  * [적용]을 누르기 전에는 문서를 건드리지 않는다
  */
 export function XlsxUploadPreview({
@@ -89,12 +92,83 @@ export function XlsxUploadPreview({
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  const toggle = (key: string) =>
-    setExcluded((prev) => {
-      const next = new Set(prev);
-      if (!next.delete(key)) next.add(key);
-      return next;
-    });
+  /**
+   * 열 머리글 — 바뀌는 칸들이 세로로 이어진 묶음 위의 글자 칸('행:열' → 그 아래 바뀌는 칸들).
+   * 누르면 그 열을 통째로 빼거나 넣는다. 머리글이 여러 열을 합친 칸이면 그 아래 열들을 모두
+   */
+  const columnHeads = useMemo(() => {
+    const out = new Map<string, string[]>();
+    const sections = repeatSections(shape);
+    const anchorOf = (r: number, c: number) => {
+      const m = shape.merges.find((x) => r >= x.startRow && r < x.startRow + x.rowSpan && c >= x.startCol && c < x.startCol + x.colSpan);
+      return m ? { r: m.startRow, c: m.startCol } : { r, c };
+    };
+    for (const ch of changes) {
+      // 묶음의 맨 위 칸에서만 위로 올라가 머리글을 찾는다
+      if (byCell.has(`${ch.r - 1}:${ch.c}`)) continue;
+      // 표(반복 구간) 안의 칸이면 표 바로 위 줄이 머리글 — 표 가운데부터 바뀌어도(늘어난 줄의 번호 등) 위의 내용 칸을 머리글로 잡지 않는다
+      const sec = sections.find((x) => ch.r >= x.first && ch.r <= x.last);
+      const above = (sec ? sec.first : ch.r) - 1;
+      const head = above >= 0 ? anchorOf(above, ch.c) : null;
+      if (!head || byCell.has(`${head.r}:${head.c}`) || String(shape.rows[head.r]?.[shape.cols[head.c]] ?? '').trim() === '') continue;
+      const keys = out.get(`${head.r}:${head.c}`) ?? [];
+      for (let r = ch.r; byCell.has(`${r}:${ch.c}`); r++) keys.push(byCell.get(`${r}:${ch.c}`)!.key);
+      out.set(`${head.r}:${head.c}`, keys);
+    }
+    return out;
+  }, [changes, byCell, shape]);
+
+  // 고르기 — 누르면 그 칸을 빼거나 넣고, 끌면 지나간 네모 안의 칸을 같은 쪽으로, Shift+누르기는 앞서 누른 칸부터 이 칸까지
+  const drag = useRef<{ from: { r: number; c: number }; start: ReadonlySet<string>; exclude: boolean } | null>(null);
+  const lastPick = useRef<{ r: number; c: number; exclude: boolean } | null>(null);
+  useEffect(() => {
+    const up = () => (drag.current = null);
+    window.addEventListener('mouseup', up);
+    return () => window.removeEventListener('mouseup', up);
+  }, []);
+  const cellAt = (target: EventTarget) => {
+    const id = (target as HTMLElement).closest<HTMLElement>('td[data-sheet-cell]')?.dataset.sheetCell;
+    if (!id) return null;
+    const [r, c] = id.split(':').map(Number);
+    return { id, r, c };
+  };
+  /** 두 칸을 모서리로 하는 네모 안의 바뀌는 칸을 모두 빼거나(exclude) 넣은 것 */
+  const withRect = (start: ReadonlySet<string>, a: { r: number; c: number }, b: { r: number; c: number }, exclude: boolean) => {
+    const next = new Set(start);
+    const [r1, r2, c1, c2] = [Math.min(a.r, b.r), Math.max(a.r, b.r), Math.min(a.c, b.c), Math.max(a.c, b.c)];
+    for (const ch of changes) {
+      if (ch.r < r1 || ch.r > r2 || ch.c < c1 || ch.c > c2) continue;
+      if (exclude) next.add(ch.key);
+      else next.delete(ch.key);
+    }
+    return next;
+  };
+  const onPickStart = (e: ReactMouseEvent) => {
+    const cell = e.button === 0 ? cellAt(e.target) : null;
+    if (!cell) return;
+    const ch = byCell.get(cell.id);
+    if (!ch) {
+      // 열 머리글 — 그 열에 적용할 칸이 하나라도 있으면 모두 빼고, 다 빠져 있으면 모두 넣는다
+      const keys = columnHeads.get(cell.id);
+      if (!keys) return;
+      const exclude = keys.some((k) => !excluded.has(k));
+      const next = new Set(excluded);
+      keys.forEach((k) => (exclude ? next.add(k) : next.delete(k)));
+      return setExcluded(next);
+    }
+    // 끄는 동안 글자가 선택되지 않게
+    e.preventDefault();
+    if (e.shiftKey && lastPick.current) return setExcluded(withRect(excluded, lastPick.current, cell, lastPick.current.exclude));
+    const exclude = !excluded.has(ch.key);
+    drag.current = { from: cell, start: excluded, exclude };
+    lastPick.current = { r: cell.r, c: cell.c, exclude };
+    setExcluded(withRect(excluded, cell, cell, exclude));
+  };
+  const onPickMove = (e: ReactMouseEvent) => {
+    const d = drag.current;
+    const cell = d ? cellAt(e.target) : null;
+    if (d && cell) setExcluded(withRect(d.start, d.from, cell, d.exclude));
+  };
   const countOf = (kind: XlsxChangeKind) => changes.filter((ch) => ch.kind === kind && !excluded.has(ch.key)).length;
   const applying = changes.length - excluded.size;
 
@@ -141,7 +215,7 @@ export function XlsxUploadPreview({
             )}
             {changes.length > 0 && (
               <span className="ml-auto flex items-center gap-1.5">
-                <span className="text-ink3">색칠된 칸을 누르면 그 칸만 적용하지 않습니다</span>
+                <span className="text-ink3" title="Shift를 누른 채 누르면 앞서 누른 칸부터 그 칸까지 한 번에 고릅니다">칸을 누르거나 끌어서 뺄 칸을 고릅니다 · 열 제목을 누르면 그 열 전체</span>
                 <button type="button" onClick={() => setExcluded(new Set())} className="rounded border border-border bg-white px-1.5 py-0.5 font-semibold hover:border-teal hover:text-teal">
                   모두 적용
                 </button>
@@ -164,11 +238,8 @@ export function XlsxUploadPreview({
           // overscroll-contain: 끝까지 내린 뒤 뒤쪽 기안 화면이 따라 움직이지 않게
           className="min-h-0 flex-1 transform-gpu overflow-auto overscroll-contain bg-white px-6 py-4 text-[12px] text-[#111] [contain:layout_paint]"
           style={COLOR_VARS}
-          onClick={(e) => {
-            const td = (e.target as HTMLElement).closest<HTMLElement>('td[data-sheet-cell]');
-            const ch = td && byCell.get(td.dataset.sheetCell ?? '');
-            if (ch) toggle(ch.key);
-          }}
+          onMouseDown={onPickStart}
+          onMouseOver={onPickMove}
         >
           <SheetView
             sheet={shown}
@@ -177,14 +248,14 @@ export function XlsxUploadPreview({
             hiddenRows={(r) => hiddenRows.has(r)}
             cellClassName={(r, c) => {
               const ch = byCell.get(`${r}:${c}`);
-              if (!ch) return undefined;
-              return `cursor-pointer ${excluded.has(ch.key) ? EXCLUDED_CLASS : CELL_CLASS[ch.kind]}`;
+              if (!ch) return columnHeads.has(`${r}:${c}`) ? HEAD_CLASS : undefined;
+              return `cursor-pointer select-none ${excluded.has(ch.key) ? EXCLUDED_CLASS : CELL_CLASS[ch.kind]}`;
             }}
             renderCell={(r, c) => {
               const head = renderHead(shown, r, c);
               if (head !== undefined) return head;
               const ch = byCell.get(`${r}:${c}`);
-              if (!ch) return undefined;
+              if (!ch) return columnHeads.has(`${r}:${c}`) ? <span title="누르면 이 열을 통째로 빼거나 넣습니다">{displayValue(shown, r, shown.cols[c])}</span> : undefined;
               const off = excluded.has(ch.key);
               const tip = off ? `적용 안 함 — 화면 값 그대로${ch.after ? ` (엑셀 값: ${ch.after})` : ''}` : ch.kind === 'add' ? '새로 들어가는 값' : `이전 값: ${ch.before}`;
               // 지워지는 칸은 지워질 글자를 줄 그어 보인다
