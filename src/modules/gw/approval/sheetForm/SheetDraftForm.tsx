@@ -55,6 +55,8 @@ import { extrasAnchorRow, extrasHiddenRows } from '@/domain/approvalForm/sheet/d
 import { draftXlsxExport, fillFromXlsx, hasXlsxFillCells, isDraftXlsx } from '@/domain/approvalForm/sheet/draftExcel';
 import { fillFromListXlsx, type ListXlsxAliases } from '@/domain/approvalForm/sheet/listExcel';
 import { LogoMarkProvider } from '../components/CompanyLetterhead';
+import { XLSX_PREVIEW_ENABLED } from '@/domain/approvalForm/sheet/xlsxPreview';
+import { SHEET_XLSX_LOCK_KEY, clearXlsxSection, dropEmptyXlsxLock, readXlsxLock, xlsxLockAfterUpload, xlsxLockedCells, type XlsxLock } from '@/domain/approvalForm/sheet/xlsxLock';
 import { XlsxUploadPreview, type XlsxUploadResult } from './XlsxUploadPreview';
 
 /** 필수 칸 가운데 비어 있는 칸의 별표에만 붙는 표식 — 상신이 막혔을 때 그 칸으로 화면을 옮기는 데 쓴다 */
@@ -568,6 +570,11 @@ export function SheetDraftForm({
   const [editNotice, setEditNotice] = useState('');
   /** 엑셀 올리기 미리보기 — 올린 값을 얹은 결과와, [적용]하면 바뀔 줄 수 */
   const [xlsxPreview, setXlsxPreview] = useState<(XlsxUploadResult & { tpl: Sheet; extras: RowExtras }) | null>(null);
+  /** 엑셀을 올려 바로 채운 뒤 시트 위에 보이는 알림 — 무엇을 채웠는지와 받지 못한 것 */
+  const [xlsxNotice, setXlsxNotice] = useState<{ fileName: string; done: string; notes: string[] } | null>(null);
+  // 엑셀로 채워 화면에서 고칠 수 없는 칸(xlsxLock.ts)
+  const rawLock = values[SHEET_XLSX_LOCK_KEY];
+  const xlsxLock = useMemo(() => readXlsxLock(rawLock), [rawLock]);
   const rawRefs = values[SHEET_REFS_KEY];
   const refs = useMemo(() => readSheetValues(rawRefs), [rawRefs]);
   /** fieldValues 로 올려 보내기 — 칸 값·서식 버전·줄 수·이름 붙은 칸 값 + 사람 칸 ID */
@@ -582,7 +589,8 @@ export function SheetDraftForm({
     // 기준 칸이 숨은 행에 있어 방금 비워졌으면 그 칸을 보는 종속 칸도 비운다
     return { sheet: clearStaleDependent(cleared.sheet), refs: cleared.refs };
   };
-  const emit = (s0: Sheet, rowExtras: typeof extras, refMap0: Record<string, string>, ownNext?: Sheet | null) => {
+  /** lockNext — 엑셀로 채운 칸 잠금 바꾸기. 없으면 그대로 */
+  const emit = (s0: Sheet, rowExtras: typeof extras, refMap0: Record<string, string>, ownNext?: Sheet | null, lockNext0: XlsxLock = xlsxLock) => {
     const settled = settle(s0, refMap0);
     let s = settled.sheet;
     const refMap = settled.refs;
@@ -597,6 +605,8 @@ export function SheetDraftForm({
       });
       s = recalculate(s);
     }
+    // 잠근 칸이 비었으면(숨은 행·종속 선택으로 비워짐) 다시 쓸 수 있게 잠금에서 뺀다
+    const lockNext = dropEmptyXlsxLock(s, lockNext0);
     onFields({
       ...sheetDocFields(s, key, rowExtras),
       // 연동 칸 값을 기존 필드 키로(휴가 period·leaveType 등) + 연동 유형 __link — 휴가·근태·캘린더·결재선이 읽는다
@@ -607,6 +617,8 @@ export function SheetDraftForm({
       // 칸 옆 글자(라벨) 값 — 칸 이름이 없는 서식도 라벨이 같은 칸끼리 가져가게(labelMatch.ts). 비공개 칸은 없다
       [SHEET_LABELED_KEY]: JSON.stringify(collectLabeled(s)),
       ...(ownNext !== undefined ? { [SHEET_OWN_KEY]: ownNext ? JSON.stringify(ownNext) : '' } : {}),
+      // 문서 값은 합쳐지므로 잠금이 풀리면 빈 글자로 지운다(잠근 적 없는 문서에는 키를 만들지 않는다)
+      ...(Object.keys(lockNext).length ? { [SHEET_XLSX_LOCK_KEY]: JSON.stringify(lockNext) } : rawLock !== undefined ? { [SHEET_XLSX_LOCK_KEY]: '' } : {}),
     });
   };
   // 반복 구간을 문서의 줄 수만큼 펼친 틀 → 값 얹고 다시 계산
@@ -615,6 +627,8 @@ export function SheetDraftForm({
     [tplSheet, rawValues, extras]
   );
   const sections = useMemo(() => (sheet ? repeatSections(sheet) : []), [sheet]);
+  const lockedCells = useMemo(() => (sheet ? xlsxLockedCells(sheet, xlsxLock) : new Set<string>()), [sheet, xlsxLock]);
+  const hasXlsxLock = sections.some((x) => xlsxLock[x.id]);
   // 결재 완료일 줄 — 작성 중엔 숨김(값이 없을 때)
   const completedRows = useMemo(() => new Set(sheet && !draftInfo?.completedDate ? completedDateRows(sheet) : []), [sheet, draftInfo?.completedDate]);
   // 첨부·관련 문서 — 맺음말 바로 위에 띠로(값이 줄 번호에 묶여 있어 줄을 끼우지 않는다). 맺음말이 없거나 표를 고치는 중이면 시트 아래에.
@@ -651,7 +665,7 @@ export function SheetDraftForm({
   }, [sheet]);
 
   // 관련 문서 값 가져오기가 쓰는 것 — 훅이라 아래 조기 반환보다 위에 둔다(틀을 읽기 전·후 렌더의 훅 개수가 같아야 한다)
-  const latest = useRef<{ tplSheet: typeof tplSheet; extras: typeof extras; rawValues: typeof rawValues; refs: typeof refs } | null>(null);
+  const latest = useRef<{ tplSheet: typeof tplSheet; extras: typeof extras; rawValues: typeof rawValues; refs: typeof refs; lock: XlsxLock } | null>(null);
   const importing = useRef(false);
   // 엑셀로 받아 채운 뒤 올리기(draftExcel.ts) — 올릴 파일 고르기 창
   const xlsxFile = useRef<HTMLInputElement>(null);
@@ -687,7 +701,7 @@ export function SheetDraftForm({
 
   /** 관련 문서의 이름 붙은 칸 값을 같은 이름 칸으로 복사 */
   // 원본 문서를 읽는 동안에도 기안자가 계속 쓸 수 있다 — 읽고 난 뒤에는 그때의 값(latest)에 얹는다
-  latest.current = { tplSheet, extras, rawValues, refs };
+  latest.current = { tplSheet, extras, rawValues, refs, lock: xlsxLock };
   const importFrom = async (src: RelatedSource) => {
     if (!tplSheet || importing.current) return;
     importing.current = true;
@@ -747,7 +761,7 @@ export function SheetDraftForm({
   const resetToTemplate = () => {
     if (!loaded?.sheet) return;
     if (!confirm('고친 표 모양과 입력한 값을 모두 지우고 서식 처음 모양으로 되돌립니다. 계속할까요?')) return;
-    emit(recalculate(loaded.sheet), {}, {}, null);
+    emit(recalculate(loaded.sheet), {}, {}, null, {});
   };
   const canEditShape = !template && !!loaded?.sheet;
 
@@ -811,7 +825,7 @@ export function SheetDraftForm({
       const cols = list.columns.map((x) => (x.header && x.header !== x.label ? `${x.label} ← ${x.header}` : x.label)).join(', ');
       const order = [list.sortedBy ? `줄은 '${list.sortedBy}' 빠른 순으로 놓습니다.` : '', list.numbered ? '번호는 1부터 다시 매깁니다.' : ''].filter(Boolean).join(' ');
       const delta = list.rowDelta ? ` 표의 줄은 ${Math.abs(list.rowDelta)}줄 ${list.rowDelta > 0 ? '늘어납니다' : '줄어듭니다'}.` : '';
-      return preview(list, [
+      return preview(list, `엑셀의 ${list.rows}줄을 '${list.table}' 표에 채웠습니다.`, [
         `엑셀의 ${list.rows}줄을 '${list.table}' 표에 채웁니다.${delta} 표에 이미 쓴 내용은 엑셀 내용으로 바뀝니다(엑셀에 없는 열은 빈 칸).`,
         `맞춘 열: ${cols}`,
         ...(order ? [order] : []),
@@ -821,18 +835,37 @@ export function SheetDraftForm({
     if (!res.ok) return alert(res.error);
     if (!res.changed && !res.rowDelta) return alert(`엑셀 파일에 화면과 다른 값이 없습니다.${res.notes.length ? `\n\n받지 않은 것\n- ${res.notes.join('\n- ')}` : ''}`);
     const rows = res.rowDelta ? ` 표의 줄은 ${Math.abs(res.rowDelta)}줄 ${res.rowDelta > 0 ? '늘어납니다' : '줄어듭니다'}.` : '';
-    preview(res, [`[엑셀로 받기]로 받은 파일의 값을 칸 자리 그대로 채웁니다.${rows}`], res.notes);
+    preview(res, '엑셀 파일의 값을 채웠습니다.', [`[엑셀로 받기]로 받은 파일의 값을 칸 자리 그대로 채웁니다.${rows}`], res.notes);
 
-    /** 미리보기 창을 연다 — [적용]을 눌러야 문서에 들어간다 */
-    function preview(got: { extras: RowExtras; values: Record<string, string>; refs: Record<string, string>; base: Record<string, string>; baseRefs: Record<string, string> }, summary: string[], notes: string[]) {
-      setXlsxPreview({ fileName: file.name, tpl, extras: got.extras, shape: expandRepeats(tpl, got.extras), base: got.base, baseRefs: got.baseRefs, values: got.values, refs: got.refs, summary, notes });
+    /** 올린 값을 문서에 넣는다 — 미리보기를 켰으면(XLSX_PREVIEW_ENABLED) 창을 띄워 [적용]을 눌러야 들어간다 */
+    function preview(got: { extras: RowExtras; values: Record<string, string>; refs: Record<string, string>; base: Record<string, string>; baseRefs: Record<string, string> }, done: string, summary: string[], notes: string[]) {
+      const shape = expandRepeats(tpl, got.extras);
+      if (XLSX_PREVIEW_ENABLED) return setXlsxPreview({ fileName: file.name, tpl, extras: got.extras, shape, base: got.base, baseRefs: got.baseRefs, values: got.values, refs: got.refs, summary, notes });
+      setXlsxNotice({ fileName: file.name, done, notes });
+      fillXlsx({ shape, extras: got.extras, base: got.base }, got.values, got.refs);
     }
+  };
+  /** 엑셀 값을 문서에 넣고, 엑셀이 채운 표의 칸을 잠근다 */
+  const fillXlsx = (at: { shape: Sheet; extras: RowExtras; base: Record<string, string> }, vals: Record<string, string>, refMap: Record<string, string>) => {
+    // 파일을 읽는 동안 잠금이 바뀌었을 수 있다([엑셀 내용 지우기]) — 값과 같이 읽고 난 뒤의 것(latest)에 얹는다
+    const lock = xlsxLockAfterUpload({ shape: at.shape, base: at.base, values: vals, skipNames: xlsxSkip, prev: latest.current?.lock ?? xlsxLock });
+    emit(applyValues(at.shape, vals, { recalc: true }), at.extras, refMap, undefined, lock);
   };
   /** 미리보기에서 [적용] — 뺀 칸은 화면 값으로 되돌린 값이 온다 */
   const applyXlsx = (vals: Record<string, string>, refMap: Record<string, string>) => {
     if (!xlsxPreview) return;
     setXlsxPreview(null);
-    emit(applyValues(expandRepeats(xlsxPreview.tpl, xlsxPreview.extras), vals, { recalc: true }), xlsxPreview.extras, refMap);
+    fillXlsx(xlsxPreview, vals, refMap);
+  };
+  /** [엑셀 내용 지우기] — 엑셀로 채운 표를 비우고 다시 손으로 쓸 수 있게 */
+  const clearXlsx = (secs: { id: string; label: string }[]) => {
+    if (!tplSheet || !secs.length) return;
+    if (!confirm(`${secs.map((x) => `'${x.label}'`).join(', ')} 표의 내용을 모두 지우고 다시 직접 쓸 수 있게 합니다. 계속할까요?`)) return;
+    const tpl = tplSheet;
+    // 표를 하나씩 — 위 표의 줄 수가 줄면 아래 표의 자리가 바뀌므로 앞 결과에 이어서 지운다
+    const next = secs.reduce((acc, x) => clearXlsxSection(tpl, acc.extras, acc.values, acc.refs, acc.lock, x.id), { extras, values: readSheetValues(rawValues), refs, lock: xlsxLock });
+    setXlsxNotice(null);
+    emit(applyValues(expandRepeats(tplSheet, next.extras), next.values, { recalc: true }), next.extras, next.refs, undefined, next.lock);
   };
   const previewHiddenRows = (s: Sheet) => new Set([...conditionHiddenRows(s), ...(draftInfo?.completedDate ? [] : completedDateRows(s)), ...extrasHiddenRows(s, false)]);
 
@@ -856,6 +889,26 @@ export function SheetDraftForm({
           onApply={applyXlsx}
           onClose={() => setXlsxPreview(null)}
         />
+      )}
+      {xlsxNotice && !editing && (
+        <div className="mb-2 flex items-start gap-2 rounded border border-teal/40 bg-teal-soft/20 px-2.5 py-1.5 text-[11.5px] leading-relaxed text-[#333] print:hidden">
+          <div className="min-w-0 flex-1">
+            <div>
+              <span className="font-semibold">{xlsxNotice.done}</span> <span className="text-[#888]">{xlsxNotice.fileName}</span>
+            </div>
+            {hasXlsxLock && <div className="text-[#666]">엑셀로 채운 칸은 여기서 고칠 수 없습니다. 고치려면 엑셀 파일을 고쳐 다시 올리거나, [엑셀 내용 지우기]를 누르세요.</div>}
+            {xlsxNotice.notes.length > 0 && (
+              <ul className="mt-0.5 list-disc pl-4 text-amber-800">
+                {xlsxNotice.notes.map((n, i) => (
+                  <li key={i}>{n}</li>
+                ))}
+              </ul>
+            )}
+          </div>
+          <button type="button" onClick={() => setXlsxNotice(null)} className="shrink-0 rounded p-0.5 text-[#999] hover:bg-white hover:text-[#333]" title="닫기">
+            <X size={13} />
+          </button>
+        </div>
       )}
       {canImport && (
         // 다른 문서 값 가져오기 — 관련 문서로 고른 문서, 또는 검색해서 고른 문서의 같은 이름(칸 옆 글자) 칸 값을 복사(§11.4). 인쇄에는 안 나옴
@@ -926,16 +979,29 @@ export function SheetDraftForm({
                   if (file) void uploadDraftXlsx(file);
                 }}
               />
+              {/* 엑셀로 채운 표가 있을 때만 — 표 아래 띠의 단추와 같은 일(표가 길면 띠가 멀리 있어 여기에도 둔다) */}
+              {hasXlsxLock && (
+                <button
+                  type="button"
+                  onClick={() => clearXlsx(sections.filter((x) => xlsxLock[x.id]))}
+                  className="flex items-center gap-1 rounded border border-rose-200 bg-white px-2 py-0.5 font-semibold text-rose-500 hover:bg-rose-50"
+                  title="엑셀로 채운 표를 비우고 다시 직접 쓸 수 있게 합니다"
+                >
+                  <Trash2 className="h-3 w-3" />엑셀 내용 지우기
+                </button>
+              )}
             </>
           )}
           <button
             type="button"
+            // 엑셀로 채운 표가 있으면 막는다 — 표 모양을 고치는 화면에서는 잠근 칸도 고칠 수 있어서
+            disabled={hasXlsxLock}
             onClick={() => {
               setEditNotice('');
               setEditing({ start: sheet, sheet });
             }}
-            className={`${canXlsx ? '' : 'ml-auto '}flex items-center gap-1 rounded border border-border bg-white px-2 py-0.5 font-semibold text-ink2 hover:border-teal hover:text-teal`}
-            title="열·행 넣기·지우기, 병합, 수식 고치기 — 금액·연동 칸, 문서 정보, 결재란 등은 고칠 수 없습니다"
+            className={`${canXlsx ? '' : 'ml-auto '}flex items-center gap-1 rounded border border-border bg-white px-2 py-0.5 font-semibold text-ink2 hover:border-teal hover:text-teal disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-border disabled:hover:text-ink2`}
+            title={hasXlsxLock ? '엑셀로 채운 표가 있어 표 모양을 고칠 수 없습니다. 표 아래 [엑셀 내용 지우기]를 누른 뒤 고치세요' : '열·행 넣기·지우기, 병합, 수식 고치기 — 금액·연동 칸, 문서 정보, 결재란 등은 고칠 수 없습니다'}
           >
             <Table2 className="h-3 w-3" />표 모양 고치기
           </button>
@@ -1033,6 +1099,8 @@ export function SheetDraftForm({
             if (auto !== undefined) return auto;
             const input = draftInputOf(sheet, r, c);
             if (!input) return undefined;
+            // 엑셀로 채운 칸 — 글자로만(고치려면 엑셀을 고쳐 다시 올리거나 [엑셀 내용 지우기])
+            if (lockedCells.has(`${r}:${c}`)) return undefined;
             // 시스템이 채우는 칸 — 글자로만(휴일근로 출근·퇴근 시각·근무 시간은 근태 기록에서)
             const cellName = sheet.cellMeta[APPROVAL_NS.name]?.[cellKey(r, sheet.cols[c])];
             // 선택 창으로 고르는 칸(휴가원 사용기간·휴가 종류) — 누르면 창, 고른 값만 보인다
@@ -1069,6 +1137,22 @@ export function SheetDraftForm({
               <div className="flex items-center gap-1.5 border-x border-b border-dashed border-violet-300 bg-violet-50/60 px-2 py-1 text-[11px]">
                 <span className="font-semibold text-violet-700">{sec.label}</span>
                 <span className="text-[#888]">{sec.last - sec.first + 1}줄</span>
+                {xlsxLock[sec.id] ? (
+                  // 엑셀로 채운 표 — 줄을 더하거나 지우지 못한다
+                  <>
+                    <span className="text-[#888]">· 엑셀로 채운 표입니다(채운 칸은 고칠 수 없음)</span>
+                    <button
+                      type="button"
+                      onClick={() => clearXlsx([sec])}
+                      title="표를 비우고 다시 직접 쓸 수 있게 합니다"
+                      className="ml-auto flex items-center gap-0.5 rounded px-1.5 py-0.5 font-semibold text-rose-500 hover:bg-rose-50"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                      엑셀 내용 지우기
+                    </button>
+                  </>
+                ) : (
+                <>
                 <button
                   type="button"
                   onClick={() => changeRows(sec.id, true)}
@@ -1089,6 +1173,8 @@ export function SheetDraftForm({
                     행 삭제
                   </button>
                 )}
+                </>
+                )}
               </div>
             );
           }}
@@ -1096,7 +1182,7 @@ export function SheetDraftForm({
           rowClassName={(r) => (sections.some((x) => r >= x.first && r <= x.last) ? 'group/rep' : undefined)}
           rowEnd={(r) => {
             const sec = sections.find((x) => r >= x.first && r <= x.last);
-            if (!sec) return null;
+            if (!sec || xlsxLock[sec.id]) return null;
             const btn = 'flex h-3 w-3 items-center justify-center rounded-sm bg-white font-bold leading-none shadow-sm ring-1 ring-black/15';
             return (
               // 투명하게 늘 있다 — 줄이나 단추 자리에 마우스를 올리면 보인다(전엔 줄에서 마우스가 나가면 바로 사라져 누르기 어려웠다)

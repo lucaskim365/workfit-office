@@ -9,6 +9,12 @@ import { cellKey, type Sheet } from '@/lib/sheet/core';
 import { applyValues, type SheetValues } from './approvalSheet';
 import { fillable } from './draftExcel';
 
+/**
+ * 엑셀을 올리면 미리보기 창(XlsxUploadPreview — 바뀌는 칸을 색으로 보이고 칸을 골라 넣는 창)을 띄울지 — 지금은 끈다.
+ * 창에서 칸을 고르는 것이 쓰는 사람에게 어렵다는 의견으로, 올리면 바로 채운다. true 로 바꾸면 창이 다시 뜬다(코드는 그대로 있다)
+ */
+export const XLSX_PREVIEW_ENABLED: boolean = false;
+
 /** add: 빈 칸에 새로 들어감 / change: 있던 값이 바뀜 / clear: 있던 값이 지워짐 */
 export type XlsxChangeKind = 'add' | 'change' | 'clear';
 
