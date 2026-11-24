@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Sheet, SheetSelection } from '@/lib/sheet';
 import {
   APPROVAL_NS,
@@ -139,6 +139,42 @@ const KIND_GROUPS = PART_SECTIONS.map((s) => ({ title: s.title, parts: s.groups.
 const KIND_PARTS = new Map(KIND_GROUPS.flatMap((g) => g.parts).map((p) => [p.id, p]));
 const UNKNOWN_KIND = '__unknown__';
 
+/**
+ * 칸 속성 입력 상자의 쓰는 중 글자 — 입력 상자를 벗어날 때 '쓰기 시작한 칸'에 넣는다.
+ * 쓰다가 표의 다른 칸을 누르면 선택이 먼저 바뀌고 나서 입력 상자가 초점을 잃는다. 그때의 선택(새로 누른 칸)에 넣으면
+ * 엉뚱한 칸에 들어가므로, 쓰기 시작할 때의 선택을 기억해 두고 선택이 바뀌는 순간 그 칸에 넣는다
+ */
+function useCellDraft(saved: string, at: SheetSelection, commit: (text: string, at: SheetSelection) => void) {
+  const [value, setValue] = useState(saved);
+  const editing = useRef<{ at: SheetSelection; text: string } | null>(null);
+  const commitRef = useRef(commit);
+  commitRef.current = commit;
+  const atRef = useRef(at);
+  atRef.current = at;
+  const end = () => {
+    const e = editing.current;
+    editing.current = null;
+    if (e) commitRef.current(e.text, e.at);
+  };
+  // 다른 칸을 골랐으면 쓰던 글은 원래 칸에 넣고, 입력 상자는 새 칸의 값으로
+  useEffect(() => {
+    end();
+    setValue(saved);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [saved, at.focus.r, at.focus.c]);
+  return {
+    value,
+    begin: () => {
+      editing.current = { at: atRef.current, text: value };
+    },
+    set: (text: string) => {
+      setValue(text);
+      editing.current = { at: editing.current?.at ?? atRef.current, text };
+    },
+    end,
+  };
+}
+
 export function SheetCellPanel({
   sheet,
   selection,
@@ -186,19 +222,18 @@ export function SheetCellPanel({
     return c < 0 || (r === focus.r && c === focus.c) ? undefined : cellAddress(r, c);
   })();
 
-  // 선택 항목은 줄마다 하나 — 입력 중엔 글자 그대로 두고, 칸을 벗어날 때 넣는다
-  const optionsText = (props.input?.options ?? []).join('\n');
-  const [options, setOptions] = useState(optionsText);
-  useEffect(() => setOptions(optionsText), [optionsText, focus.r, focus.c]);
-
   // 여러 칸을 골랐어도 초점 칸과 종류가 같은 칸에만, 고친 속성만 넣는다 — 종류가 다른 칸의 종류·항목·종속이 지워지지 않게
-  const patchInputs = (patch: (input: CellInput) => CellInput, opts?: { skipDependent?: boolean }) =>
-    onChange(patchSameInputs(sheet, range, focus, patch, opts));
-  const commitOptions = () => {
-    if (!props.input) return;
-    const list = options.split('\n').map((o) => o.trim()).filter(Boolean);
-    patchInputs((input) => ({ ...input, options: list }), { skipDependent: true });
-  };
+  const patchInputs = (patch: (input: CellInput) => CellInput, opts?: { skipDependent?: boolean }, at: SheetSelection = selection) =>
+    onChange(patchSameInputs(sheet, at.range, at.focus, patch, opts));
+
+  // 선택 항목은 줄마다 하나 — 입력 중엔 글자 그대로 두고, 칸을 벗어날 때 넣는다(쓰기 시작한 칸에 — useCellDraft)
+  const optionsText = (props.input?.options ?? []).join('\n');
+  const options = useCellDraft(optionsText, selection, (text, at) => {
+    const input = approvalCellProps(sheet, at.focus.r, at.focus.c).input;
+    const list = text.split('\n').map((o) => o.trim()).filter(Boolean);
+    if (!input || list.join('\n') === (input.options ?? []).join('\n')) return;
+    patchInputs((x) => ({ ...x, options: list }), { skipDependent: true }, at);
+  });
 
   const hasOptions = props.input?.type === 'select' || props.input?.type === 'multiSelect';
 
@@ -207,21 +242,24 @@ export function SheetCellPanel({
   const isTitleCell = props.bind === 'doc.title';
   const canPlaceholder = isTitleCell || (!!props.input && PLACEHOLDER_INPUTS.has(props.input.type));
   const placeholderText = isTitleCell ? (titleHintOf(sheet, focus.r, focus.c) ?? '') : (props.input?.placeholder ?? '');
-  const [placeholder, setPlaceholder] = useState(placeholderText);
-  useEffect(() => setPlaceholder(placeholderText), [placeholderText, focus.r, focus.c]);
-  const commitPlaceholder = () => {
-    const p = placeholder.trim().slice(0, PLACEHOLDER_MAX);
-    if (isTitleCell) {
-      if (p !== placeholderText) onChange(setApprovalProp(sheet, { r1: focus.r, r2: focus.r, c1: focus.c, c2: focus.c }, APPROVAL_NS.titleHint, p));
+  const placeholder = useCellDraft(placeholderText, selection, (text, at) => {
+    const p = text.trim().slice(0, PLACEHOLDER_MAX);
+    const { r, c } = at.focus;
+    const cell = approvalCellProps(sheet, r, c);
+    if (cell.bind === 'doc.title') {
+      if (p !== (titleHintOf(sheet, r, c) ?? '')) onChange(setApprovalProp(sheet, { r1: r, r2: r, c1: c, c2: c }, APPROVAL_NS.titleHint, p));
       return;
     }
-    if (!props.input) return;
-    if (p === (props.input.placeholder ?? '')) return;
-    patchInputs((input) => {
-      const { placeholder: _old, ...rest } = input;
-      return p ? { ...rest, placeholder: p } : rest;
-    });
-  };
+    if (!cell.input || p === (cell.input.placeholder ?? '')) return;
+    patchInputs(
+      (input) => {
+        const { placeholder: _old, ...rest } = input;
+        return p ? { ...rest, placeholder: p } : rest;
+      },
+      undefined,
+      at
+    );
+  });
 
   // 칸 종류 — 입력 칸·자동 채우기·자동번호를 하나로(부품을 누르는 것과 같다)
   const kindValue = props.input
@@ -412,10 +450,11 @@ export function SheetCellPanel({
         <Row label="입력 예시" hint="기안자가 이 칸에 무엇을 어떻게 쓰면 되는지 알려 주는 글입니다. 비어 있는 칸 안에 흐리게 보이고, 쓰기 시작하면 사라집니다. 작성 화면에만 — 값으로 저장되지 않고 결재·인쇄엔 안 나옵니다.">
           <input
             className={inp}
-            value={placeholder}
+            value={placeholder.value}
             maxLength={PLACEHOLDER_MAX}
-            onChange={(e) => setPlaceholder(e.target.value)}
-            onBlur={commitPlaceholder}
+            onChange={(e) => placeholder.set(e.target.value)}
+            onFocus={placeholder.begin}
+            onBlur={placeholder.end}
             onKeyDown={(e) => e.key === 'Enter' && (e.currentTarget as HTMLInputElement).blur()}
             placeholder={isTitleCell ? '비워 두면 "문서 제목을 입력하세요 (필수)"' : '기안자에게 보일 예시나 쓰는 법'}
           />
@@ -423,7 +462,7 @@ export function SheetCellPanel({
       )}
       {hasOptions && !props.input?.depends && (
         <Row label="고를 항목" hint="한 줄에 하나씩 적습니다">
-          <textarea className={`${inp} min-h-[84px] resize-y`} value={options} onChange={(e) => setOptions(e.target.value)} onBlur={commitOptions} />
+          <textarea className={`${inp} min-h-[84px] resize-y`} value={options.value} onChange={(e) => options.set(e.target.value)} onFocus={options.begin} onBlur={options.end} />
         </Row>
       )}
       {/* 종속 칸 — 다른 화면으로 가지 않고 제자리에서 기준 칸 값마다 항목을 고친다(기준 칸 설정의 같은 입력과 같은 값) */}

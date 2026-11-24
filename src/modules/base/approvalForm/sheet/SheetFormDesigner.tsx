@@ -22,6 +22,7 @@ import { DEFAULT_COL_WIDTH, SheetEditor, createSheet, importXlsx, type CellRange
 import {
   SHEET_PAGE_WIDTH,
   approvalCellProps,
+  titleHintOf,
   bindLabel,
   mergeApprovalRange,
   mergeCoversLinks,
@@ -44,7 +45,7 @@ import {
 import { Help, SheetCellPanel } from './SheetCellPanel';
 import { requestSidebarCollapse } from '@/app/shell/collapseSidebar';
 import { PALETTE_HELP, PART_MIME, PartRemoveButton, SheetPalette, applyPart } from './SheetPalette';
-import { InputLook } from './InputLook';
+import { HINT_LOOK, InputLook } from './InputLook';
 import { SheetEditorTour } from './SheetEditorTour';
 import { SheetEditorGuide } from './SheetEditorGuide';
 import { healRepeatSections, repeatIssues, repeatSections } from '@/domain/approvalForm/sheet/repeatRows';
@@ -397,6 +398,11 @@ function Designer({
           className="pointer-events-none absolute inset-1 flex items-center justify-center rounded border-2 border-dashed border-indigo-300 bg-indigo-50/60 text-[11px] font-semibold text-indigo-500"
         >
           결재란 — 결재선에 따라 칸 수가 바뀝니다
+        </span>
+      ) : p.bind === 'doc.title' && emptyCell && titleHintOf(sheet, r, c) ? (
+        // 문서 제목 칸에 정한 입력 예시 — 기안 화면처럼 흐리게
+        <span aria-hidden title="입력 예시 — 기안 화면에서 빈 제목 칸에 흐리게 보입니다" className={HINT_LOOK}>
+          <span className="truncate">{titleHintOf(sheet, r, c)}</span>
         </span>
       ) : (p.bind?.startsWith('draft.') || p.bind?.startsWith('doc.')) && emptyCell ? (
         <span aria-hidden className="pointer-events-none absolute inset-0 flex items-center px-1.5 text-[11px] italic text-sky-600/70">

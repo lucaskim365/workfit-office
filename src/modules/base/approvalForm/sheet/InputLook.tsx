@@ -1,5 +1,5 @@
 import { Building2, Calendar, CheckSquare, ChevronDown, Square } from 'lucide-react';
-import type { CellInput } from '@/domain/approvalForm/sheet/approvalSheet';
+import { placeholderOf, type CellInput } from '@/domain/approvalForm/sheet/approvalSheet';
 
 /**
  * 서식 편집기 — 비어 있는 입력 칸 안에 기안 화면에서 뜰 입력 도구 모양을 흐리게 그린다.
@@ -79,8 +79,20 @@ function look(input: CellInput) {
   }
 }
 
-/** 글 입력 칸은 아무것도 안 그린다(빗금이 없으면 쓸 수 있는 칸) */
+/** 입력 예시 글자 모양 — 기안 화면의 흐린 예시와 같게(기울이지 않음). 문서 제목 칸의 예시도 이 모양 */
+export const HINT_LOOK = 'pointer-events-none absolute inset-0 flex items-center overflow-hidden px-1.5 text-[11px] text-[#b4b4b4]';
+
+/** 입력 예시를 정한 칸은 그 글을 기안 화면처럼 흐리게. 예시가 없는 글 입력 칸은 아무것도 안 그린다(빗금이 없으면 쓸 수 있는 칸) */
 export function InputLook({ input }: { input: CellInput }) {
+  const hint = placeholderOf(input);
+  if (hint) {
+    const numeric = input.type === 'number' || input.type === 'currency';
+    return (
+      <span aria-hidden title="입력 예시 — 기안 화면에서 빈 칸에 흐리게 보입니다" className={HINT_LOOK}>
+        <span className={`truncate ${numeric ? 'flex-1 pr-6 text-right' : ''}`}>{hint}</span>
+      </span>
+    );
+  }
   if (input.type === 'text') return null;
   return (
     <span
