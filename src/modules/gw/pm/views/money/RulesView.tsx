@@ -80,7 +80,7 @@ export function RulesView() {
                   <td className={`${td} whitespace-nowrap`}><Cell v={r.gov} /></td>
                   <td className={`${td} whitespace-nowrap`}><Cell v={r.do} /></td>
                   <td className={`${td} whitespace-nowrap`}><Cell v={r.si} /></td>
-                  <td className={td}>{r.etc ? <span className="whitespace-nowrap">{r.etc.name} <Cell v={r.etc} /></span> : <span className="text-ink3">-</span>}{r.capLocal != null && <div className="text-[11px] text-ink2">지자체 합계 최대 {wonText(r.capLocal)}</div>}</td>
+                  <td className={td}>{r.etc ? <span className="whitespace-nowrap">{r.etc.name} <Cell v={r.etc} /></span> : <span className="text-ink3">-</span>}{!!r.capLocal && <div className="text-[11px] text-ink2">지자체 합계 최대 {wonText(r.capLocal)}</div>}</td>
                   <td className={`${td} max-w-[260px] text-[11.5px]`}>{r.url ? <a href={r.url} target="_blank" rel="noopener noreferrer" className="text-blue hover:underline" onClick={(e) => e.stopPropagation()}>{r.src || '링크'}</a> : r.src}</td>
                   <td className={td}>{r.conf ? <Tag tone="ok">확인</Tag> : <Check />}</td>
                 </tr>
@@ -105,7 +105,8 @@ function CfgModal({ c, onSave, onClose }: { c: PmMoneyCfg; onSave: (c: PmMoneyCf
   const save = async () => {
     for (const k of ['cloudMonthly', 'cloudMonths', 'kosaMonthly'] as const) if (v[k].trim() === '' || !(+v[k] >= 0)) { setErr(['0 이상 숫자로 넣어 주세요', k]); return; }
     if (!(+v.workH >= 1)) { setErr(['월 근무시간은 1 이상으로 넣어 주세요', 'workH']); return; }
-    await onSave(pmMoneyCfgSchema.parse({ ...c, cloudMonthly: Math.round(+v.cloudMonthly), cloudMonths: Math.round(+v.cloudMonths), kosaName: v.kosaName.trim(), kosaMonthly: Math.round(+v.kosaMonthly), workH: +v.workH, revBasis: v.revBasis, laborOn: v.laborOn }));
+    setErr(null);
+    try { await onSave(pmMoneyCfgSchema.parse({ ...c, cloudMonthly: Math.round(+v.cloudMonthly), cloudMonths: Math.round(+v.cloudMonths), kosaName: v.kosaName.trim(), kosaMonthly: Math.round(+v.kosaMonthly), workH: +v.workH, revBasis: v.revBasis, laborOn: v.laborOn })); } catch (e) { setErr([(e as Error).message || '저장하지 못했습니다', '']); }
   };
   const bad = (f: string) => err?.[1] === f;
   return (
@@ -132,10 +133,14 @@ function RuleModal({ r, year, onSave, onRemove, onClose }: { r: PmFundRule | nul
   const save = async () => {
     const e = ruleCheck(v);
     if (e) { setErr(e); return; }
-    await onSave(ruleFromDraft(v, r?.id ?? ''));
+    setErr(null);
+    try { await onSave(ruleFromDraft(v, r?.id ?? '')); } catch (x) { setErr([(x as Error).message || '저장하지 못했습니다', '']); }
   };
   // 이 기준을 쓰는 사업을 묻는 확인은 사업 재원(6-6)이 생기면 더함 — 지금은 쓰는 사업이 없음
-  const del = async () => { if (r && confirm(`'${r.biz}' 지원 기준을 지울까요?`)) await onRemove(r.id); };
+  const del = async () => {
+    if (!r || !confirm(`'${r.biz}' 지원 기준을 지울까요?`)) return;
+    try { await onRemove(r.id); } catch (x) { setErr([(x as Error).message || '지우지 못했습니다', '']); }
+  };
   const bad = (f: string) => err?.[1] === f;
   const num = (k: keyof RuleDraft, label: string, max?: number) => (
     <F label={label} bad={bad(k)}><input type="number" min={0} max={max} className={inp} value={v[k] as string} onChange={(e) => set(k, e.target.value)} /></F>

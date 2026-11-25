@@ -106,7 +106,7 @@ export function ruleDraft(r: PmFundRule | null, year: number): RuleDraft {
   return {
     year: String(r ? r.year : year), region: r?.region ?? '', sigungu: r?.sigungu ?? '', biz: r?.biz ?? '',
     govR: s(r?.gov?.rate), govC: man(r?.gov?.cap), doR: s(r?.do?.rate), doC: man(r?.do?.cap), siR: s(r?.si?.rate), siC: man(r?.si?.cap),
-    capLocal: man(r?.capLocal), etcN: r?.etc?.name ?? '', etcR: s(r?.etc?.rate), etcC: man(r?.etc?.cap),
+    capLocal: r?.capLocal ? man(r.capLocal) : '', etcN: r?.etc?.name ?? '', etcR: s(r?.etc?.rate), etcC: man(r?.etc?.cap),
     src: r?.src ?? '', url: r?.url ?? '', conf: !!r?.conf,
   };
 }
@@ -119,12 +119,12 @@ export function ruleCheck(v: RuleDraft): [string, keyof RuleDraft] | null {
   for (const k of ['govC', 'doC', 'siC', 'etcC', 'capLocal'] as const) if (v[k].trim() && !(+v[k] >= 0)) return ['상한은 0 이상 숫자로 넣어 주세요', k];
   return null;
 }
-/** 창 값 → 기준 (데모 onSubmit: 비율 · 상한이 둘 다 비면 그 재원 없음, 기타는 이름이 있어야) */
+/** 창 값 → 기준 (데모 onSubmit: 비율 · 상한이 둘 다 비면 그 재원 없음, 기타는 이름이 있어야). 새로 만들 때 id = '' → 저장소가 붙임 */
 export function ruleFromDraft(v: RuleDraft, id: string): PmFundRule {
   const num = (x: string) => (x.trim() === '' ? null : +x);
   const won = (x: string) => (x.trim() === '' ? null : Math.round(+x * 10000));
   const pair = (r: string, c: string): FundPair | null => (r.trim() === '' && c.trim() === '' ? null : { rate: num(r), cap: won(c) });
-  return pmFundRuleSchema.parse({
+  return pmFundRuleSchema.extend({ id: z.string() }).parse({
     id, year: +v.year, region: v.region.trim(), sigungu: v.sigungu.trim(), biz: v.biz.trim(),
     gov: pair(v.govR, v.govC), do: pair(v.doR, v.doC), si: pair(v.siR, v.siC),
     etc: v.etcN.trim() ? { name: v.etcN.trim(), rate: num(v.etcR), cap: won(v.etcC) } : null,
@@ -226,9 +226,9 @@ export function itemCheck(v: ItemDraft): [string, keyof ItemDraft] | null {
   if (v.cost.trim() !== '' && !(+v.cost >= 0)) return ['매입단가는 0 이상 숫자로 넣어 주세요', 'cost'];
   return null;
 }
-/** 창 값 → 품목 (데모 onSubmit — 묶음 · 지난 견적은 그대로 둠) */
+/** 창 값 → 품목 (데모 onSubmit — 묶음 · 지난 견적은 그대로 둠). 새로 만들 때 id = '' → 저장소가 붙임 */
 export function itemFromDraft(v: ItemDraft, base: PmItem | null, id: string): PmItem {
-  return pmItemSchema.parse({
+  return pmItemSchema.extend({ id: z.string() }).parse({
     ...(base ?? { grp: '', hist: [] }), id,
     name: v.name.trim(), sec: v.sec, kind: v.kind, cat: v.cat, unit: v.unit.trim(), price: Math.round(+v.price || 0),
     cost: v.cost.trim() === '' ? null : Math.round(+v.cost), vendor: v.vendor.trim(), pass: v.pass, vary: v.vary, desc: v.desc, note: v.note.trim(),

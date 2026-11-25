@@ -100,9 +100,13 @@ function ItemModal({ it, onSave, onRemove, onClose }: { it: PmItem | null; onSav
   const save = async () => {
     const e = itemCheck(v);
     if (e) { setErr(e); return; }
-    await onSave(itemFromDraft(v, it, it?.id ?? ''));
+    setErr(null);
+    try { await onSave(itemFromDraft(v, it, it?.id ?? '')); } catch (x) { setErr([(x as Error).message || '저장하지 못했습니다', '']); }
   };
-  const del = async () => { if (it && confirm(`'${it.name}' 품목을 목록에서 지울까요? 이미 만든 견적은 그대로입니다.`)) await onRemove(it); };
+  const del = async () => {
+    if (!it || !confirm(`'${it.name}' 품목을 목록에서 지울까요? 이미 만든 견적은 그대로입니다.`)) return;
+    try { await onRemove(it); } catch (x) { setErr([(x as Error).message || '지우지 못했습니다', '']); }
+  };
   const bad = (f: string) => err?.[1] === f;
   const h = it?.hist ?? [];
   return (

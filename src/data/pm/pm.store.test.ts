@@ -3,6 +3,7 @@ import test from 'node:test';
 import { liveOf } from '@/domain/pm/rules';
 import { makeSubTicket, makeTaskTicket, taskTicketIndex } from '@/domain/pm/ticket';
 import { createPmStore } from './pm.store';
+import { itemCheck, itemDraft, itemFromDraft, ruleCheck, ruleDraft, ruleFromDraft } from '@/domain/pm/money';
 
 /** 2단계 저장소 — 티켓 번호·발행 잠금·세부 작업 연동·업무 수정 반영 (메모리, 사람은 가짜 ID u1·u3) */
 const TODAY = '2026-11-25';
@@ -326,4 +327,27 @@ test('6-4 저장: 단가 · 계산 기준 · 지원 기준 추가/수정/삭제 
   assert.ok(snap.items.some((x) => x.id === it.id && x.name === '테스트 품목'));
   assert.equal(snap.items[1].price, 1);
   assert.ok(!snap.items.some((x) => x.id === 'P89'));
+});
+
+test('6-4 검수: 창에서 새로 추가 (id 없음) → 저장소가 id 를 붙여 저장 · 다시 고치기 · 지우기', async () => {
+  const s = createPmStore(TODAY);
+  const rd = { ...ruleDraft(null, 2026), region: '경남', biz: '새 기준', doR: '30', doC: '3600', capLocal: '0' };
+  assert.equal(ruleCheck(rd), null);
+  const r = await s.saveFundRule(ruleFromDraft(rd, ''));
+  assert.match(r.id, /^F/);
+  assert.deepEqual([r.do, r.capLocal], [{ rate: 30, cap: 36_000_000 }, 0]);
+  assert.equal(ruleDraft(r, 2026).capLocal, '', '합계 상한 0 = 빈칸 (데모 r.capLocal||\'\')');
+  await s.saveFundRule(ruleFromDraft({ ...ruleDraft(r, 2026), biz: '새 기준 (고침)' }, r.id));
+  const id0 = { ...itemDraft(null), name: '산업용 태블릿', price: '1500000' };
+  assert.equal(itemCheck(id0), null);
+  const it = await s.saveItem(itemFromDraft(id0, null, ''));
+  assert.match(it.id, /^P/);
+  await s.saveItem(itemFromDraft({ ...itemDraft(it), cost: '1000000' }, it, it.id));
+  let snap = await s.snapshot();
+  assert.deepEqual([snap.fundRules.length, snap.fundRules.find((x) => x.id === r.id)?.biz], [14, '새 기준 (고침)']);
+  assert.deepEqual([snap.items.length, snap.items.find((x) => x.id === it.id)?.cost], [90, 1000000]);
+  await s.removeFundRule(r.id);
+  await s.removeItem(it.id);
+  snap = await s.snapshot();
+  assert.deepEqual([snap.fundRules.length, snap.items.length], [13, 89]);
 });
