@@ -4,6 +4,7 @@ import type {
   PmProject, PmSubtask, PmTask, PmTaskDone, PmTaskFunctions,
 } from '@/domain/pm/schema';
 import type { PmPlan } from '@/domain/pm/site';
+import { LOAD_MAX_DEFAULT } from '@/domain/pm/team';
 import { SEED_BASE_DATE, SEED_VERSION, seedFunctions, seedPlanFunctions, seedPlans, seedProjects, seedSubtasks, seedTasks } from './seed';
 import { moveTicket, nextTicketNo, syncTicketWithTask, tkOpen, type PmTicket } from '@/domain/pm/ticket';
 
@@ -41,6 +42,9 @@ export interface PmSnapshot {
   /** 이슈·액션 — 화면은 5단계, 지금은 대시보드가 세기만 (0건) */
   issues: PmIssue[];
   actions: PmAction[];
+  // ── 3-4 (팀 현황) ──
+  /** 화면 설정 (데모 S.loadMax — 모두가 같이 보는 값) */
+  settings: { loadMax: number };
 }
 
 const clone = <T>(v: T): T => structuredClone(v);
@@ -84,6 +88,7 @@ export function createPmStore(today = todayStr()) {
   const state: PmSnapshot = { projects, tasks, functions, subtasks, baselines, logs: [], done: [], tickets: [], sourceVersion: SEED_VERSION,
     baseDate: SEED_BASE_DATE, plans: seedPlans(), planFunctions: seedPlanFunctions(),
     gov: [], planChecks: [], govLinks: [], agreements: [], msOk: [], issues: [], actions: [],
+    settings: { loadMax: LOAD_MAX_DEFAULT },
   };
 
   const log = (projectId: string, code: string, kind: PmChangeLog['kind'], text: string, by: string, day: string) => {
@@ -347,6 +352,11 @@ export function createPmStore(today = todayStr()) {
       p.bidRes = v;
       p.bidAt = v ? { date: day, by } : null;
       log(projectId, '-', '수정', v ? `선정 결과 '${v}' 기록` : `선정 결과 지움 (이전: ${old})`, by, day);
+    },
+
+    /** 몰림 기준 주당 마감 (loadMax 6008: 1 이상, 잘못 넣으면 8) */
+    async setLoadMax(v: number) {
+      state.settings.loadMax = Math.max(1, Math.round(+v) || LOAD_MAX_DEFAULT);
     },
 
     /** 기준선 재설정 (baseSet) */

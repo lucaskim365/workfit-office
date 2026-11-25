@@ -20,7 +20,7 @@ export function usePmPeople() {
     () =>
       (q.data ?? [])
         .filter((u) => u.status !== '미사용')
-        .map((u) => ({ id: u.id, name: u.name, label: u.position ? `${u.name} ${u.position}` : u.name, dept: (u as { deptName?: string }).deptName ?? '' }))
+        .map((u) => ({ id: u.id, name: u.name, label: u.position ? `${u.name} ${u.position}` : u.name, dept: u.dept ?? '' }))
         .sort((a, b) => a.name.localeCompare(b.name, 'ko')),
     [q.data],
   );

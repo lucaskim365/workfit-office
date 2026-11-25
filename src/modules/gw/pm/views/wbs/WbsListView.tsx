@@ -51,6 +51,8 @@ export function WbsListView() {
     const next = new URLSearchParams(params);
     next.delete('stage');
     next.delete('period');
+    next.delete('who');
+    next.delete('st');
     if (v === 'all') next.delete('k');
     else next.set('k', v);
     setParams(next);
@@ -61,12 +63,21 @@ export function WbsListView() {
   // 티켓 목록의 [발행 추천 고르기] → ?period=rec 로 발행 추천 탭 (한 번만 읽음)
   const per = params.get('period');
   const initPeriod = PM_PERIOD_TABS.some(([p]) => p === per) ? (per as PmPeriod) : null;
-  return <WbsList key={k + (params.get('stage') ?? '') + (per ?? '')} d={d} k={k} setK={setK} people={people} initStage={params.get('stage') ?? 'all'} initPeriod={initPeriod} />;
+  // 팀 현황에서 사람을 눌러 오면 ?who=사용자 ID · ?st=완료 (한 번만 읽음, 데모 wbsGoto who·st)
+  const who = params.get('who') ?? '';
+  const st = params.get('st');
+  const init: Partial<PmFilter> = {
+    stage: params.get('stage') ?? 'all',
+    ...(initPeriod ? { period: initPeriod } : {}),
+    ...(who ? { who } : {}),
+    ...(st === '완료' || st === 'all' ? { st } : {}),
+  };
+  return <WbsList key={k + (params.get('stage') ?? '') + (per ?? '') + who + (st ?? '')} d={d} k={k} setK={setK} people={people} init={init} initPeriod={initPeriod || (who ? 'all' : null)} />;
 }
 
 type People = ReturnType<typeof usePmPeople>;
 
-function WbsList({ d, k, setK, people, initStage, initPeriod }: { d: PmDerived; k: string; setK: (v: string) => void; people: People; initStage: string; initPeriod: PmPeriod | null }) {
+function WbsList({ d, k, setK, people, init, initPeriod }: { d: PmDerived; k: string; setK: (v: string) => void; people: People; init: Partial<PmFilter>; initPeriod: PmPeriod | null }) {
   const { snap, today, liveMap, ctx } = d;
   const mut = usePmMutations(people.me, people.nameOf);
   const projects = snap.projects;
@@ -74,7 +85,7 @@ function WbsList({ d, k, setK, people, initStage, initPeriod }: { d: PmDerived; 
   const projOf = (id: string) => projects.find((p) => p.id === id);
   const shortOf = (id: string) => { const p = projOf(id); return p ? nameP(p) : id; };
 
-  const [f, setF] = useState<PmFilter>({ ...PM_FILTER_DEFAULT, stage: initStage, ...(initPeriod ? { period: initPeriod } : {}) });
+  const [f, setF] = useState<PmFilter>({ ...PM_FILTER_DEFAULT, ...init });
   const filter: PmFilter = { ...f, projectId: k, mine: f.mine ? people.me : '' };
   const [home, setHome] = useState(!initPeriod);
   const [board, setBoard] = useState(false);

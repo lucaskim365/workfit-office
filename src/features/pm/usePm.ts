@@ -144,5 +144,7 @@ export function usePmSiteMutations(me: string) {
     setGovLink: m(({ projectId, itemId, taskIds }: { projectId: string; itemId: string; taskIds: string[] | null }) => s.setGovLink(projectId, itemId, taskIds)),
     setTaskDates: m(({ items, note }: { items: Array<{ id: string; start: string; end: string }>; note: string }) => s.setTaskDates(items, note, me)),
     setBidResult: m(({ projectId, v }: { projectId: string; v: '' | '선정' | '탈락' }) => s.setBidResult(projectId, v, me)),
+    // 팀 현황 (3-4)
+    setLoadMax: m((v: number) => s.setLoadMax(v)),
   };
 }
