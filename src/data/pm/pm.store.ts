@@ -1,12 +1,13 @@
 import { applyProgress, makeBaseline, todayStr } from '@/domain/pm/rules';
 import type {
-  PmAction, PmAgreementChange, PmBaseline, PmChangeLog, PmGovLink, PmGovRecord, PmIssue, PmMilestoneOk, PmPlanCheck,
-  PmProject, PmSubtask, PmTask, PmTaskDone, PmTaskFunctions,
+  PmAction, PmAgreementChange, PmBaseline, PmChangeLog, PmGovLink, PmGovRecord, PmIssue, PmLater, PmMilestoneOk, PmPlanCheck,
+  PmProject, PmSubtask, PmTask, PmTaskDone, PmTaskFunctions, PmUpdRequest, PmWeekCheck,
 } from '@/domain/pm/schema';
 import type { PmPlan } from '@/domain/pm/site';
 import { LOAD_MAX_DEFAULT } from '@/domain/pm/team';
 import { SEED_BASE_DATE, SEED_VERSION, seedFunctions, seedPlanFunctions, seedPlans, seedProjects, seedSubtasks, seedTasks } from './seed';
-import { moveTicket, nextTicketNo, syncTicketWithTask, tkOpen, type PmTicket } from '@/domain/pm/ticket';
+import { moveTicket, nextTicketNo, setTicketProg, syncTicketWithTask, tkOpen, type PmTicket } from '@/domain/pm/ticket';
+import { weekStart } from '@/domain/pm/site';
 
 /**
  * PM 저장소 — 1단계는 **메모리 전용** (§5.1: `pm*` 컬렉션이 아직 없어 `VITE_DB_DRIVER=appwrite` 여도 메모리).
@@ -45,6 +46,13 @@ export interface PmSnapshot {
   // ── 3-4 (팀 현황) ──
   /** 화면 설정 (데모 S.loadMax — 모두가 같이 보는 값) */
   settings: { loadMax: number };
+  // ── 3-5 (내 업무) ──
+  /** 진행률 '변동 없음' 확인 (주마다) */
+  weekChecks: PmWeekCheck[];
+  /** 나중에 할 일 (사람마다) */
+  later: PmLater[];
+  /** 진행률 갱신 요청 (보내는 화면은 5단계 주간 진행률) */
+  updReq: PmUpdRequest[];
 }
 
 const clone = <T>(v: T): T => structuredClone(v);
@@ -89,6 +97,7 @@ export function createPmStore(today = todayStr()) {
     baseDate: SEED_BASE_DATE, plans: seedPlans(), planFunctions: seedPlanFunctions(),
     gov: [], planChecks: [], govLinks: [], agreements: [], msOk: [], issues: [], actions: [],
     settings: { loadMax: LOAD_MAX_DEFAULT },
+    weekChecks: [], later: [], updReq: [],
   };
 
   const log = (projectId: string, code: string, kind: PmChangeLog['kind'], text: string, by: string, day: string) => {
@@ -191,6 +200,43 @@ export function createPmStore(today = todayStr()) {
       if (r.done === 'remove') state.done = state.done.filter((d) => d.id !== id);
       else if (r.done) state.done = [...state.done.filter((d) => d.id !== id), r.done];
       log(t.projectId, t.code, '수정', `${r.log} (${why})`, by, day);
+      // 진행 중인 업무 티켓도 같은 진행률로 (quickAp 2289: tk.prog = ap)
+      const k = state.tickets.findIndex((x) => x.taskId === id && !x.subtaskId && !x.legacyKey && tkOpen(x));
+      if (k >= 0 && state.tickets[k].prog !== r.pct) state.tickets[k] = setTicketProg(state.tickets[k], r.pct, by, day);
+    },
+
+    // ── 내 업무 (3-5) ──────────────────────────────────
+    /** 나중에 할 일로 내리기 · 지금 할 일로 올리기 (setLater) */
+    async setLater(who: string, taskId: string, on: boolean) {
+      const cur = state.later.find((x) => x.id === who);
+      const ids = (cur?.taskIds ?? []).filter((x) => x !== taskId);
+      if (on) ids.push(taskId);
+      state.later = [...state.later.filter((x) => x.id !== who), { id: who, taskIds: ids }];
+    },
+    /** 진행률 '변동 없음' — 이번 주에 갱신한 것으로 침 (wcMark) */
+    async markNoChange(taskIds: readonly string[], by: string, day = todayStr()) {
+      const week = weekStart(day);
+      for (const taskId of taskIds) {
+        const t = state.tasks.find((x) => x.id === taskId);
+        if (!t) continue;
+        const id = `${week}|${taskId}`;
+        state.weekChecks = [...state.weekChecks.filter((x) => x.id !== id), { id, projectId: t.projectId, taskId, week, date: day, by }];
+      }
+    },
+    /** 마일스톤 승인 (msApprove) — 변경 이력 "마일스톤 승인 — 이름" */
+    async approveMilestone(taskId: string, by: string, byName: string, day = todayStr()) {
+      const t = state.tasks.find((x) => x.id === taskId);
+      if (!t) throw new Error('업무를 찾을 수 없습니다');
+      state.msOk = [...state.msOk.filter((x) => x.id !== taskId), { id: taskId, date: day, by }];
+      log(t.projectId, t.code, '수정', `마일스톤 승인 — ${byName}`, by, day);
+    },
+    /** 액션 아이템 완료 · 다시 열기 (actDone) */
+    async setActionDone(id: string, done: boolean, by: string, day = todayStr()) {
+      const a = state.actions.find((x) => x.id === id);
+      if (!a) throw new Error('액션 아이템을 찾을 수 없습니다');
+      a.done = done;
+      a.doneDate = done ? day : '';
+      a.doneBy = done ? by : '';
     },
 
     async addSubtask(taskId: string, text: string, assigneeId: string, due: string, by: string, day = todayStr()): Promise<PmSubtask> {

@@ -146,5 +146,10 @@ export function usePmSiteMutations(me: string) {
     setBidResult: m(({ projectId, v }: { projectId: string; v: '' | '선정' | '탈락' }) => s.setBidResult(projectId, v, me)),
     // 팀 현황 (3-4)
     setLoadMax: m((v: number) => s.setLoadMax(v)),
+    // 내 업무 (3-5)
+    setLater: m(({ taskId, on }: { taskId: string; on: boolean }) => s.setLater(me, taskId, on)),
+    markNoChange: m((taskIds: string[]) => s.markNoChange(taskIds, me)),
+    approveMilestone: m(({ taskId, byName }: { taskId: string; byName: string }) => s.approveMilestone(taskId, me, byName)),
+    setActionDone: m(({ id, done }: { id: string; done: boolean }) => s.setActionDone(id, done, me)),
   };
 }

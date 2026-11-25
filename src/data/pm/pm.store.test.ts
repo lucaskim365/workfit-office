@@ -85,3 +85,24 @@ test('사업별 화면 저장: 점검 보완 → 후속 기한 · 지적 사항,
   snap = await s.snapshot();
   assert.deepEqual(snap.govLinks.map((x) => x.id), ['P2|g_mid']);
 });
+
+test('내 업무(3-5): 진행률 기록이 진행 중 티켓에도 · 나중에 할 일 · 변동 없음 · 마일스톤 승인', async () => {
+  const { s, t, ctx } = await setup();
+  await s.issueTickets([makeTaskTicket('P0-0000', { task: t, assigneeId: 'u1', prio: '보통', due: '2026-12-01' }, { reviewerId: '', approverId: '', memo: '' }, ctx)]);
+  await s.setProgress(t.id, 40, '내 업무에서 기록', 'u1', TODAY);
+  let snap = await s.snapshot();
+  assert.equal(snap.tickets[0].prog, 40, '티켓 진행률도 40 (quickAp)');
+  assert.equal(liveOf(snap.tasks.find((x) => x.id === t.id)!, snap.tickets[0]).pct, 40);
+  await s.setLater('u1', t.id, true);
+  await s.setLater('u1', t.id, true);
+  snap = await s.snapshot();
+  assert.deepEqual(snap.later, [{ id: 'u1', taskIds: [t.id] }]);
+  await s.setLater('u1', t.id, false);
+  await s.markNoChange([t.id, t.id], 'u1', TODAY);
+  await s.approveMilestone(t.id, 'u3', 'u3 부장', TODAY);
+  snap = await s.snapshot();
+  assert.deepEqual(snap.later[0].taskIds, []);
+  assert.deepEqual(snap.weekChecks.map((x) => x.id), [`2026-11-23|${t.id}`]);
+  assert.equal(snap.msOk[0].id, t.id);
+  assert.match(snap.logs.at(-1)!.text, /마일스톤 승인 — u3 부장/);
+});

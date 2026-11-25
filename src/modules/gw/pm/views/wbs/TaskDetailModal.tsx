@@ -5,7 +5,7 @@ import { doneInfoOf, isDone, isLate, leftText, liveOf, monthDay, undoPct } from 
 import type { PmSubtask, PmTask } from '@/domain/pm/schema';
 import type { PmDerived, usePmMutations } from '@/features/pm/usePm';
 import type { usePmPeople } from '../../usePmPeople';
-import { makeSubTicket, subTicketOf } from '@/domain/pm/ticket';
+import { makeSubTicket, subTicketOf, tkOpen } from '@/domain/pm/ticket';
 import { StatusTag } from '../ticket/parts';
 import { ProjectTag, Tag } from './parts';
 
@@ -71,7 +71,7 @@ export function TaskDetailModal({ id, d, people, mut, shortOf, onClose, onEdit, 
           <Button onClick={onEdit}>✏ 수정</Button>
           <span className="flex-1" />
           <Button onClick={onClose}>닫기</Button>
-          {!done && <Button variant="accent" onClick={complete} title="세부 작업 하나가 아니라 이 업무 전체가 끝났을 때 누르세요 — 실적 100% · 완료로 바뀝니다">✓ TASK 전체 완료</Button>}
+          {!done && !(tk && tkOpen(tk)) && <Button variant="accent" onClick={complete} title="세부 작업 하나가 아니라 이 업무 전체가 끝났을 때 누르세요 — 실적 100% · 완료로 바뀝니다">✓ TASK 전체 완료</Button>}
           {tk
             ? <Button variant="primary" onClick={() => onOpenTicket(tk.no)}>티켓 {tk.no} 열기</Button>
             : !done && <Button variant="primary" onClick={() => onIssue(t.id)}>🎫 티켓 발행</Button>}

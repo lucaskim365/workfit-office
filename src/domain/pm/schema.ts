@@ -171,8 +171,31 @@ export const pmActionSchema = z.object({
   whoId: z.string().default(''),
   due: day.default(''),
   done: z.boolean().default(false),
+  /** 완료한 날 · 사람 (actDone — 내 업무 '처리할 일'에서 체크) */
+  doneDate: day.default(''),
+  doneBy: z.string().default(''),
 });
 export type PmAction = z.infer<typeof pmActionSchema>;
+
+/** 진행률 '변동 없음' 확인 (`pmWeekChecks`, 데모 S.wcChk) — 그 주에 갱신한 것으로 침. id = `${주 시작일}|${taskId}` */
+export const pmWeekCheckSchema = z.object({
+  id: z.string().min(1),
+  projectId: z.string().min(1),
+  taskId: z.string().min(1),
+  /** 주 시작일 (월요일) */
+  week: day,
+  date: day,
+  by: z.string().default(''),
+});
+export type PmWeekCheck = z.infer<typeof pmWeekCheckSchema>;
+
+/** 나중에 할 일 (`pmLater`, 데모 S.later) — 사람마다 직접 내려 둔 업무. id = 사용자 ID */
+export const pmLaterSchema = z.object({ id: z.string().min(1), taskIds: z.array(z.string()).default([]) });
+export type PmLater = z.infer<typeof pmLaterSchema>;
+
+/** 진행률 갱신 요청 (데모 S.updReq) — PM 이 주간 진행률 화면(5단계)에서 보냄. id = 받는 사람 ID */
+export const pmUpdRequestSchema = z.object({ id: z.string().min(1), date: day, by: z.string().default(''), projectId: z.string().default('') });
+export type PmUpdRequest = z.infer<typeof pmUpdRequestSchema>;
 
 /** 업무 (`pmTasks`) — 데모 `WF` 19칸. 업무 목록 양식은 미확정이라 필수 칸을 최소로 (§3.2) */
 export const pmTaskSchema = z.object({

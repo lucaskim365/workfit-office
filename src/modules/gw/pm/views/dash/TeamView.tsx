@@ -86,6 +86,8 @@ export function TeamTodayView() {
   const nLate = rows.filter((r) => r.late).length;
   const nStale = rows.filter((r) => r.stale).length;
   const deptOf = (id: string) => people.people.find((p) => p.id === id)?.dept ?? '';
+  /** 그 사람이 '나중에'로 내린 업무 수 (pTeam later) */
+  const laterN = (id: string, ts: readonly { id: string }[]) => { const s = new Set(d.snap.later.find((x) => x.id === id)?.taskIds ?? []); return ts.filter((t) => s.has(t.id)).length; };
 
   const num = (v: number, label: string, tone: string, tab: PersonTab, who: string) => (
     <button type="button" onClick={() => B.openPerson(who, k, tab)} title={`눌러서 ${label} 업무 보기`}
@@ -146,7 +148,7 @@ export function TeamTodayView() {
                 </div>
                 <div className="flex items-center gap-1.5 border-t border-border px-3.5 py-2">
                   <span className="flex min-w-0 flex-1 flex-wrap gap-1">{r.ks.map((x) => <ProjectTag key={x}>{shortOf(x)}</ProjectTag>)}</span>
-                  <Button size="sm" variant="secondary" onClick={() => B.openPerson(r.id, k, 'all')}>업무 {r.ts.length} →</Button>
+                  <Button size="sm" variant="secondary" onClick={() => B.openPerson(r.id, k, 'all')}>업무 {r.ts.length}{laterN(r.id, r.ts) ? ` · 나중에 ${laterN(r.id, r.ts)}` : ''} →</Button>
                 </div>
               </div>
             );
