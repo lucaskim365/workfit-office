@@ -5,7 +5,7 @@ import { isDone, liveOf, monthDay, shortName, varianceOf, type VarKind } from '@
 import { usePmDerived, usePmMutations } from '@/features/pm/usePm';
 import { usePmPeople } from '../../usePmPeople';
 import { EmptyHint, ProjectTag, Tag } from './parts';
-import { TaskDetailModal } from './TaskDetailModal';
+import { usePmModals } from '../ticket/usePmModals';
 
 /**
  * 일정 변동 (varView 5614): 사업 칩 → 사업별 요약(늦춰짐·당겨짐·추가·삭제, 마지막 업무 종료 변화, 기준선 재설정)
@@ -24,7 +24,7 @@ export function VarianceView() {
   const [vk, setVk] = useState('all');
   const [tab, setTab] = useState<'all' | VarKind>('all');
   const [pg, setPg] = useState(1);
-  const [openId, setOpenId] = useState<string | null>(null);
+  const M = usePmModals({ d, people, mut, shortOf: (id) => { const p = d?.snap.projects.find((x) => x.id === id); return p ? shortName(p, d!.snap.projects) : id; } });
   const [baseFor, setBaseFor] = useState<string | null>(null);
   const [baseLabel, setBaseLabel] = useState('');
   if (!d) return <EmptyHint title="불러오는 중입니다" />;
@@ -102,7 +102,7 @@ export function VarianceView() {
             <thead><tr className="bg-panel-alt"><th className={th}>변경</th><th className={th}>사업 · 번호</th><th className={th}>업무</th><th className={th}>기준선 종료</th><th className={th}>현재 종료</th><th className={`${th} text-right`}>차이</th></tr></thead>
             <tbody>
               {shown.map((r, i) => (
-                <tr key={`${r.kind}${r.taskId ?? r.code}${i}`} className={`border-t border-border ${r.taskId ? 'cursor-pointer hover:bg-panel-alt' : ''}`} onClick={() => r.taskId && setOpenId(r.taskId)}>
+                <tr key={`${r.kind}${r.taskId ?? r.code}${i}`} className={`border-t border-border ${r.taskId ? 'cursor-pointer hover:bg-panel-alt' : ''}`} onClick={() => r.taskId && M.openTask(r.taskId)}>
                   <td className={td}><Tag tone={KIND[r.kind][0]}>{KIND[r.kind][1]}</Tag></td>
                   <td className={`${td} whitespace-nowrap`}><ProjectTag>{nameOf(r.projectId)}</ProjectTag> <span className="text-[11px]">{r.code}</span></td>
                   <td className={td} title={r.name}>{r.name.length > 48 ? `${r.name.slice(0, 48)}…` : r.name}</td>
@@ -129,7 +129,7 @@ export function VarianceView() {
           <thead><tr className="bg-panel-alt"><th className={th}>구분</th><th className={th}>후행 업무</th><th className={th}>선행 업무</th><th className={th}>내용</th></tr></thead>
           <tbody>
             {dep.map((o, i) => (
-              <tr key={i} className="cursor-pointer border-t border-border hover:bg-panel-alt" onClick={() => setOpenId(o.id)}>
+              <tr key={i} className="cursor-pointer border-t border-border hover:bg-panel-alt" onClick={() => M.openTask(o.id)}>
                 <td className={td}><Tag tone={o.kind === '일정 충돌' ? 'bad' : 'warn'}>{o.kind}</Tag></td>
                 <td className={td}>{o.t}</td><td className={td}>{o.p}</td><td className={`${td} text-ink3`}>{o.txt}</td>
               </tr>
@@ -139,7 +139,7 @@ export function VarianceView() {
         {!dep.length && <EmptyHint title="점검할 선후행 문제가 없습니다" hint="선행 업무는 업무 수정 창에서 지정합니다." />}
       </div>
 
-      {openId && <TaskDetailModal id={openId} d={d} people={people} mut={mut} shortOf={nameOf} onClose={() => setOpenId(null)} onEdit={() => setOpenId(null)} />}
+      {M.node}
       {baseFor && (
         <Modal
           open

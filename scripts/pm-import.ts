@@ -14,6 +14,7 @@
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { Client, Databases, Query } from 'node-appwrite';
+import { todayStr } from '../src/domain/pm/rules';
 import { buildImportPreview, type DemoState, type GwUserLite, type ImportPreview } from '../src/data/pm/importPlan';
 
 const arg = (name: string) => process.argv.find((a) => a.startsWith(`--${name}=`))?.slice(name.length + 3);
@@ -122,7 +123,7 @@ async function main() {
   if (!statePath) throw new Error('--state=<state.json 경로> 가 필요합니다');
   const demo = arg('demo') ?? join(process.env.USERPROFILE ?? '', 'Desktop', '프관', 'FactoryFlow_PM_데모.html');
   const plans = arg('plans') ?? join(dirname(demo), '사업계획서');
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayStr();
   const out = arg('out') ?? join(dirname(statePath), `dryrun-${today.replace(/-/g, '')}.md`);
   if (resolve(out).startsWith(resolve(process.cwd()))) throw new Error('보고서는 저장소 밖에 둡니다 (실제 이름 포함)');
 

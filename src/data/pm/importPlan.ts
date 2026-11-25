@@ -2,7 +2,28 @@ import {
   pmProjectSchema, pmSubtaskSchema, pmTaskFunctionsSchema, pmTaskSchema,
   type PmProject, type PmSubtask, type PmTask,
 } from '@/domain/pm/schema';
+import { PM_TICKET_PRIOS, PM_TICKET_STATUSES, PM_TICKET_TYPES, pmTicketSchema, ticketType, type PmTicket } from '@/domain/pm/ticket';
 import { seedFunctions, seedProjects, seedSubtasks, seedTasks } from './seed';
+
+type DemoTicket = NonNullable<DemoState['tickets']>[number];
+const pick = <T extends string>(v: unknown, list: readonly T[], dflt: T): T => (list.includes(v as T) ? (v as T) : dflt);
+
+/** 데모 티켓 → `pmTickets` (사람 이름 → 사용자 ID). 예전 WBS 번호면 업무 연결 없이 '옛 업무' */
+export function legacyTicket(t: DemoTicket, taskIds: ReadonlySet<string>, subIds: ReadonlySet<string>, idOf: (name: unknown) => string): PmTicket {
+  const linked = taskIds.has(t.key);
+  const s = (v: unknown) => (v == null ? '' : String(v));
+  return {
+    no: t.no, projectId: t.k, taskId: linked ? t.key : '', subtaskId: t.sub && subIds.has(t.sub) ? t.sub : '', legacyKey: linked ? '' : t.key,
+    code: linked ? t.wbs : '', title: t.title, parent: s(t.parent), output: s(t.out), stage: s(t.stage),
+    type: pick(t.type, PM_TICKET_TYPES, ticketType(s(t.stage))), approverId: idOf(t.pm), reviewerId: idOf(t.reviewer), reviewOk: !!t.revOk,
+    assigneeId: idOf(t.assignee), watcherIds: (t.watchers ?? []).map(idOf).filter(Boolean), prio: pick(t.prio, PM_TICKET_PRIOS, '보통'),
+    start: s(t.start), due: s(t.due), status: pick(t.status, PM_TICKET_STATUSES, '발행'), prog: Math.max(0, Math.min(100, Number(t.prog) || 0)),
+    created: s(t.created), issuerId: idOf(t.issuer), memo: s(t.memo),
+    files: Array.isArray(t.files) ? (t.files as Array<{ name?: string; d?: string; who?: string }>).map((f) => ({ name: s(f.name), date: s(f.d), by: idOf(f.who) })) : [],
+    taskChange: s(t.wbsChg),
+    hist: (t.hist ?? []).map((h) => ({ date: s(h.d), by: idOf(h.who) || (h.who === '시스템' ? 'system' : ''), text: s(h.txt), ...((h as { c?: number }).c ? { comment: true } : {}) })),
+  };
+}
 
 /**
  * 옮기기 미리보기(dry-run) — DB에 쓰지 않고 "무엇이 몇 건 들어갈지" 계산만 한다.
@@ -216,6 +237,8 @@ export function buildImportPreview(state: DemoState, users: readonly GwUserLite[
       const row: PmSubtask = {
         id: s.id, taskId: key, text: s.txt, assigneeId: idOf(s.who), due: s.due ?? '', estHours: Number(s.est) || 0,
         done: !!s.done, doneDate: s.dd ?? '', memo: '', createdBy: idOf(s.by), createdDate: s.d ?? '', fromFp: false, order: i,
+        // 예전 WBS 번호면 '옛 업무' 기록으로만 (11/24 사용자 — 다시 잇는 화면 없음)
+        legacyKey: taskIds.has(key) ? '' : key,
       };
       stateSubs.push(row);
       if (!taskIds.has(key)) {
@@ -227,8 +250,9 @@ export function buildImportPreview(state: DemoState, users: readonly GwUserLite[
   const emptySubKeys = Object.entries(state.subs ?? {}).filter(([, l]) => !l.length).map(([k]) => k);
   if (emptySubKeys.length) problems.push(`세부 작업 목록이 빈 업무 ${emptySubKeys.length}개(${emptySubKeys.join(', ')}) — 옮길 것 없음 (지운 흔적)`);
 
-  // 4) 티켓 (칸은 2단계에서 확정 — 지금은 건수·연결·사람만)
+  // 4) 티켓 → pmTickets. 예전 WBS 번호면 taskId 없이 legacyKey(옛 업무)만
   const subIds = new Set(stateSubs.map((s) => s.id));
+  const tickets: PmTicket[] = (state.tickets ?? []).map((t) => legacyTicket(t, taskIds, subIds, idOf));
   for (const t of state.tickets ?? []) {
     if (!taskIds.has(t.key)) {
       const c = bestTask(t.k, `${t.title} ${t.parent ?? ''}`, tasks);
@@ -252,6 +276,7 @@ export function buildImportPreview(state: DemoState, users: readonly GwUserLite[
   check('업무', tasks, pmTaskSchema, (r) => r.id);
   check('세부 기능', fns, pmTaskFunctionsSchema, (r) => r.id);
   check('세부 작업', [...fpSubs, ...stateSubs], pmSubtaskSchema, (r) => r.id);
+  check('티켓', tickets, pmTicketSchema, (r) => r.no);
 
   // 6) 사업: 내장 데이터 vs state.json sites
   const sites = state.sites ?? [];
@@ -295,7 +320,7 @@ export function buildImportPreview(state: DemoState, users: readonly GwUserLite[
     { collection: 'pmTasks', count: tasks.length, source: '내장 데이터', note: '담당·날짜 비어 있음 (가짜 값 안 넣음)' },
     { collection: 'pmTaskFunctions', count: fns.length, source: '내장 데이터', note: `세부 기능 ${fns.reduce((a, f) => a + f.items.length, 0)}줄` },
     { collection: 'pmSubtasks', count: fpSubs.length + stateSubs.length, source: '내장(FP) + state.json', note: `FP 신규·변경 미리 넣기 ${fpSubs.length} + 사람이 만든 것 ${stateSubs.length}(전부 연결 끊김)` },
-    { collection: 'pmTickets', count: (state.tickets ?? []).length, source: 'state.json', note: `칸은 2단계에서 확정. 전부 예전 WBS 번호 → 연결 끊김 ${broken.filter((b) => b.kind === '티켓').length}` },
+    { collection: 'pmTickets', count: tickets.length, source: 'state.json', note: `옛 업무(예전 WBS 번호) ${tickets.filter((x) => x.legacyKey).length} — 업무 연결 없이 기록으로` },
     { collection: 'pmBaselines', count: projectsWithTasks.size, source: '새로 만듦', note: `"최초 계획 · 옮긴 날" — 업무 있는 사업만. 예전 기준선 ${Object.keys(state.baselines ?? {}).length}개는 안 옮김` },
     { collection: 'pmChangeLogs', count: (state.wbsLog ?? []).length, source: 'state.json', note: '예전 변경 이력 0건' },
     { collection: 'pmDailyPlans', count: 0, source: '—', note: `업무계획 ${planN}건은 새로 시작 (옮기지 않음)` },

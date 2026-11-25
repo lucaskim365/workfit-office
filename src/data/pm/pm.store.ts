@@ -1,6 +1,7 @@
 import { applyProgress, makeBaseline, todayStr } from '@/domain/pm/rules';
 import type { PmBaseline, PmChangeLog, PmProject, PmSubtask, PmTask, PmTaskDone, PmTaskFunctions } from '@/domain/pm/schema';
 import { SEED_VERSION, seedFunctions, seedProjects, seedSubtasks, seedTasks } from './seed';
+import { moveTicket, nextTicketNo, syncTicketWithTask, tkOpen, type PmTicket } from '@/domain/pm/ticket';
 
 /**
  * PM 저장소 — 1단계는 **메모리 전용** (§5.1: `pm*` 컬렉션이 아직 없어 `VITE_DB_DRIVER=appwrite` 여도 메모리).
@@ -17,6 +18,8 @@ export interface PmSnapshot {
   baselines: PmBaseline[];
   logs: PmChangeLog[];
   done: PmTaskDone[];
+  /** 티켓 (2단계) — 메모리. 옛 티켓(state.json)은 7단계 옮기기 때 들어옴 */
+  tickets: PmTicket[];
   /** 데이터 출처 표시 (데모 ver) */
   sourceVersion: string;
 }
@@ -59,7 +62,7 @@ export function createPmStore(today = todayStr()) {
     .map((p) => ({ p, ts: tasks.filter((t) => t.projectId === p.id) }))
     .filter((x) => x.ts.length)
     .map(({ p, ts }) => makeBaseline(p.id, ts, label, today, ''));
-  const state: PmSnapshot = { projects, tasks, functions, subtasks, baselines, logs: [], done: [], sourceVersion: SEED_VERSION };
+  const state: PmSnapshot = { projects, tasks, functions, subtasks, baselines, logs: [], done: [], tickets: [], sourceVersion: SEED_VERSION };
 
   const log = (projectId: string, code: string, kind: PmChangeLog['kind'], text: string, by: string, day: string) => {
     state.logs.push({ id: nid('lg'), projectId, code, kind, text, date: day, by });
@@ -77,6 +80,39 @@ export function createPmStore(today = todayStr()) {
     for (const d of state.done) if (d.id === oldId) d.id = newId;
     for (const b of state.baselines) if (b.map[oldId]) { b.map[newId] = b.map[oldId]; delete b.map[oldId]; }
     for (const t of state.tasks) t.predecessorIds = t.predecessorIds.map((x) => (x === oldId ? newId : x));
+    // 세부 작업 티켓도 새 번호로 (업무 티켓은 syncTickets 가 이력과 함께)
+    for (const x of state.tickets) if (x.subtaskId && x.taskId === oldId) x.taskId = newId;
+  };
+  /** 업무를 고치면 업무 티켓도 따라감 (wbsSyncTicket) → 변경 이력 꼬리 " · 티켓 P2-0001 반영" */
+  const syncTickets = (old: PmTask, next: PmTask, by: string, day: string) => {
+    const i = state.tickets.findIndex((x) => x.taskId === old.id && !x.subtaskId && x.status !== '취소' && !x.legacyKey);
+    if (i < 0) return '';
+    const n = syncTicketWithTask(state.tickets[i], old, next, by, day);
+    if (!n) return '';
+    state.tickets[i] = n;
+    return ` · 티켓 ${n.no} 반영`;
+  };
+  const findTicket = (no: string) => {
+    const i = state.tickets.findIndex((x) => x.no === no);
+    if (i < 0) throw new Error('티켓을 찾을 수 없습니다');
+    return i;
+  };
+  /** 번호 붙여 넣기 — 사업별 다음 번호 */
+  const pushTicket = (x: PmTicket) => {
+    const t = { ...clone(x), no: nextTicketNo(state.tickets, x.projectId) };
+    state.tickets.push(t);
+    return t;
+  };
+  /** 세부 작업 티켓을 고치면 세부 작업도 (담당·마감·완료) */
+  const syncSub = (x: PmTicket, day: string, by: string, done: boolean | null) => {
+    if (!x.subtaskId) return;
+    const s = state.subtasks.find((v) => v.id === x.subtaskId);
+    if (!s) return;
+    s.assigneeId = x.assigneeId;
+    s.due = x.due;
+    if (done === true) { s.done = true; s.doneDate = day; }
+    else if (done === false) { s.done = false; s.doneDate = ''; }
+    void by;
   };
 
   return {
@@ -102,7 +138,8 @@ export function createPmStore(today = todayStr()) {
       if (next.id !== id && state.tasks.some((x) => x.id === next.id)) throw new Error(`이미 ${next.code} 번호가 있습니다`);
       state.tasks[i] = clone(next);
       rekey(id, next.id);
-      log(next.projectId, next.code, '수정', diffText(old, next, nameOf) || '변경 없음', by, day);
+      const tk = syncTickets(old, next, by, day);
+      log(next.projectId, next.code, '수정', `${diffText(old, next, nameOf) || '변경 없음'}${tk}`, by, day);
       return clone(next);
     },
 
@@ -110,8 +147,10 @@ export function createPmStore(today = todayStr()) {
     async bulkUpdate(items: ReadonlyArray<{ next: PmTask; summary: string }>, by: string, day = todayStr()) {
       for (const { next, summary } of items) {
         const i = findTask(next.id);
+        const old = state.tasks[i];
         state.tasks[i] = clone(next);
-        if (summary) log(next.projectId, next.code, '수정', `일괄 수정: ${summary}`, by, day);
+        const tk = syncTickets(old, next, by, day);
+        if (summary) log(next.projectId, next.code, '수정', `일괄 수정: ${summary}${tk}`, by, day);
       }
     },
 
@@ -129,7 +168,7 @@ export function createPmStore(today = todayStr()) {
 
     async addSubtask(taskId: string, text: string, assigneeId: string, due: string, by: string, day = todayStr()): Promise<PmSubtask> {
       const order = Math.max(-1, ...state.subtasks.filter((s) => s.taskId === taskId).map((s) => s.order)) + 1;
-      const s: PmSubtask = { id: nid('s'), taskId, text, assigneeId, due, estHours: 0, done: false, doneDate: '', memo: '', createdBy: by, createdDate: day, fromFp: false, order };
+      const s: PmSubtask = { id: nid('s'), taskId, text, assigneeId, due, estHours: 0, done: false, doneDate: '', memo: '', createdBy: by, createdDate: day, fromFp: false, order, legacyKey: '' };
       state.subtasks.push(s);
       return clone(s);
     },
@@ -140,7 +179,48 @@ export function createPmStore(today = todayStr()) {
       if ('done' in patch) s.doneDate = patch.done ? day : '';
     },
     async removeSubtask(id: string) {
+      const xt = state.tickets.filter((x) => x.subtaskId === id && x.status !== '취소').pop();
+      if (xt && tkOpen(xt)) throw new Error(`티켓 ${xt.no}이(가) 진행 중이라 지울 수 없습니다. 티켓을 먼저 발행 취소하세요`);
       state.subtasks = state.subtasks.filter((x) => x.id !== id);
+    },
+
+    // ── 티켓 (2단계) ──────────────────────────────────
+    /** 발행 — 번호는 저장소가 붙인다 (no 는 무시). 이미 발행된 업무·세부 작업은 거부 */
+    async issueTickets(list: readonly PmTicket[]): Promise<PmTicket[]> {
+      for (const x of list) {
+        const dup = state.tickets.some((v) => v.status !== '취소' && v.taskId === x.taskId && v.subtaskId === x.subtaskId && !v.legacyKey);
+        if (dup) throw new Error(`이미 발행된 ${x.subtaskId ? '세부 작업' : '업무'}가 있습니다 (${x.title})`);
+      }
+      return list.map((x) => clone(pushTicket(x)));
+    },
+    /** 상태 이동 (tkMove) → 안내 문구 */
+    async moveTicket(no: string, to: PmTicket['status'], cmt: string, me: string, nameOf: (id: string) => string, day = todayStr()): Promise<string> {
+      const i = findTicket(no);
+      const r = moveTicket(state.tickets[i], to, cmt, me, day, nameOf);
+      if (!r.ok) throw new Error(r.error);
+      state.tickets[i] = r.ticket;
+      syncSub(r.ticket, day, me, r.subDone);
+      return r.message;
+    },
+    /** 칸 고치기 결과 저장 (applyTicketDraft·setTicketProg 등 domain 계산 결과) */
+    async putTicket(x: PmTicket) {
+      const i = findTicket(x.no);
+      state.tickets[i] = clone(x);
+      syncSub(x, todayStr(), '', null);
+    },
+    async commentTicket(no: string, text: string, me: string, day = todayStr()) {
+      const i = findTicket(no);
+      state.tickets[i].hist.push({ date: day, by: me, text: `💬 ${text}`, comment: true });
+    },
+    async addTicketFile(no: string, name: string, me: string, day = todayStr()) {
+      const x = state.tickets[findTicket(no)];
+      x.files.push({ name, date: day, by: me });
+      x.hist.push({ date: day, by: me, text: `산출물 첨부 — ${name}` });
+    },
+    async removeTicketFile(no: string, index: number, me: string, day = todayStr()) {
+      const x = state.tickets[findTicket(no)];
+      const f = x.files.splice(index, 1)[0];
+      if (f) x.hist.push({ date: day, by: me, text: `산출물 삭제 — ${f.name}` });
     },
 
     /** 기준선 재설정 (baseSet) */

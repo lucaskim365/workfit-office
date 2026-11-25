@@ -3,7 +3,6 @@
  * 화면을 옮길 때마다 PmScreen 에서 해당 보기를 실제 화면으로 바꾸고, 여기 표에서 지운다.
  */
 const STAGE_OF: Record<string, number> = {
-  'task/ticket': 2,
   'dash/overview': 3, 'dash/site': 3, 'dash/team': 3, 'sched/load': 3, 'dash/hours': 3, 'dash/my': 3, 'dash/plan': 3,
   'doc/insp': 4, 'site/cr': 4, 'doc/audit': 4,
   'risk/issue': 5, 'doc/meet': 5, 'doc/check': 5, 'doc/report': 5,

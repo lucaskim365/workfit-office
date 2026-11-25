@@ -27,5 +27,11 @@ export function usePmPeople() {
   const byId = useMemo(() => new Map(people.map((p) => [p.id, p])), [people]);
   const nameOf = useCallback((id: string) => byId.get(id)?.name ?? (id ? '(알 수 없음)' : ''), [byId]);
   const labelOf = useCallback((id: string) => byId.get(id)?.label ?? nameOf(id), [byId, nameOf]);
-  return { me: user?.id ?? '', people, nameOf, labelOf };
+  /** "박명규 부장" 같은 글자 → 사용자 ID. 같은 이름이 2명 이상이면 고르지 않음('') — 티켓 기본 승인자(업무 PM)용 */
+  const idByName = useCallback((text: string) => {
+    const n = text.trim().split(/\s+/)[0] ?? '';
+    const hit = n ? people.filter((p) => p.name === n) : [];
+    return hit.length === 1 ? hit[0].id : '';
+  }, [people]);
+  return { me: user?.id ?? '', people, nameOf, labelOf, idByName };
 }

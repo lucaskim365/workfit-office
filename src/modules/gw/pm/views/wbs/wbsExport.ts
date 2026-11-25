@@ -4,7 +4,7 @@ import type { PmDerived } from '@/features/pm/usePm';
 
 /**
  * 업무 목록 엑셀 내보내기 (wbsCsv 6602) — 엑셀에서 바로 열리는 CSV(UTF-8 BOM). 데모와 같은 열 + 묶음·공수.
- * 티켓 칸은 2단계에서 채운다.
+ * 티켓 칸 = 그 업무의 티켓 (취소·세부 작업 티켓 제외).
  */
 export function tasksCsv(tasks: readonly PmTask[], d: PmDerived, nameOf: (id: string) => string, shortOf: (id: string) => string): string {
   const q = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
@@ -15,7 +15,7 @@ export function tasksCsv(tasks: readonly PmTask[], d: PmDerived, nameOf: (id: st
     return [
       t.projectId, shortOf(t.projectId), p?.biz, p?.company, t.stage, t.group, t.code, t.name, t.output, t.pmName,
       t.assigneeIds.map(nameOf).join(' / '), t.execMemo, t.start, t.end, t.start && t.end ? diffDays(t.start, t.end) + 1 : '',
-      t.milestone ? '◆' : '', l.status, `${t.planPct}%`, `${l.pct}%`, t.md ?? '', '', '',
+      t.milestone ? '◆' : '', l.status, `${t.planPct}%`, `${l.pct}%`, t.md ?? '', d.taskTicket.get(t.id)?.no ?? '', d.taskTicket.get(t.id)?.status ?? '',
     ];
   });
   return '﻿' + [head, ...rows].map((r) => r.map(q).join(',')).join('\r\n');

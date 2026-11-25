@@ -126,6 +126,8 @@ export const pmSubtaskSchema = z.object({
   /** FP 세부 기능에서 미리 넣은 것 (§3.3 세부 작업 미리 넣기) */
   fromFp: z.boolean().default(false),
   order: z.number().default(0),
+  /** 옛 업무 = 예전 WBS 번호 (예: "P2|5.24"). 있으면 '옛 업무' 기록으로만 — 지금 업무와 연결 없음 (11/24 사용자, §5.1.2) */
+  legacyKey: z.string().default(''),
 });
 export type PmSubtask = z.infer<typeof pmSubtaskSchema>;
 

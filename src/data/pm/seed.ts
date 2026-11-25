@@ -126,6 +126,7 @@ export function seedSubtasks(fns: readonly PmTaskFunctions[], today: string): Pm
         createdBy: '',
         createdDate: today,
         fromFp: true,
+        legacyKey: '',
         order: i,
       });
     });

@@ -7,12 +7,14 @@ import { PmPlaceholder } from './views/PmPlaceholder';
 import { WbsListView } from './views/wbs/WbsListView';
 import { GanttView } from './views/wbs/GanttView';
 import { VarianceView } from './views/wbs/VarianceView';
+import { TicketListView } from './views/ticket/TicketListView';
 
 /** 옮긴 보기 → 화면. 없는 보기는 '옮기는 중' 자리 */
 const VIEWS: Record<string, ComponentType> = {
   'task/wbs': WbsListView,
   'sched/gantt': GanttView,
   'risk/delay': VarianceView,
+  'task/ticket': TicketListView,
 };
 
 /**
@@ -30,7 +32,7 @@ export default function PmScreen() {
     const next = new URLSearchParams(params);
     next.set('v', viewId);
     // 화면을 바꾸면 업무 목록 사업 선택(k)·단계(stage)는 그 화면 것만 — 업무 목록 안에서만 유지
-    if (!viewId.startsWith('task/wbs')) { next.delete('k'); next.delete('stage'); }
+    if (!viewId.startsWith('task/wbs')) { next.delete('k'); next.delete('stage'); next.delete('period'); }
     setParams(next);
   };
 

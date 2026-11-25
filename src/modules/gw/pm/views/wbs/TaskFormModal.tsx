@@ -98,7 +98,8 @@ export function TaskFormModal({ mode, d, people, mut, shortOf, onClose, onSaved 
   const [v, setV] = useState(init);
   const [err, setErr] = useState<{ msg: string; field: string } | null>(null);
   const set = <K extends keyof typeof v>(key: K, val: (typeof v)[K]) => setV((x) => ({ ...x, [key]: val }));
-  const ticketLocked = false; // 2단계: 티켓이 있는 업무는 다른 사업으로 못 옮김
+  // 티켓이 있는 업무는 다른 사업으로 못 옮김 (티켓 번호가 사업별)
+  const ticketLocked = mode.kind === 'edit' && !!src && d.taskTicket.has(src.id);
 
   const title = mode.kind === 'new' ? '📝 업무 추가' : mode.kind === 'copy' ? `업무 복사 — ${src?.code}` : `업무 수정 — ${shortOf(src!.projectId)} ${src!.code}`;
 

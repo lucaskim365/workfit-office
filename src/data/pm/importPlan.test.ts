@@ -60,7 +60,8 @@ test('미리보기: 예전 WBS 번호는 연결 끊김, 새 번호는 이어짐,
   assert.equal(p.people.find((x) => x.name === '박외부')?.match, '안 함(이름 글자)');
   // 내장 데이터의 사업·업무 PM(실제 이름)도 데모 사용자 목록에서 찾으므로, 여기선 가짜 목록에 없는 이름이 잡히는지만
   assert.ok(p.unknownNames.includes('없는사람'));
-  assert.equal(p.schemaErrors.length, 0);
+  // 일부러 넣은 잘못된 날짜(P2-0002 due 2026/11/01)만 칸 오류로 잡힌다
+  assert.deepEqual(p.schemaErrors.map((e) => e.split(':')[0]), ['티켓 P2-0002']);
   // 내장 데이터 건수 (1단계 확인 숫자와 같음)
   assert.equal(p.counts.find((c) => c.collection === 'pmTasks')?.count, 338);
   assert.equal(p.counts.find((c) => c.collection === 'pmProjects')?.count, 12);

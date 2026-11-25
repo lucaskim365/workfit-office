@@ -10,7 +10,8 @@ import type { PmProject, PmTask } from '@/domain/pm/schema';
 import { usePmDerived, usePmMutations, type PmDerived } from '@/features/pm/usePm';
 import { usePmPeople } from '../../usePmPeople';
 import { Avatar, DueCell, EmptyHint, MiniBar, ProgressBar, ProjectTag, StatusRing, Tag, toneOf } from './parts';
-import { TaskDetailModal } from './TaskDetailModal';
+import { usePmModals } from '../ticket/usePmModals';
+import { StatusTag } from '../ticket/parts';
 import { TaskFormModal, type TaskFormMode } from './TaskFormModal';
 import { BulkEditModal } from './BulkEditModal';
 import { ChangeLogModal } from './ChangeLogModal';
@@ -49,6 +50,7 @@ export function WbsListView() {
   const setK = (v: string) => {
     const next = new URLSearchParams(params);
     next.delete('stage');
+    next.delete('period');
     if (v === 'all') next.delete('k');
     else next.set('k', v);
     setParams(next);
@@ -56,12 +58,15 @@ export function WbsListView() {
 
   if (!d) return <EmptyHint title="업무 목록을 불러오는 중입니다" />;
   // 간트에서 단계를 눌러 오면 ?stage= 로 그 단계만 (한 번만 읽음)
-  return <WbsList key={k + (params.get('stage') ?? '')} d={d} k={k} setK={setK} people={people} initStage={params.get('stage') ?? 'all'} />;
+  // 티켓 목록의 [발행 추천 고르기] → ?period=rec 로 발행 추천 탭 (한 번만 읽음)
+  const per = params.get('period');
+  const initPeriod = PM_PERIOD_TABS.some(([p]) => p === per) ? (per as PmPeriod) : null;
+  return <WbsList key={k + (params.get('stage') ?? '') + (per ?? '')} d={d} k={k} setK={setK} people={people} initStage={params.get('stage') ?? 'all'} initPeriod={initPeriod} />;
 }
 
 type People = ReturnType<typeof usePmPeople>;
 
-function WbsList({ d, k, setK, people, initStage }: { d: PmDerived; k: string; setK: (v: string) => void; people: People; initStage: string }) {
+function WbsList({ d, k, setK, people, initStage, initPeriod }: { d: PmDerived; k: string; setK: (v: string) => void; people: People; initStage: string; initPeriod: PmPeriod | null }) {
   const { snap, today, liveMap, ctx } = d;
   const mut = usePmMutations(people.me, people.nameOf);
   const projects = snap.projects;
@@ -69,16 +74,18 @@ function WbsList({ d, k, setK, people, initStage }: { d: PmDerived; k: string; s
   const projOf = (id: string) => projects.find((p) => p.id === id);
   const shortOf = (id: string) => { const p = projOf(id); return p ? nameP(p) : id; };
 
-  const [f, setF] = useState<PmFilter>({ ...PM_FILTER_DEFAULT, stage: initStage });
+  const [f, setF] = useState<PmFilter>({ ...PM_FILTER_DEFAULT, stage: initStage, ...(initPeriod ? { period: initPeriod } : {}) });
   const filter: PmFilter = { ...f, projectId: k, mine: f.mine ? people.me : '' };
-  const [home, setHome] = useState(true);
+  const [home, setHome] = useState(!initPeriod);
   const [board, setBoard] = useState(false);
   const [fltOpen, setFltOpen] = useState(false);
   const [sel, setSel] = useState<Set<string>>(new Set());
   const [folds, setFolds] = useState<Record<string, boolean>>({});
   const [more, setMore] = useState<Set<string>>(new Set());
-  const [openId, setOpenId] = useState<string | null>(null);
-  const [form, setForm] = useState<TaskFormMode | null>(null);
+  const [form, setForm0] = useState<TaskFormMode | null>(null);
+  const M = usePmModals({ d, people, mut, shortOf, onEditTask: (id) => setForm0({ kind: 'edit', id }), onIssued: () => setSel(new Set()) });
+  const setOpenId = (id: string) => M.openTask(id);
+  const setForm = setForm0;
   const [bulk, setBulk] = useState(false);
   const [logOpen, setLogOpen] = useState(false);
   const [help, setHelp] = useState(false);
@@ -147,6 +154,14 @@ function WbsList({ d, k, setK, people, initStage }: { d: PmDerived; k: string; s
             {t.output && <span className="text-ink2">{t.output}</span>}
           </div>
         </div>
+        {(() => {
+          const x = d.taskTicket.get(t.id);
+          return x ? (
+            <span onClick={(e) => { e.stopPropagation(); M.openTicket(x.no); }} title="티켓 열기" className="flex-none cursor-pointer">
+              <StatusTag s={x.status} />
+            </span>
+          ) : null;
+        })()}
         <div className="flex w-[110px] flex-none items-center gap-1.5 text-[11.5px]">
           {as ? (
             <>
@@ -304,7 +319,7 @@ function WbsList({ d, k, setK, people, initStage }: { d: PmDerived; k: string; s
   );
   const foot = (
     <div className="border-t border-border px-3 py-2 text-[10.5px] text-ink3">
-      {snap.sourceVersion} · 사업 {projects.length}개 · 업무 {tasks.length.toLocaleString()}건 · 티켓 0건 (2단계) · 저장: 메모리(새로 고침하면 처음 데이터로)
+      {snap.sourceVersion} · 사업 {projects.length}개 · 업무 {tasks.length.toLocaleString()}건 · 티켓 {snap.tickets.filter((x) => x.status !== '취소').length}건 · 저장: 메모리(새로 고침하면 처음 데이터로)
     </div>
   );
   const emptyBody = (
@@ -493,6 +508,7 @@ function WbsList({ d, k, setK, people, initStage }: { d: PmDerived; k: string; s
 
   const selTasks = [...sel].map((id) => d.taskMap.get(id)).filter((t): t is PmTask => !!t);
   const needA = selTasks.filter((t) => !defaultAssignee(t)).length;
+  const issuedSel = selTasks.filter((t) => d.taskTicket.has(t.id)).length;
 
   return (
     <div>
@@ -506,7 +522,7 @@ function WbsList({ d, k, setK, people, initStage }: { d: PmDerived; k: string; s
       </div>
       {help && (
         <p className="mb-3 rounded-lg bg-panel-alt px-3 py-2 text-[11.5px] leading-relaxed text-ink2">
-          첫 화면은 사업 카드입니다. 카드를 누르면 그 사업의 단계 흐름과 묶음별 업무가 열리고, 첫 묶음만 펼쳐집니다. 업무 앞 동그라미는 진행률(초록 = 완료, 빨강 = 지연)이고, 줄을 누르면 상세가 열립니다. 체크해서 일괄 수정합니다 (티켓 발행은 2단계).
+          첫 화면은 사업 카드입니다. 카드를 누르면 그 사업의 단계 흐름과 묶음별 업무가 열리고, 첫 묶음만 펼쳐집니다. 업무 앞 동그라미는 진행률(초록 = 완료, 빨강 = 지연)이고, 줄을 누르면 상세가 열립니다. 체크해서 일괄 수정하거나 티켓을 발행합니다.
           위 숫자 칸을 누르면 그 업무 목록이 열립니다.
         </p>
       )}
@@ -520,21 +536,12 @@ function WbsList({ d, k, setK, people, initStage }: { d: PmDerived; k: string; s
           <span className="flex-1" />
           <Button size="sm" onClick={() => setSel(new Set())}>선택 해제</Button>
           <Button size="sm" onClick={() => setBulk(true)}>✏ 일괄 수정</Button>
-          <Button size="sm" variant="primary" disabled title="티켓은 2단계에서 옮깁니다">🎫 티켓 발행 ({sel.size}건) — 2단계</Button>
+          {issuedSel > 0 && <span className="text-[11px] text-ink3">이미 티켓 있음 {issuedSel}건은 빼고 발행</span>}
+          <Button size="sm" variant="primary" disabled={issuedSel === sel.size} onClick={() => M.issue([...sel])}>🎫 티켓 발행 ({sel.size - issuedSel}건)</Button>
         </div>
       )}
 
-      {openId && (
-        <TaskDetailModal
-          id={openId}
-          d={d}
-          people={people}
-          mut={mut}
-          shortOf={shortOf}
-          onClose={() => setOpenId(null)}
-          onEdit={() => { setForm({ kind: 'edit', id: openId }); setOpenId(null); }}
-        />
-      )}
+      {M.node}
       {form && <TaskFormModal mode={form} d={d} people={people} mut={mut} shortOf={shortOf} onClose={() => setForm(null)} onSaved={(id) => { setForm(null); if (id) setOpenId(id); }} />}
       {bulk && <BulkEditModal ids={[...sel]} d={d} people={people} mut={mut} onClose={() => setBulk(false)} onDone={() => { setBulk(false); setSel(new Set()); }} />}
       {logOpen && <ChangeLogModal d={d} people={people} shortOf={shortOf} projectId={k} onClose={() => setLogOpen(false)} />}
