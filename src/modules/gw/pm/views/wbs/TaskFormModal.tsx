@@ -12,7 +12,8 @@ import type { usePmPeople } from '../../usePmPeople';
  * 데모와 다른 점: 데모는 시작·종료일이 필수지만, 지금 업무 목록은 날짜가 모두 비어 있어
  * 필수로 하면 날짜를 지어 넣어야 수정할 수 있다 → 비워도 저장되게 둠 (종료 ≥ 시작만 확인).
  */
-export type TaskFormMode = { kind: 'new'; projectId: string; stage: string } | { kind: 'edit'; id: string } | { kind: 'copy'; id: string };
+/** preset = 미리 채울 값 (요구사항 CR 승인 → 업무 추가, 데모 crToWbs) */
+export type TaskFormMode = { kind: 'new'; projectId: string; stage: string; preset?: { name: string; output: string; end: string } } | { kind: 'edit'; id: string } | { kind: 'copy'; id: string };
 
 /** 다음 번호 (wbsNextCode 6386): 그 단계 마지막 번호의 끝 숫자 + 1, 사업 안에서 겹치지 않게 */
 export function nextCode(tasks: readonly PmTask[], projectId: string, stage: string): string {
@@ -89,9 +90,9 @@ export function TaskFormModal({ mode, d, people, mut, shortOf, onClose, onSaved 
     const k = mode.kind === 'new' ? mode.projectId : '';
     const st0 = mode.kind === 'new' && mode.stage ? mode.stage : stagesOf(k)[0] ?? '';
     return {
-      projectId: k, stage: st0, newStage: '', code: nextCode(snap.tasks, k, st0), name: '', output: '',
+      projectId: k, stage: st0, newStage: '', code: nextCode(snap.tasks, k, st0), name: mode.kind === 'new' ? mode.preset?.name ?? '' : '', output: mode.kind === 'new' ? mode.preset?.output ?? '' : '',
       pmName: snap.projects.find((p) => p.id === k)?.pmName ?? '', assignees: [] as { id: string; sub: boolean }[], execMemo: '',
-      start: '', end: '', status: '계획' as const, milestone: false, pre: '', planPct: 0, actualPct: 0, md: '', memo: '',
+      start: '', end: mode.kind === 'new' ? mode.preset?.end ?? '' : '', status: '계획' as const, milestone: false, pre: '', planPct: 0, actualPct: 0, md: '', memo: '',
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

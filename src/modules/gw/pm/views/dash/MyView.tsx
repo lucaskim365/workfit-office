@@ -82,7 +82,7 @@ export function MyView() {
     const X = { tasks: d.snap.tasks, liveMap: d.liveMap, projects: d.snap.projects, today: d.today };
     const laterIds = d.snap.later.find((x) => x.id === me)?.taskIds ?? [];
     const w = myWork(me, X, laterIds, sort, sortL);
-    const ib = myInbox(me, { ...X, tickets: d.snap.tickets, msOk: new Map(d.snap.msOk.map((x) => [x.id, x])), issues: d.snap.issues, actions: d.snap.actions, pmOf });
+    const ib = myInbox(me, { ...X, tickets: d.snap.tickets, msOk: new Map(d.snap.msOk.map((x) => [x.id, x])), issues: d.snap.issues, actions: d.snap.actions, crs: d.snap.crs, pmOf });
     const sitePm = (id: string) => { const p = d.snap.projects.find((x) => x.id === id); return p ? pmOf(p)[0] ?? '' : ''; };
     // 업무계획에서 체크 · 메모한 날도 갱신으로 · 최근 7일 업무계획에 넣은 업무 = '최근 한 업무' (updIdx · planRecentIdx)
     const U = { ...X, logs: d.snap.logs, checks: d.snap.weekChecks, tickets: d.snap.tickets, baseDate: d.snap.baseDate, sitePm,
@@ -115,7 +115,8 @@ export function MyView() {
   };
   const toggleLater = (t: PmTask, on: boolean) => smut.setLater.mutate({ taskId: t.id, on });
   const openBoard = (k: string) => { setMsg(null); setBoard(k); setPg(1); setPgL(1); window.scrollTo(0, 0); };
-  const goView = (v: string) => { const n = new URLSearchParams(); n.set('v', v); setParams(n); };
+  /** 'site/cr?cr=CR-001&review=1' 처럼 시작 값을 붙여도 됨 */
+  const goView = (v: string) => { const [vv, q] = v.split('?'); const n = new URLSearchParams(q ?? ''); n.set('v', vv); setParams(n); };
 
   const msgBar = msg && (
     <div className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-[12px] ${msg.bad ? 'border-danger/30 bg-danger/5 text-danger' : 'border-teal/30 bg-teal-soft/30 text-ink'}`}>
@@ -375,7 +376,7 @@ export function MyView() {
 /** 종류 4가지 (inbox): 이름 · 설명 · 가는 화면 (없으면 아직 안 옮김) */
 const INBOX: ReadonlyArray<{ nm: string; ds: string; go: string; goOk: boolean; goNote?: string }> = [
   { nm: '내 티켓', ds: '배정받은 진행 중 티켓', go: 'task/ticket', goOk: true },
-  { nm: '승인 대기', ds: '내가 검토 · 승인할 티켓 · 마일스톤 (요구사항 CR 은 4단계에서 더함)', go: 'task/ticket', goOk: true },
+  { nm: '승인 대기', ds: '내가 검토 · 승인할 티켓 · 마일스톤 · CR', go: 'task/ticket', goOk: true },
   { nm: '이슈', ds: '내 담당 · 관련 미해결 이슈', go: 'risk/issue', goOk: false, goNote: '이슈 화면은 5단계' },
   { nm: '액션 아이템', ds: '회의에서 맡은 후속 조치', go: 'doc/meet', goOk: false, goNote: '회의록 화면은 5단계' },
 ];
@@ -427,6 +428,17 @@ function InboxModal({ i, ib, d, shortOf, nameOf, labelOf, onClose, onOpenTicket,
             {ttl(x.title, tkSub(x))}
             <td className="whitespace-nowrap px-3 py-2">{labelOf(x.assigneeId)} 요청</td>
             <DueTd d={x.due} today={today} />
+          </tr>
+        );
+      }
+      if (a.kind === 'cr') {
+        const c = a.c;
+        return (
+          <tr key={c.id} onClick={() => onGo(`site/cr?cr=${c.id}&review=1`)} className="cursor-pointer border-b border-border hover:bg-panel-alt">
+            <td className="w-px whitespace-nowrap px-3 py-2"><Tag tone="run">CR</Tag></td>
+            {ttl(c.title, `${shortOf(c.projectId)} · ${c.id}`)}
+            <td className="whitespace-nowrap px-3 py-2 text-[11px] text-ink3">변경 요청</td>
+            <td className="px-3 py-2 text-right"><Button size="sm" variant="secondary">검토</Button></td>
           </tr>
         );
       }

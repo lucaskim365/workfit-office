@@ -37,7 +37,11 @@ export function SiteView() {
   const smut = usePmSiteMutations(people.me);
   const [params, setParams] = useSearchParams();
   // 🔔 '보완 조치' 알림에서 오면 ?fix=점검 항목 → 지적 사항 창 (한 번만 읽음, 데모 govItemsGo)
-  const [pop, setPop] = useState<Pop | null>(() => (params.get('fix') ? { kind: 'fix', id: params.get('fix')! } : null));
+  const [pop, setPop] = useState<Pop | null>(null);
+  // 주소의 fix 값이 바뀔 때마다 한 번 열기 — 이미 사업별 화면에 있을 때 알림을 눌러도 열리게 (CR 창과 같은 방식)
+  const fixP = params.get('fix') ?? '';
+  const [seenFix, setSeenFix] = useState('');
+  if (fixP !== seenFix) { setSeenFix(fixP); if (fixP) setPop({ kind: 'fix', id: fixP }); }
   const [dlAll, setDlAll] = useState(false);
   const shortOf = (id: string) => { const p = d?.snap.projects.find((x) => x.id === id); return p ? shortName(p, d!.snap.projects) : id; };
   const modals = usePmModals({ d, people, mut, shortOf });

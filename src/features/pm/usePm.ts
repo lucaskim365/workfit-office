@@ -175,5 +175,11 @@ export function usePmSiteMutations(me: string) {
     // 4단계: 산출물
     setDoc: m(({ taskId, st }: { taskId: string; st: PmDoc['st'] }) => s.setDoc(taskId, st, me)),
     uploadDoc: m(({ taskId, name }: { taskId: string; name: string }) => s.uploadDoc(taskId, name, me)),
+    // 4단계: 요구사항(CR)
+    addCr: m((x: Parameters<typeof s.addCr>[0]) => s.addCr(x, me)),
+    updateCr: m(({ id, x }: { id: string; x: Parameters<typeof s.updateCr>[1] }) => s.updateCr(id, x)),
+    removeCr: m((id: string) => s.removeCr(id)),
+    reviewCr: m(({ id, decision, comment }: { id: string; decision: '승인' | '반려'; comment: string }) => s.reviewCr(id, decision, comment, me)),
+    linkCrTask: m(({ id, taskId }: { id: string; taskId: string }) => s.linkCrTask(id, taskId)),
   };
 }

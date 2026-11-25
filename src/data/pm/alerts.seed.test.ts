@@ -4,6 +4,7 @@ import { liveOf, shortName, type Live } from '@/domain/pm/rules';
 import { siteCtxOf, type SiteInputs } from '@/domain/pm/site';
 import { myAlerts } from '@/domain/pm/alerts';
 import { gsFind } from '@/domain/pm/search';
+import { pmChangeRequestSchema } from '@/domain/pm/schema';
 import { kpiDefs, kpiScore } from '@/domain/pm/kpi';
 import { PM_MENUS } from '@/modules/gw/pm/menu';
 import { SEED_BASE_DATE, seedPlans, seedProjects, seedTasks } from './seed';
@@ -49,6 +50,10 @@ test('검색: 데모 gsFind 와 같은 결과', () => {
   assert.deepEqual(find('일정'), ['하는 일|TASK 추가 · 일정 수정|바로 가기', '하는 일|원가 변경 · 대금 일정|바로 가기', '화면|일정 변동|업무 목록 · 티켓']);
   assert.deepEqual(find('SF26178367'), ['사업|신광 · 신광테크|부처협업형(산업보안) · PM 박명규'], '과제번호로 사업 찾기 (데모 hit(s.no))');
   assert.deepEqual(find('  '), []);
+  // 4단계: CR 번호 · 제목으로 찾으면 그 CR 창 (데모 crEdit)
+  const crs = [pmChangeRequestSchema.parse({ id: 'CR-001', projectId: 'P2', title: '바코드 라벨 추가', status: '승인' })];
+  const hits = gsFind('CR-001', { today: TODAY, screens, projects, tasks, liveMap, tickets: [], issues: [], actions: [], crs, people: [], shortOf, nameOf: (x) => x });
+  assert.deepEqual(hits.map((x) => [x.grp, x.label, x.sub, x.go]), [['CR', 'CR-001 바코드 라벨 추가', '승인', { kind: 'view', v: 'site/cr', params: { cr: 'CR-001' } }]]);
 });
 
 test('성과지표: 계획서 있는 사업 7개 × 지표 2개, 실측 전 (데모 kpiScore)', () => {

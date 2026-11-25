@@ -383,3 +383,35 @@ export const pmPdfDraftSchema = z.object({
   at: z.string().default(''),
 });
 export type PmPdfDraft = z.infer<typeof pmPdfDraftSchema>;
+
+/** 요구사항 변경 (`pmChangeRequests`, 데모 S.crs) — id = 'CR-001'. 요청자는 도입기업 담당자 이름 글자 (§0) */
+export const PM_CR_CATS = ['기능 추가', '화면 변경', '설비 추가', '데이터 변경', '보고서 추가', '기타'] as const;
+export const PM_CR_PRIOS = ['긴급', '높음', '보통', '낮음'] as const;
+export const PM_CR_STATES = ['검토중', '승인', '반려'] as const;
+export const pmChangeRequestSchema = z.object({
+  id: z.string().min(1),
+  projectId: z.string().min(1),
+  cat: z.string().default('기능 추가'),
+  title: z.string().min(1),
+  desc: z.string().default(''),
+  /** 요청자 (도입기업 담당자 이름/직책 — 글자) */
+  req: z.string().default(''),
+  /** 요청일 */
+  date: day.default(''),
+  prio: z.string().default('보통'),
+  /** 일정 영향 (일) */
+  days: z.number().min(0).default(0),
+  /** 비용 영향 (만원) */
+  cost: z.number().min(0).default(0),
+  status: z.enum(PM_CR_STATES).default('검토중'),
+  /** 검토 의견 · 검토한 사람(사용자 ID) · 검토일 */
+  comment: z.string().default(''),
+  reviewer: z.string().default(''),
+  revD: day.default(''),
+  /** 승인 뒤 추가한 업무 ID (데모 wbsKey) */
+  taskId: z.string().default(''),
+  /** 접수한 사람 · 접수일 */
+  by: z.string().default(''),
+  at: day.default(''),
+});
+export type PmChangeRequest = z.infer<typeof pmChangeRequestSchema>;

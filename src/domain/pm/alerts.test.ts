@@ -73,3 +73,20 @@ test('확인한 알림은 문구로 기억 — 문구가 바뀌면 다시 뜸 (a
   assert.equal(alertSeen({ '새 티켓 · P9-0001': '2026-11-25' }, { ...a, txt: '새 티켓 · P9-0002' }), false);
   assert.equal(alertSeen(undefined, a), false);
 });
+
+test('4단계 CR: 사업 PM 에게 검토 대기(내가 접수한 건 빼고) · 접수자에게 결과 7일 — 누르면 그 CR 창', async () => {
+  const { pmChangeRequestSchema } = await import('./schema');
+  const { siteCtxOf } = await import('./site');
+  const p = pmProjectSchema.parse({ id: 'P9', company: '테스트', pmUserId: 'pm' });
+  const c = siteCtxOf(p, { tasks: [], liveMap: new Map(), plans: {}, gov: [], planChecks: [], govLinks: [], agreements: [], baselines: [], issues: [] }, TODAY);
+  const crs = [
+    pmChangeRequestSchema.parse({ id: 'CR-001', projectId: 'P9', title: '바코드 라벨 추가', by: 'u' }),
+    pmChangeRequestSchema.parse({ id: 'CR-002', projectId: 'P9', title: 'PM 이 직접 접수', by: 'pm' }),
+    pmChangeRequestSchema.parse({ id: 'CR-003', projectId: 'P9', title: '설비 추가', by: 'u', status: '승인', reviewer: 'pm', revD: '2026-11-24' }),
+    pmChangeRequestSchema.parse({ id: 'CR-004', projectId: 'P9', title: '오래된 반려', by: 'u', status: '반려', reviewer: 'pm', revD: '2026-11-10' }),
+  ];
+  const x = X({ projects: [p], sites: [c], crs, pmOf: (q) => [q.pmUserId] });
+  assert.deepEqual(txt('pm', x), ['warn|CR 검토 대기 · CR-001 바코드 라벨 추가 (김철수 접수)|site/cr']);
+  assert.deepEqual(myAlerts('pm', x)[0].go, { kind: 'view', v: 'site/cr', params: { cr: 'CR-001', review: '1' } });
+  assert.deepEqual(txt('u', x), ['ok|CR 승인 · CR-003 설비 추가 (pm)|site/cr'], '7일 지난 반려는 안 뜸');
+});

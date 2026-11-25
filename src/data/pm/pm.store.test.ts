@@ -167,3 +167,23 @@ test('4단계 산출물 저장: 상태 고르기 · 파일 올리면 제출완�
   assert.deepEqual((await s.snapshot()).docs.map((d) => d.id), ['P2|99-99']);
   await assert.rejects(s.setDoc('없음', '작성중', 'me'));
 });
+
+test('4단계 CR 저장: 접수 → 검토중 · 번호 · 수정 · 검토(의견 필수, 한 번만) · 업무 잇기 · 업무 번호 따라감', async () => {
+  const s = createPmStore('2026-11-25');
+  const base = { projectId: 'P2', cat: '기능 추가', title: '바코드 라벨 추가', desc: '', req: '도입기업 담당자', date: '2026-11-24', prio: '보통', days: 5, cost: 100 };
+  const a = await s.addCr(base, 'u1');
+  const b = await s.addCr({ ...base, title: '두 번째' }, 'u1');
+  assert.deepEqual([a.id, a.status, a.by, a.at, b.id], ['CR-001', '검토중', 'u1', '2026-11-25', 'CR-002']);
+  assert.deepEqual((await s.snapshot()).crs.map((c) => c.id), ['CR-002', 'CR-001'], '최근 접수가 앞');
+  await s.updateCr('CR-001', { ...base, days: 9 });
+  await assert.rejects(s.reviewCr('CR-001', '승인', '  ', 'pm'), /의견/);
+  await s.reviewCr('CR-001', '승인', '일정 여유 있음', 'pm');
+  await assert.rejects(s.reviewCr('CR-001', '반려', '다시', 'pm'), /이미 승인/);
+  const t = (await s.snapshot()).tasks.find((x) => x.projectId === 'P2')!;
+  await s.linkCrTask('CR-001', t.id);
+  await s.updateTask(t.id, { ...t, id: 'P2|99-01', code: '99-01' }, 'pm');
+  const c = (await s.snapshot()).crs.find((x) => x.id === 'CR-001')!;
+  assert.deepEqual([c.status, c.comment, c.reviewer, c.revD, c.days, c.taskId], ['승인', '일정 여유 있음', 'pm', '2026-11-25', 9, 'P2|99-01']);
+  await s.removeCr('CR-002');
+  assert.deepEqual((await s.snapshot()).crs.map((x) => x.id), ['CR-001']);
+});

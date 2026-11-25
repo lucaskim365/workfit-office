@@ -1,6 +1,6 @@
 import { addDays, applyProgress, makeBaseline, todayStr } from '@/domain/pm/rules';
 import type {
-  PmAction, PmAgreementChange, PmBaseline, PmChangeLog, PmDoc, PmGovLink, PmGovRecord, PmIssue, PmLater, PmMilestoneOk, PmPlanCheck,
+  PmAction, PmAgreementChange, PmBaseline, PmChangeLog, PmChangeRequest, PmDoc, PmGovLink, PmGovRecord, PmIssue, PmLater, PmMilestoneOk, PmPlanCheck,
   PmPdfDraft, PmPlanDay, PmPlanItem, PmPlanRep, PmProject, PmSubtask, PmTask, PmTaskDone, PmTaskFunctions, PmUpdRequest, PmWeekCheck,
 } from '@/domain/pm/schema';
 import { wdOf } from '@/domain/pm/plan';
@@ -10,6 +10,7 @@ import { SEED_BASE_DATE, SEED_VERSION, seedFunctions, seedPlanFunctions, seedPla
 import { moveTicket, nextTicketNo, setTicketProg, syncTicketWithTask, tkOpen, type PmTicket } from '@/domain/pm/ticket';
 import { weekStart } from '@/domain/pm/site';
 import type { PmAiMeas, PmKpiDef, PmKpiMeas } from '@/domain/pm/kpi';
+import { nextCrId } from '@/domain/pm/cr';
 
 /**
  * PM 저장소 — 1단계는 **메모리 전용** (§5.1: `pm*` 컬렉션이 아직 없어 `VITE_DB_DRIVER=appwrite` 여도 메모리).
@@ -74,6 +75,8 @@ export interface PmSnapshot {
   // ── 4단계 (점검 · 요구사항 · 산출물) ──
   /** 산출물 제출 상태 (데모 S.docs) — 사람이 고르거나 파일을 올린 업무만 */
   docs: PmDoc[];
+  /** 요구사항 변경 (데모 S.crs) — 최근 접수가 앞 */
+  crs: PmChangeRequest[];
 }
 
 const clone = <T>(v: T): T => structuredClone(v);
@@ -122,6 +125,7 @@ export function createPmStore(today = todayStr()) {
     planDays: [], planReps: [], pdfDrafts: [],
     kpiDefs: [], kpiMeas: [], aiMeas: [], seen: [], favs: [],
     docs: [],
+    crs: [],
   };
 
   const log = (projectId: string, code: string, kind: PmChangeLog['kind'], text: string, by: string, day: string) => {
@@ -147,6 +151,8 @@ export function createPmStore(today = todayStr()) {
     // 산출물 상태 · 마일스톤 승인도 새 번호로 (rekey 2190: S.docs · S.msOk)
     for (const d of state.docs) if (d.id === oldId) d.id = newId;
     for (const m of state.msOk) if (m.id === oldId) m.id = newId;
+    // CR 에 연결한 업무도 (데모 wbsKey 는 rekey 대상이 아니지만, 여기선 업무 ID 로 이어 두므로 따라가게)
+    for (const c of state.crs) if (c.taskId === oldId) c.taskId = newId;
   };
   const planOf = (who: string, date: string) => state.planDays.find((p) => p.who === who && p.date === date);
   /** 업무를 고치면 업무 티켓도 따라감 (wbsSyncTicket) → 변경 이력 꼬리 " · 티켓 P2-0001 반영" */
@@ -522,6 +528,37 @@ export function createPmStore(today = todayStr()) {
       const t = state.tasks.find((x) => x.id === taskId);
       if (!t) throw new Error('업무를 찾을 수 없습니다');
       state.docs = [...state.docs.filter((d) => d.id !== taskId), { id: taskId, projectId: t.projectId, st: '제출완료', file: fileName, date: day, by }];
+    },
+
+    // ── 4단계: 요구사항(CR) ──────────────────────────────
+    /** CR 접수 (crForm 새로) — 번호 붙여 맨 앞에, 검토중 */
+    async addCr(x: Omit<PmChangeRequest, 'id' | 'status' | 'comment' | 'reviewer' | 'revD' | 'taskId' | 'by' | 'at'>, by: string, day = todayStr()): Promise<PmChangeRequest> {
+      const id = nextCrId(state.crs);
+      const c: PmChangeRequest = { ...clone(x), id, status: '검토중', comment: '', reviewer: '', revD: '', taskId: '', by, at: day };
+      state.crs.unshift(c);
+      return clone(c);
+    },
+    /** CR 수정 (crForm 고치기) — 접수 칸만, 상태 · 검토 기록은 그대로 */
+    async updateCr(id: string, x: Pick<PmChangeRequest, 'projectId' | 'cat' | 'title' | 'desc' | 'req' | 'date' | 'prio' | 'days' | 'cost'>) {
+      const c = state.crs.find((v) => v.id === id);
+      if (!c) throw new Error('CR을 찾을 수 없습니다');
+      Object.assign(c, clone(x));
+    },
+    async removeCr(id: string) {
+      state.crs = state.crs.filter((v) => v.id !== id);
+    },
+    /** 검토 · 승인 (crReview) — 의견 필수, 검토중일 때만 */
+    async reviewCr(id: string, decision: '승인' | '반려', comment: string, by: string, day = todayStr()) {
+      const c = state.crs.find((v) => v.id === id);
+      if (!c) throw new Error('CR을 찾을 수 없습니다');
+      if (c.status !== '검토중') throw new Error(`${id}는 이미 ${c.status} 처리되었습니다`);
+      if (!comment.trim()) throw new Error('검토 의견을 적어 주세요');
+      Object.assign(c, { status: decision, comment: comment.trim(), reviewer: by, revD: day });
+    },
+    /** 승인한 CR 로 추가한 업무 잇기 (wbsForm preset.cr) */
+    async linkCrTask(id: string, taskId: string) {
+      const c = state.crs.find((v) => v.id === id);
+      if (c) c.taskId = taskId;
     },
 
     /** 몰림 기준 주당 마감 (loadMax 6008: 1 이상, 잘못 넣으면 8) */

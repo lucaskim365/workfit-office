@@ -103,7 +103,7 @@ export function PmSearch({ people }: { people: People }) {
     if (!d || !deb.trim()) return [];
     const shortOf = (id: string) => { const p = d.snap.projects.find((x) => x.id === id); return p ? shortName(p, d.snap.projects) : id; };
     return gsFind(deb, { today: d.today, screens, projects: d.snap.projects, tasks: d.snap.tasks, liveMap: d.liveMap, tickets: d.snap.tickets,
-      issues: d.snap.issues, actions: d.snap.actions, people: people.people, shortOf, nameOf: people.nameOf });
+      issues: d.snap.issues, actions: d.snap.actions, crs: d.snap.crs, people: people.people, shortOf, nameOf: people.nameOf });
   }, [d, deb, screens, people.people, people.nameOf]);
   useEffect(() => setSel(0), [deb]);
   const close = () => { setOpen(false); setQ(''); setDeb(''); inp.current?.blur(); };
@@ -180,7 +180,7 @@ export function PmBell({ people }: { people: People }) {
       logs: d.snap.logs, checks: d.snap.weekChecks, tickets: d.snap.tickets, baseDate: d.snap.baseDate, sitePm,
       more: planUpdDates(C), planRecent: planRecentIdx(C),
       subtasks: d.snap.subtasks, actions: d.snap.actions, issues: d.snap.issues,
-      msOk: new Map(d.snap.msOk.map((x) => [x.id, x])), updReq: d.snap.updReq,
+      msOk: new Map(d.snap.msOk.map((x) => [x.id, x])), updReq: d.snap.updReq, crs: d.snap.crs,
       sites: S.all.map((r) => r.c), pmOf, shortOf, nameOf: people.nameOf,
     });
   }, [d, S, me, people.idByName, people.nameOf]);

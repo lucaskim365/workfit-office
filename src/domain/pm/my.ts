@@ -1,5 +1,5 @@
 import { addDays, diffDays, isDone, liveOf, prioOf, taskPeople, type Live } from './rules';
-import type { PmAction, PmChangeLog, PmIssue, PmMilestoneOk, PmProject, PmTask, PmWeekCheck } from './schema';
+import type { PmAction, PmChangeLog, PmIssue, PmMilestoneOk, PmProject, PmTask, PmWeekCheck, PmChangeRequest } from './schema';
 import { isDrop, isPre, weekStart } from './site';
 import { workItemOf } from './team';
 import { tkOpen, tkReviewPending, type PmTicket } from './ticket';
@@ -94,13 +94,16 @@ export const msReqOf = (tasks: readonly PmTask[], t: PmTask) =>
 
 export type Approval =
   | { kind: 'tk'; x: PmTicket }
-  | { kind: 'ms'; t: PmTask };
+  | { kind: 'ms'; t: PmTask }
+  | { kind: 'cr'; c: PmChangeRequest };
 
 export interface InboxInputs extends MyInputs {
   tickets: readonly PmTicket[];
   msOk: ReadonlyMap<string, PmMilestoneOk>;
   issues: readonly PmIssue[];
   actions: readonly PmAction[];
+  /** 요구사항 변경 (4단계) */
+  crs?: readonly PmChangeRequest[];
   /** 사업 PM (그룹웨어 사용자 ID 들) — 데모 myPm: 업무 목록 PM · 사업 정보 PM */
   pmOf: (p: PmProject) => string[];
 }
@@ -108,7 +111,7 @@ export interface InboxInputs extends MyInputs {
 export interface Inbox {
   /** 내 티켓 — 배정받은 진행 중 티켓 */
   tickets: PmTicket[];
-  /** 승인 대기 — 내가 검토 · 승인할 티켓 · 내가 PM인 사업의 마일스톤 (요구사항 CR 은 4단계) */
+  /** 승인 대기 — 내가 검토 · 승인할 티켓 · 내가 PM인 사업의 마일스톤 · 검토중 요구사항(CR) */
   appr: Approval[];
   /** 이슈 — 내 담당 · 관련 미해결 */
   issues: PmIssue[];
@@ -128,7 +131,10 @@ export function myInbox(me: string, X: InboxInputs): Inbox {
   const ms = X.tasks
     .filter((t) => mine.has(t.projectId) && t.milestone && !isPre(t) && isDone(L(t)) && !X.msOk.has(t.id) && msReqOf(X.tasks, t).every((x) => isDone(L(x))))
     .sort((a, b) => (a.end < b.end ? -1 : 1));
-  const appr: Approval[] = [...rev.map((x) => ({ kind: 'tk' as const, x })), ...ms.map((t) => ({ kind: 'ms' as const, t }))];
+  // CR: 검토중 · 내가 PM인 사업 (데모 myPm — 탈락 사업도 포함)
+  const pmAll = new Set(X.projects.filter((p) => X.pmOf(p).includes(me)).map((p) => p.id));
+  const crs = (X.crs ?? []).filter((c) => c.status === '검토중' && pmAll.has(c.projectId));
+  const appr: Approval[] = [...rev.map((x) => ({ kind: 'tk' as const, x })), ...ms.map((t) => ({ kind: 'ms' as const, t })), ...crs.map((c) => ({ kind: 'cr' as const, c }))];
   const issues = X.issues.filter((i) => (i.ownerId === me || i.watchIds.includes(me)) && i.status !== '해결');
   const actions = X.actions.filter((a) => !a.done && a.whoId === me).sort((a, b) => ((a.due || '9') < (b.due || '9') ? -1 : 1));
   return { tickets, appr, issues, actions, total: tickets.length + appr.length + issues.length + actions.length };

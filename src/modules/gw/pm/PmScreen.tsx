@@ -23,6 +23,7 @@ import { LogView } from './views/dash/LogView';
 import { PlanView } from './views/plan/PlanView';
 import { DocView } from './views/doc/DocView';
 import { InspView } from './views/doc/InspView';
+import { CrView } from './views/doc/CrView';
 
 /** 옮긴 보기 → 화면. 없는 보기는 '옮기는 중' 자리 */
 const VIEWS: Record<string, ComponentType> = {
@@ -41,6 +42,7 @@ const VIEWS: Record<string, ComponentType> = {
   'site/kpi': KpiView,
   'doc/audit': DocView,
   'doc/insp': InspView,
+  'site/cr': CrView,
 };
 
 const NO_TITLE = new Set(['sched/gantt', 'risk/delay']);
@@ -70,7 +72,7 @@ export default function PmScreen() {
     next.set('v', viewId);
     // 화면을 바꾸면 업무 목록 사업 선택(k)·단계(stage)는 그 화면 것만 — 업무 목록 안에서만 유지
     if (!viewId.startsWith('task/wbs')) { next.delete('k'); next.delete('stage'); next.delete('period'); next.delete('who'); next.delete('st'); }
-    for (const x of ['q', 'board', 'inbox', 'pop', 'side', 'fix']) next.delete(x);
+    for (const x of ['q', 'board', 'inbox', 'pop', 'side', 'fix', 'cr', 'review']) next.delete(x);
     setParams(next);
   };
   /** 알림 · 검색 · 즐겨찾기에서 갈 곳 */

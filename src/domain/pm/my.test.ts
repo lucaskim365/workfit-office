@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { liveOf, type Live } from './rules';
-import { pmActionSchema, pmIssueSchema, pmProjectSchema, pmTaskSchema, type PmChangeLog, type PmTask } from './schema';
+import { pmActionSchema, pmChangeRequestSchema, pmIssueSchema, pmProjectSchema, pmTaskSchema, type PmChangeLog, type PmTask } from './schema';
 import { myInbox, mySites, myUpdList, myWork, nextMilestone, pageOf, updBatch, updWhat, type UpdItem } from './my';
 import type { PmTicket } from './ticket';
 
@@ -63,9 +63,11 @@ test('처리할 일: 내 티켓 · 승인 대기(티켓 검토 · 마일스톤) 
     ...X(ts), tickets, msOk: new Map(), pmOf: (p) => [p.pmUserId].filter(Boolean),
     issues: [pmIssueSchema.parse({ id: 'i1', projectId: 'P9', title: '이슈', ownerId: 'pm' }), pmIssueSchema.parse({ id: 'i2', projectId: 'P9', title: '해결', ownerId: 'pm', status: '해결' })],
     actions: [pmActionSchema.parse({ id: 'a1', text: '할 일', whoId: 'pm', due: '2026-11-30' }), pmActionSchema.parse({ id: 'a2', text: '끝', whoId: 'pm', done: true })],
+    // CR: 내가 PM인 사업의 검토중만 (4단계, 데모 appr cr)
+    crs: [pmChangeRequestSchema.parse({ id: 'CR-001', projectId: 'P9', title: '검토중' }), pmChangeRequestSchema.parse({ id: 'CR-002', projectId: 'P9', title: '승인됨', status: '승인' }), pmChangeRequestSchema.parse({ id: 'CR-003', projectId: 'P3', title: '남의 사업' })],
   });
-  assert.deepEqual(ib.appr.map((a) => (a.kind === 'ms' ? a.t.code : a.x.no)), ['m'], 'PM 사업 마일스톤 — 앞선 업무가 남은 m2 는 아직');
-  assert.deepEqual([ib.issues.length, ib.actions.length, ib.total], [1, 1, 3]);
+  assert.deepEqual(ib.appr.map((a) => (a.kind === 'ms' ? a.t.code : a.kind === 'tk' ? a.x.no : a.c.id)), ['m', 'CR-001'], 'PM 사업 마일스톤 — 앞선 업무가 남은 m2 는 아직 · 검토중 CR');
+  assert.deepEqual([ib.issues.length, ib.actions.length, ib.total], [1, 1, 4]);
   const mine = myInbox('me', { ...X(ts), tickets, msOk: new Map(), pmOf: () => [], issues: [], actions: [] });
   assert.deepEqual(mine.tickets.map((x) => x.no), ['P9-0001']);
   assert.deepEqual(mine.appr.map((a) => (a.kind === 'tk' ? a.x.no : '')), ['P9-0003', 'P9-0004']);
