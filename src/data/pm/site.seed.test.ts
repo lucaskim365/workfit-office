@@ -126,3 +126,15 @@ test('4단계 점검 · 감리 대비 (데모 inspInfo · pInsp 값, 11/25 · �
   assert.deepEqual([b.nBad, b.nWarn, b.soon, b.nGi, b.fin.length], [6, 0, 7, 0, 0]);
   assert.deepEqual(b.up.map((x) => x.c.p.id), ['P2', 'P3', 'P5', 'P6', 'P8', 'P9', 'P7']);
 });
+
+test('5단계 주간 진행률 · 보고서 (데모 pWeekCheck · docReport 값, 11/25 · 기록 0건)', async () => {
+  const { wcBoard, weekReport } = await import('@/domain/pm/weekly');
+  const X = { tasks, liveMap, projects, today: TODAY, logs: [], checks: [], tickets: [], baseDate: SEED_BASE_DATE, sitePm: () => '' };
+  // 업무가 있는 사업 6개 모두 갱신할 업무 0건 (날짜가 없어서) → 100%
+  const B = wcBoard(KS.map(ctx), X, '박명규', () => [], true, []);
+  assert.deepEqual(B.list.map((r) => [r.c.p.id, r.n]), [['P2', 0], ['P3', 0], ['P5', 0], ['P6', 0], ['P7', 0], ['P8', 0]]);
+  assert.deepEqual([B.tot, B.pct, B.fin], [0, 100, 6]);
+  // 보고서 1번: 진척(반올림) · 계획 · 완료 / 전체 · 지연 · 상태 · 11월 4주차
+  const R = (k: string) => { const r = weekReport(ctx(k), 0, { tickets: [], issues: [], meetings: [], hours: () => 0 }); return [Math.round(r.act), Math.round(r.plan), r.done, r.n, r.late.length, r.wkNo]; };
+  assert.deepEqual([R('P2'), R('P3'), R('P7')], [[7, 0, 15, 72, 0, 4], [4, 0, 6, 60, 0, 4], [1, 0, 2, 63, 0, 4]]);
+});

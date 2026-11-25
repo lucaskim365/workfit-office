@@ -176,7 +176,7 @@ export function myAlerts(me: string, X: AlertInputs): PmAlert[] {
     for (const c of live.filter((c) => c.ts.length && isPm(c))) {
       const ts = c.ts.filter((t) => info(t));
       const ok = ts.filter((t) => taskUpd(idx, t.id) >= ws).length;
-      if (ok < ts.length) out.push({ grp: 'wc', gk: X.shortOf(c.p.id), gn: ts.length - ok, lv: 'warn', txt: `${X.shortOf(c.p.id)} · 이번 주 진행률 갱신 ${ok} / ${ts.length}건 — 주간 진행률 '사람별 갱신 현황'`, go: view('doc/check') });
+      if (ok < ts.length) out.push({ grp: 'wc', gk: X.shortOf(c.p.id), gn: ts.length - ok, lv: 'warn', txt: `${X.shortOf(c.p.id)} · 이번 주 진행률 갱신 ${ok} / ${ts.length}건 — 주간 진행률 '사람별 갱신 현황'`, go: view('doc/check', { k: c.p.id }) });
     }
   }
   // 내가 맡긴 일이 끝났을 때 (7일) — 세부 작업 · 액션 아이템

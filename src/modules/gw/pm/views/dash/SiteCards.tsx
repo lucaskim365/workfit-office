@@ -267,9 +267,9 @@ export function InfoCard({ c, short, onKpi }: { c: SiteCtx; short: string; onKpi
   );
 }
 
-/** 최근 업데이트 (updCard) — 점검 결과 · 협약변경 (주간 특이사항은 5단계) */
-export function UpdatesCard({ L, nameOf }: { L: SiteUpdate[]; nameOf: (id: string) => string }) {
-  const btn = <Button size="sm" disabled title="주간 특이사항은 주간 진행률 화면(5단계)에서 씁니다">이번 주 특이사항 쓰기 (5단계)</Button>;
+/** 최근 업데이트 (updCard) — 주간 특이사항 · 점검 결과 · 협약변경. [이번 주 특이사항 쓰기] = 주간 진행률 화면 (wcGo) */
+export function UpdatesCard({ L, nameOf, noteNow, onWrite }: { L: SiteUpdate[]; nameOf: (id: string) => string; noteNow: boolean; onWrite: () => void }) {
+  const btn = <Button size="sm" variant={noteNow ? 'secondary' : 'primary'} onClick={onWrite} title="주간 진행률 화면의 특이사항 칸">{noteNow ? '이번 주 특이사항 고치기' : '이번 주 특이사항 쓰기'}</Button>;
   if (!L.length) {
     return <Card><CardHead title="최근 업데이트"><span className="flex-1" /><span className="text-[11px] text-ink3">0건 · 주간 특이사항 · 점검 결과 · 협약변경이 쌓입니다</span>{btn}</CardHead></Card>;
   }

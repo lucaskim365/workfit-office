@@ -26,6 +26,8 @@ import { InspView } from './views/doc/InspView';
 import { CrView } from './views/doc/CrView';
 import { IssueView } from './views/issue/IssueView';
 import { MeetView } from './views/meet/MeetView';
+import { WeekCheckView } from './views/weekly/WeekCheckView';
+import { ReportView } from './views/weekly/ReportView';
 
 /** 옮긴 보기 → 화면. 없는 보기는 '옮기는 중' 자리 */
 const VIEWS: Record<string, ComponentType> = {
@@ -47,6 +49,8 @@ const VIEWS: Record<string, ComponentType> = {
   'site/cr': CrView,
   'risk/issue': IssueView,
   'doc/meet': MeetView,
+  'doc/check': WeekCheckView,
+  'doc/report': ReportView,
 };
 
 const NO_TITLE = new Set(['sched/gantt', 'risk/delay']);

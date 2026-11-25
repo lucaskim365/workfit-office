@@ -38,7 +38,7 @@ function PrioTag({ t, d }: { t: PmTask; d: PmDerived }) {
 const span = (t: PmTask) => (t.start || t.end ? `${monthDay(t.start)}~${monthDay(t.end)}` : '일정 없음');
 
 /** 진행률 입력 — 바꾸고 칸을 벗어나거나 Enter 면 바로 저장 (quickAp) */
-function PctInput({ pct, onSet, onBad }: { pct: number; onSet: (n: number) => void; onBad: () => void }) {
+export function PctInput({ pct, onSet, onBad }: { pct: number; onSet: (n: number) => void; onBad: () => void }) {
   return (
     <span className="inline-flex items-center gap-0.5 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
       <input type="number" min={0} max={100} step={1} defaultValue={pct} key={pct} aria-label="실적 진행률"

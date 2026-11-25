@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { Button } from '@/shared/ui/Button';
 import { diffDays, monthDay, shortName } from '@/domain/pm/rules';
 import {
-  agoText, agrWarn, dday, dlStat, fnLinks, fnSt, GOV_FOLLOW_OF, GOV_INNER, govItems, govResTone, siteUpdates, sumDeadlines, type Deadline, type FnState,
+  agoText, agrWarn, weekStart, dday, dlStat, fnLinks, fnSt, GOV_FOLLOW_OF, GOV_INNER, govItems, govResTone, siteUpdates, sumDeadlines, type Deadline, type FnState,
 } from '@/domain/pm/site';
 import type { PmAgreementChange } from '@/domain/pm/schema';
 import { usePmDerived, usePmMutations, usePmSiteMutations, usePmSites, type PmSiteRow } from '@/features/pm/usePm';
@@ -186,7 +186,7 @@ export function SiteView() {
       <div className="grid items-stretch gap-4 lg:grid-cols-2">
         <div className="flex min-w-0 flex-col gap-4">
           <InfoCard c={c} short={short} onKpi={() => go('site/kpi', { k: c.p.id })} />
-          <UpdatesCard L={siteUpdates(c)} nameOf={people.nameOf} />
+          <UpdatesCard L={siteUpdates(c)} nameOf={people.nameOf} noteNow={!!d.snap.reports.find((r) => r.projectId === k && r.week === weekStart(today))?.note} onWrite={() => go('doc/check', { k })} />
           <AgreementCard c={c} onNew={() => setPop({ kind: 'agr', x: null })} onEdit={(x) => setPop({ kind: 'agr', x })} />
         </div>
         <Card className="flex min-h-[520px] min-w-0 flex-col">

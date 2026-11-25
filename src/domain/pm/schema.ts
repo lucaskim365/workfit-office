@@ -231,6 +231,19 @@ export type PmLater = z.infer<typeof pmLaterSchema>;
 export const pmUpdRequestSchema = z.object({ id: z.string().min(1), date: day, by: z.string().default(''), projectId: z.string().default('') });
 export type PmUpdRequest = z.infer<typeof pmUpdRequestSchema>;
 
+/** 주간 보고 작성 항목 (`pmReports`, 데모 S.reports[k][주]) — 금주 특이사항 · 도입기업 협조 요청. id = `${사업}|${주 시작일}` */
+export const pmReportSchema = z.object({
+  id: z.string().min(1),
+  projectId: z.string().min(1),
+  /** 주 시작일 (월요일) */
+  week: day,
+  note: z.string().default(''),
+  req: z.string().default(''),
+  by: z.string().default(''),
+  at: day.default(''),
+});
+export type PmReport = z.infer<typeof pmReportSchema>;
+
 /** 산출물 제출 상태 (`pmDocs`, 데모 S.docs) — 사람이 고르거나 파일을 올린 것만. id = 업무 ID */
 export const PM_DOC_STATES = ['미작성', '작성중', '제출완료'] as const;
 export const pmDocSchema = z.object({

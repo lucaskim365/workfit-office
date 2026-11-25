@@ -114,6 +114,9 @@ export function usePmMutations(me: string, nameOf?: (id: string) => string) {
     updateAction: m(({ id, x }: { id: string; x: Parameters<typeof s.updateAction>[1] }) => s.updateAction(id, x, me)),
     removeAction: m((id: string) => s.removeAction(id)),
     setActionDone: m(({ id, done }: { id: string; done: boolean }) => s.setActionDone(id, done, me)),
+    // 5단계: 주간 진행률 · 보고서
+    setReport: m(({ projectId, week, patch }: { projectId: string; week: string; patch: { note?: string; req?: string } }) => s.setReport(projectId, week, patch, me)),
+    sendUpdRequest: m(({ whoId, projectId }: { whoId: string; projectId: string }) => s.sendUpdRequest(whoId, projectId, me)),
   };
 }
 
@@ -133,7 +136,7 @@ export function usePmSites(d: PmDerived | null): { rows: PmSiteRow[]; all: PmSit
     const { snap, today, liveMap } = d;
     const X: SiteInputs = {
       tasks: snap.tasks, liveMap, plans: snap.plans, gov: snap.gov, planChecks: snap.planChecks, govLinks: snap.govLinks,
-      agreements: snap.agreements, baselines: snap.baselines, issues: snap.issues,
+      agreements: snap.agreements, baselines: snap.baselines, issues: snap.issues, reports: snap.reports,
     };
     const all = snap.projects
       .map((p) => {

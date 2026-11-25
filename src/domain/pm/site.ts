@@ -1,7 +1,7 @@
 import { addDays, diffDays, isDone, liveOf, mdAvgRaw, monthDay, planPct, siteStatusOf, type Live, type PmSiteStatus } from './rules';
 import type {
   PmAction, PmAgreementChange, PmBaseline, PmChangeLog, PmGovLink, PmGovRecord, PmIssue, PmMilestoneOk,
-  PmPlanCheck, PmProject, PmTask,
+  PmPlanCheck, PmProject, PmReport, PmTask,
 } from './schema';
 
 /**
@@ -105,6 +105,8 @@ export interface SiteCtx {
   baseline: PmBaseline | null;
   /** 이 사업 이슈 */
   issues: readonly PmIssue[];
+  /** 이 사업 주간 보고 작성 항목 (5단계) */
+  reports?: readonly PmReport[];
 }
 
 const done = (c: SiteCtx, t: PmTask) => isDone(c.live(t));
@@ -632,6 +634,7 @@ export interface SiteInputs {
   agreements: readonly PmAgreementChange[];
   baselines: readonly PmBaseline[];
   issues: readonly PmIssue[];
+  reports?: readonly PmReport[];
 }
 /** 사업 1개의 SiteCtx */
 export function siteCtxOf(p: PmProject, x: SiteInputs, today: string): SiteCtx {
@@ -648,6 +651,7 @@ export function siteCtxOf(p: PmProject, x: SiteInputs, today: string): SiteCtx {
     agr: by(x.agreements),
     baseline: x.baselines.find((b) => b.id === p.id) ?? null,
     issues: by(x.issues),
+    reports: by(x.reports ?? []),
   };
 }
 
@@ -725,10 +729,11 @@ export type FnState = '완료' | '지연' | '진행 중' | '시작 전' | '연�
 export const fnSt = (c: SiteCtx, f: FnLink): FnState =>
   !f.t ? (f.kind === '기존' ? '기존' : '연결 없음') : done(c, f.t) ? '완료' : late(c, f.t) ? '지연' : c.live(f.t).pct > 0 || nowOf(c, f.t) ? '진행 중' : '시작 전';
 
-/** 최근 업데이트 (siteUpdates 7338) — 점검 결과 · 협약변경. 주간 특이사항은 5단계(주간 점검)에서 더함 */
+/** 최근 업데이트 (siteUpdates 7338) — 주간 특이사항 · 점검 결과 · 협약변경, 최근 순 */
 export interface SiteUpdate { d: string; tag: '주간 특이사항' | '점검 결과' | '협약변경'; who: string; txt: string; res?: string }
 export function siteUpdates(c: SiteCtx): SiteUpdate[] {
   const out: SiteUpdate[] = [];
+  for (const r of c.reports ?? []) if (r.note || r.req) out.push({ d: r.at || r.week, tag: '주간 특이사항', who: r.by, txt: [r.note, r.req ? `협조 요청: ${r.req}` : ''].filter(Boolean).join(' / ') });
   for (const g of govItems(c) ?? []) {
     const r = c.gov.get(g.id);
     if (r && r.v) out.push({ d: r.date, tag: '점검 결과', who: r.by, txt: `${g.t.replace(/ —.*$/, '')} — ${r.v}${r.memo ? ` · ${r.memo}` : ''}`, res: r.v });

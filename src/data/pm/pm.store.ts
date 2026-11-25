@@ -1,6 +1,6 @@
 import { addDays, applyProgress, makeBaseline, todayStr } from '@/domain/pm/rules';
 import type {
-  PmAction, PmAgreementChange, PmBaseline, PmChangeLog, PmChangeRequest, PmDoc, PmMeeting, PmGovLink, PmGovRecord, PmIssue, PmLater, PmMilestoneOk, PmPlanCheck,
+  PmAction, PmAgreementChange, PmBaseline, PmChangeLog, PmChangeRequest, PmDoc, PmMeeting, PmReport, PmGovLink, PmGovRecord, PmIssue, PmLater, PmMilestoneOk, PmPlanCheck,
   PmPdfDraft, PmPlanDay, PmPlanItem, PmPlanRep, PmProject, PmSubtask, PmTask, PmTaskDone, PmTaskFunctions, PmUpdRequest, PmWeekCheck,
 } from '@/domain/pm/schema';
 import { wdOf } from '@/domain/pm/plan';
@@ -81,6 +81,8 @@ export interface PmSnapshot {
   // ── 5단계 ──
   /** 회의록 (데모 S.meetings) */
   meetings: PmMeeting[];
+  /** 주간 보고 작성 항목 (데모 S.reports) */
+  reports: PmReport[];
 }
 
 const clone = <T>(v: T): T => structuredClone(v);
@@ -131,6 +133,7 @@ export function createPmStore(today = todayStr()) {
     docs: [],
     crs: [],
     meetings: [],
+    reports: [],
   };
 
   const log = (projectId: string, code: string, kind: PmChangeLog['kind'], text: string, by: string, day: string) => {
@@ -597,6 +600,18 @@ export function createPmStore(today = todayStr()) {
     },
     async removeAction(id: string) {
       state.actions = state.actions.filter((v) => v.id !== id);
+    },
+
+    // ── 5단계: 주간 진행률 · 보고서 ──────────────────────
+    /** 금주 특이사항 · 협조 요청 저장 (wcNote · wcReq · rptNote · rptReq) — 주마다 */
+    async setReport(projectId: string, week: string, patch: { note?: string; req?: string }, by: string, day = todayStr()) {
+      const id = `${projectId}|${week}`;
+      const old = state.reports.find((r) => r.id === id);
+      state.reports = [...state.reports.filter((r) => r.id !== id), { id, projectId, week, note: old?.note ?? '', req: old?.req ?? '', ...patch, by, at: day }];
+    },
+    /** 진행률 갱신 요청 보내기 (updReq) — 받는 사람마다 1건 (마지막 요청) */
+    async sendUpdRequest(whoId: string, projectId: string, by: string, day = todayStr()) {
+      state.updReq = [...state.updReq.filter((r) => r.id !== whoId), { id: whoId, date: day, by, projectId }];
     },
 
     // ── 4단계: 요구사항(CR) ──────────────────────────────

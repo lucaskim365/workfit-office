@@ -223,3 +223,15 @@ test('5단계 회의록 · 액션 저장: 회의 사업을 바꾸면 그 회의 
   await s.removeAction(a.id);
   assert.equal((await s.snapshot()).actions.length, 0);
 });
+
+test('5단계 주간 보고 저장: 특이사항 · 협조 요청은 주마다 따로 고쳐도 서로 안 지움 · 진행률 갱신 요청은 사람마다 마지막 1건', async () => {
+  const s = createPmStore('2026-11-25');
+  await s.setReport('P2', '2026-11-23', { note: '시연 완료' }, 'pm');
+  await s.setReport('P2', '2026-11-23', { req: 'BOM 엑셀' }, 'pm2');
+  await s.setReport('P2', '2026-11-16', { note: '지난주' }, 'pm');
+  const r = (await s.snapshot()).reports.find((x) => x.id === 'P2|2026-11-23')!;
+  assert.deepEqual([r.note, r.req, r.by, (await s.snapshot()).reports.length], ['시연 완료', 'BOM 엑셀', 'pm2', 2]);
+  await s.sendUpdRequest('u1', 'P2', 'pm');
+  await s.sendUpdRequest('u1', 'P3', 'pm2');
+  assert.deepEqual((await s.snapshot()).updReq, [{ id: 'u1', date: '2026-11-25', by: 'pm2', projectId: 'P3' }]);
+});
