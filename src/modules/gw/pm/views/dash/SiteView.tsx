@@ -161,7 +161,7 @@ export function SiteView() {
       <FlowCard c={c} st={stage} nameOf={people.nameOf} onOpenTask={modals.openTask} onGoWbs={() => go('task/wbs', { k })}
         docOf={d.docOf} onSetDoc={(taskId, st) => void smut.setDoc.mutateAsync({ taskId, st })} onGoDoc={() => go('doc/audit', { k })} />
       {stage.i === 0 && <BidCard c={c} nameOf={people.nameOf} onBidRes={bidRes} />}
-      {stage.i === 4 && <AfterCard c={c} nameOf={people.nameOf} />}
+      {stage.i === 4 && <AfterCard c={c} nameOf={people.nameOf} onAsAdd={() => modals.openIssue(null, k)} />}
 
       <div className="grid gap-3 lg:grid-cols-3">
         <Card className="px-4 py-3">

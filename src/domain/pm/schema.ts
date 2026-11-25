@@ -59,6 +59,9 @@ export const pmProjectSchema = z.object({
   contactName: z.string().default(''),
   contactPhone: z.string().default(''),
   contactEmail: z.string().default(''),
+  /** 생산 라인 · 설비 (이름 글자 — 이슈 '발생 라인 / 설비' 고르기, 입력은 6단계 사업 정보) */
+  lines: z.array(z.string()).default([]),
+  equip: z.array(z.string()).default([]),
 });
 export type PmProject = z.infer<typeof pmProjectSchema>;
 
@@ -142,7 +145,7 @@ export type PmAgreementChange = z.infer<typeof pmAgreementChangeSchema>;
 export const pmMilestoneOkSchema = z.object({ id: z.string().min(1), date: day, by: z.string().default('') });
 export type PmMilestoneOk = z.infer<typeof pmMilestoneOkSchema>;
 
-/** 이슈 (`pmIssues`) — 대시보드가 세는 칸만. 등록·수정 화면과 나머지 칸은 5단계 */
+/** 이슈 (`pmIssues`, 데모 S.issues) — id = 'I-001'. 등록 · 수정 화면은 5단계 (issueForm 3182) */
 export const PM_ISSUE_SEVS = ['긴급', '높음', '보통', '낮음'] as const;
 export const pmIssueSchema = z.object({
   id: z.string().min(1),
@@ -159,6 +162,15 @@ export const pmIssueSchema = z.object({
   date: day.default(''),
   /** 등록일 */
   at: day.default(''),
+  /** 발생 라인 / 설비 (사업 정보의 라인 · 설비 중) */
+  equip: z.string().default(''),
+  /** 연관 업무 ID */
+  taskId: z.string().default(''),
+  /** 현상 / 상세 내용 · 조치 내용 (해결이면 필수) */
+  desc: z.string().default(''),
+  action: z.string().default(''),
+  /** 윗선 보고됨 (에스컬레이션 — 긴급으로 등록하거나 [보고]) */
+  esc: z.boolean().default(false),
 });
 export type PmIssue = z.infer<typeof pmIssueSchema>;
 

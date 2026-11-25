@@ -187,3 +187,20 @@ test('4단계 CR 저장: 접수 → 검토중 · 번호 · 수정 · 검토(의�
   await s.removeCr('CR-002');
   assert.deepEqual((await s.snapshot()).crs.map((x) => x.id), ['CR-001']);
 });
+
+test('5단계 이슈 저장: 등록(긴급이면 보고됨) · 수정 · 윗선 보고(긴급 · 대응중) · 연관 업무 번호 따라감 · 삭제', async () => {
+  const s = createPmStore('2026-11-25');
+  const t = (await s.snapshot()).tasks.find((x) => x.projectId === 'P2')!;
+  const base = { projectId: 'P2', title: 'PLC 통신 끊김', cat: '설비 통신 장애', sev: '보통' as const, status: '열림', ownerId: 'u2', watchIds: ['u3'], date: '2026-11-24', equip: '', taskId: t.id, desc: '', action: '' };
+  const a = await s.addIssue(base, 'u1');
+  const b = await s.addIssue({ ...base, title: '긴급 건', sev: '긴급' }, 'u1');
+  assert.deepEqual([a.id, a.esc, a.by, a.at, b.id, b.esc], ['I-001', false, 'u1', '2026-11-25', 'I-002', true]);
+  await s.escalateIssue('I-001');
+  await s.updateIssue('I-002', { ...base, title: '긴급 건', sev: '긴급', status: '해결', action: '재부팅' });
+  await s.updateTask(t.id, { ...t, id: 'P2|99-02', code: '99-02' }, 'u1');
+  let L = (await s.snapshot()).issues;
+  assert.deepEqual(L.map((i) => [i.id, i.sev, i.status, i.esc, i.by, i.taskId]), [['I-002', '긴급', '해결', true, 'u1', 'P2|99-02'], ['I-001', '긴급', '대응중', true, 'u1', 'P2|99-02']]);
+  await s.removeIssue('I-002');
+  L = (await s.snapshot()).issues;
+  assert.deepEqual(L.map((i) => i.id), ['I-001']);
+});

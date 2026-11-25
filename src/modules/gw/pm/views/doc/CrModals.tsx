@@ -61,7 +61,7 @@ export function CrFormModal({ c, projects, shortOf, defSite, today, onSave, onRe
       footer={(
         <div className="flex w-full items-center gap-2">
           {!isNew && <Button variant="secondary" onClick={() => void del()}>삭제</Button>}
-          <span className="flex-1" />
+          <span className="flex-1 text-right text-[12px] font-bold text-danger" role="alert">{err?.msg}</span>
           <Button variant="secondary" onClick={onClose}>취소</Button>
           <Button onClick={() => void save()}>{isNew ? '접수' : '저장'}</Button>
         </div>
@@ -88,7 +88,6 @@ export function CrFormModal({ c, projects, shortOf, defSite, today, onSave, onRe
         <F label="일정 영향 (일)" req bad={bad('days')}><input type="number" min={0} className={inp} value={v.days} onChange={(e) => set('days', e.target.value)} /></F>
         <F label="비용 영향 (만원)" req bad={bad('cost')}><input type="number" min={0} className={inp} value={v.cost} onChange={(e) => set('cost', e.target.value)} /></F>
       </div>
-      {err && <p className="mt-3 text-[12px] font-bold text-danger">{err.msg}</p>}
     </Modal>
   );
 }

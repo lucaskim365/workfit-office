@@ -11,6 +11,7 @@ import { moveTicket, nextTicketNo, setTicketProg, syncTicketWithTask, tkOpen, ty
 import { weekStart } from '@/domain/pm/site';
 import type { PmAiMeas, PmKpiDef, PmKpiMeas } from '@/domain/pm/kpi';
 import { nextCrId } from '@/domain/pm/cr';
+import { nextIssueId } from '@/domain/pm/issue';
 
 /**
  * PM 저장소 — 1단계는 **메모리 전용** (§5.1: `pm*` 컬렉션이 아직 없어 `VITE_DB_DRIVER=appwrite` 여도 메모리).
@@ -151,6 +152,7 @@ export function createPmStore(today = todayStr()) {
     // 산출물 상태 · 마일스톤 승인도 새 번호로 (rekey 2190: S.docs · S.msOk)
     for (const d of state.docs) if (d.id === oldId) d.id = newId;
     for (const m of state.msOk) if (m.id === oldId) m.id = newId;
+    for (const i of state.issues) if (i.taskId === oldId) i.taskId = newId;
     // CR 에 연결한 업무도 (데모 wbsKey 는 rekey 대상이 아니지만, 여기선 업무 ID 로 이어 두므로 따라가게)
     for (const c of state.crs) if (c.taskId === oldId) c.taskId = newId;
   };
@@ -528,6 +530,31 @@ export function createPmStore(today = todayStr()) {
       const t = state.tasks.find((x) => x.id === taskId);
       if (!t) throw new Error('업무를 찾을 수 없습니다');
       state.docs = [...state.docs.filter((d) => d.id !== taskId), { id: taskId, projectId: t.projectId, st: '제출완료', file: fileName, date: day, by }];
+    },
+
+    // ── 5단계: 이슈 ──────────────────────────────────
+    /** 이슈 등록 (issueForm 새로) — 번호 붙여 맨 앞에, 긴급이면 보고됨 */
+    async addIssue(x: Omit<PmIssue, 'id' | 'by' | 'at' | 'esc'>, by: string, day = todayStr()): Promise<PmIssue> {
+      const i: PmIssue = { ...clone(x), id: nextIssueId(state.issues), by, at: day, esc: x.sev === '긴급' };
+      state.issues.unshift(i);
+      return clone(i);
+    },
+    /** 이슈 수정 — 등록한 사람 · 등록일 · 보고됨은 그대로 */
+    async updateIssue(id: string, x: Omit<PmIssue, 'id' | 'by' | 'at' | 'esc'>) {
+      const i = state.issues.find((v) => v.id === id);
+      if (!i) throw new Error('이슈를 찾을 수 없습니다');
+      Object.assign(i, clone(x));
+    },
+    async removeIssue(id: string) {
+      state.issues = state.issues.filter((v) => v.id !== id);
+    },
+    /** 윗선 보고 (esc 5938) — 긴급으로, 열림이면 대응중으로 */
+    async escalateIssue(id: string) {
+      const i = state.issues.find((v) => v.id === id);
+      if (!i) throw new Error('이슈를 찾을 수 없습니다');
+      i.esc = true;
+      i.sev = '긴급';
+      if (i.status === '열림') i.status = '대응중';
     },
 
     // ── 4단계: 요구사항(CR) ──────────────────────────────

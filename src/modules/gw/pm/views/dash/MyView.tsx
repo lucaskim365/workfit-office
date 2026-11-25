@@ -127,7 +127,7 @@ export function MyView() {
 
   const head = (
     <ScreenHead title="내 업무" desc={`${people.labelOf(me)} · 진행률을 기록하면 업무 목록과 팀 현황에 바로 반영됩니다`}>
-      <Button size="sm" disabled title="이슈 등록은 이슈 화면과 같이 5단계에서 옮깁니다">+ 이슈 (5단계)</Button>
+      <Button size="sm" onClick={() => modals.openIssue(null)}>+ 이슈</Button>
       <Button size="sm" variant="primary" onClick={() => goView('dash/plan')} title="업무계획의 오늘 할 일로 이동">오늘 할 일</Button>
     </ScreenHead>
   );
@@ -356,6 +356,7 @@ export function MyView() {
         <InboxModal i={inbox} ib={ib} d={d} shortOf={shortOf} nameOf={people.nameOf} labelOf={people.labelOf}
           onClose={() => setInbox(null)}
           onOpenTicket={(no) => { setInbox(null); modals.openTicket(no); }}
+          onOpenIssue={(id) => { setInbox(null); modals.openIssue(id); }}
           onApproveMs={(t) => {
             if (!confirm(`${d.snap.projects.find((p) => p.id === t.projectId)?.company ?? ''} · ${t.name}\n\n이 마일스톤을 승인할까요? (승인자 ${people.labelOf(me)} · ${today})`)) return;
             smut.approveMilestone.mutate({ taskId: t.id, byName: people.labelOf(me) });
@@ -377,7 +378,7 @@ export function MyView() {
 const INBOX: ReadonlyArray<{ nm: string; ds: string; go: string; goOk: boolean; goNote?: string }> = [
   { nm: '내 티켓', ds: '배정받은 진행 중 티켓', go: 'task/ticket', goOk: true },
   { nm: '승인 대기', ds: '내가 검토 · 승인할 티켓 · 마일스톤 · CR', go: 'task/ticket', goOk: true },
-  { nm: '이슈', ds: '내 담당 · 관련 미해결 이슈', go: 'risk/issue', goOk: false, goNote: '이슈 화면은 5단계' },
+  { nm: '이슈', ds: '내 담당 · 관련 미해결 이슈', go: 'risk/issue', goOk: true },
   { nm: '액션 아이템', ds: '회의에서 맡은 후속 조치', go: 'doc/meet', goOk: false, goNote: '회의록 화면은 5단계' },
 ];
 type IbRow = Inbox['tickets'][number] | Approval | Inbox['issues'][number] | Inbox['actions'][number];
@@ -395,10 +396,10 @@ function DueTd({ d, today }: { d: string; today: string }) {
   );
 }
 
-function InboxModal({ i, ib, d, shortOf, nameOf, labelOf, onClose, onOpenTicket, onApproveMs, onActionDone, onGo }: {
+function InboxModal({ i, ib, d, shortOf, nameOf, labelOf, onClose, onOpenTicket, onOpenIssue, onApproveMs, onActionDone, onGo }: {
   i: number; ib: Inbox; d: PmDerived;
   shortOf: (id: string) => string; nameOf: (id: string) => string; labelOf: (id: string) => string;
-  onClose: () => void; onOpenTicket: (no: string) => void; onApproveMs: (t: PmTask) => void; onActionDone: (id: string, done: boolean) => void; onGo: (v: string) => void;
+  onClose: () => void; onOpenTicket: (no: string) => void; onOpenIssue: (id: string) => void; onApproveMs: (t: PmTask) => void; onActionDone: (id: string, done: boolean) => void; onGo: (v: string) => void;
 }) {
   const b = INBOX[i];
   const list = inboxList(ib, i);
@@ -455,7 +456,7 @@ function InboxModal({ i, ib, d, shortOf, nameOf, labelOf, onClose, onOpenTicket,
     if (i === 2) {
       const x = r as Inbox['issues'][number];
       return (
-        <tr key={x.id} className="border-b border-border" title="이슈 상세 · 수정 창은 5단계에서 옮깁니다">
+        <tr key={x.id} onClick={() => onOpenIssue(x.id)} className="cursor-pointer border-b border-border hover:bg-panel-alt">
           <td className="w-px whitespace-nowrap px-3 py-2"><Tag tone={x.sev === '긴급' ? 'bad' : 'warn'}>{x.sev || '보통'}</Tag></td>
           {ttl(x.title, [shortOf(x.projectId), x.ownerId ? `${nameOf(x.ownerId)} 담당` : ''].filter(Boolean).join(' · '))}
           <td className="whitespace-nowrap px-3 py-2">{x.status}</td>
@@ -480,7 +481,7 @@ function InboxModal({ i, ib, d, shortOf, nameOf, labelOf, onClose, onOpenTicket,
         <Button variant="secondary" onClick={onClose}>닫기</Button>
         <Button variant="primary" disabled={!b.goOk} title={b.goNote} onClick={() => onGo(b.go)}>{b.nm} 화면으로 →{b.goOk ? '' : ` (${b.goNote?.replace(/.* /, '')})`}</Button>
       </>}>
-      <p className="mb-2.5 text-[12px] text-ink3">{b.ds}{list.length && i < 2 ? ' · 줄을 누르면 상세 창이 열립니다' : ''}</p>
+      <p className="mb-2.5 text-[12px] text-ink3">{b.ds}{list.length && i < 3 ? ' · 줄을 누르면 상세 창이 열립니다' : ''}</p>
       {list.length ? (
         <div className="max-h-[60vh] overflow-y-auto rounded-lg border border-border">
           <table className="w-full text-[12px]">
@@ -496,7 +497,7 @@ function InboxModal({ i, ib, d, shortOf, nameOf, labelOf, onClose, onOpenTicket,
 const INBOX_HINT = [
   '티켓 목록에서 나에게 배정된 티켓이 발행되면 여기 나옵니다.',
   '내가 검토자 · 승인자인 티켓이 검토 요청되거나, 내가 PM인 사업의 마일스톤 업무가 끝나면 여기 나옵니다.',
-  '이슈(5단계)에서 내가 담당이거나 관련자인 이슈가 등록되면 여기 나옵니다.',
+  '이슈 화면에서 내가 담당이거나 관련자인 이슈가 등록되면 여기 나옵니다.',
   '회의록(5단계)에서 나에게 액션 아이템이 배정되면 여기 나옵니다.',
 ];
 

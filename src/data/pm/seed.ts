@@ -61,7 +61,7 @@ export function seedProjects(): PmProject[] {
       order: i,
       annDue: '', evalDate: '', bidRes: '', bidAt: null, warrantyM: null,
       // 업종 · 소재지는 계획서 값으로 한 번 채움 (데모 applyPlanInfo 6902 — 켤 때 빈 칸만)
-      ceo: '', industry: s(PLANS[p.k]?.industry), region: s(PLANS[p.k]?.region), bizRegNo: '', contactName: '', contactPhone: '', contactEmail: '',
+      ceo: '', industry: s(PLANS[p.k]?.industry), region: s(PLANS[p.k]?.region), bizRegNo: '', contactName: '', contactPhone: '', contactEmail: '', lines: [], equip: [],
     }) satisfies PmProject);
 }
 

@@ -22,7 +22,7 @@ export const GS_DO: ReadonlyArray<readonly [string, string, SearchGo]> = [
   ['협약변경 기록', '협약변경 기간 연장 변경 기록', v('dash/site')],
   ['사업계획서 등록', '계획서 PDF 기능 목록 성과지표 등록', v('dash/site')],
   ['주간 특이사항 · 주간 보고서', '주간 보고 보고서 특이사항 협조 요청 진행률 갱신', v('doc/check')],
-  ['이슈 등록', '이슈 문제 장애 등록', v('risk/issue')],
+  ['이슈 등록', '이슈 문제 장애 등록', v('risk/issue', { issue: 'new' })],
   ['회의록 작성', '회의 회의록 액션 아이템', v('doc/meet')],
   ['산출물 제출', '산출물 제출 문서 파일 감리', v('doc/audit')],
   ['팀원 업무량 보기', '팀 현황 업무량 부하 누가 바쁜지', v('dash/team')],
@@ -82,7 +82,7 @@ export function gsFind(q0: string, X: SearchInputs): SearchHit[] {
     push('업무 목록', `${X.shortOf(p.id)} 업무 목록 보기`, `안 끝난 업무 ${n}건`, v('task/wbs', { k: p.id, period: 'now' }), 12);
   }
   for (const x of X.tickets) if (hit(x.no) || hit(x.title)) push('티켓', `${x.no} ${x.title}`, `${X.shortOf(x.projectId)} · ${x.status} · ${X.nameOf(x.assigneeId) || '담당 없음'}`, { kind: 'ticket', no: x.no }, 5);
-  for (const i of X.issues) if (hit(i.id) || hit(i.title)) push('이슈', `${i.id} ${i.title}`, `${i.sev} · ${i.status}`, v('risk/issue'), 5);
+  for (const i of X.issues) if (hit(i.id) || hit(i.title)) push('이슈', `${i.id} ${i.title}`, `${i.sev} · ${i.status}`, v('risk/issue', { issue: i.id }), 5);
   for (const a of X.actions) if (hit(a.text)) push('액션 아이템', a.text, `${X.nameOf(a.whoId) || '담당 없음'}${a.due ? ` · ~${monthDay(a.due)}` : ''}${a.done ? ' · 완료' : ''}`, v('doc/meet'), 5);
   for (const c of X.crs ?? []) if (hit(c.id) || hit(c.title)) push('CR', `${c.id} ${c.title}`, c.status, v('site/cr', { cr: c.id }), 5);
   for (const u of X.people) if (hit(u.name) || hit(u.dept)) push('사람', u.label, `${u.dept || u.position || ''} · 누르면 이 사람의 진행 중 업무`, v('task/wbs', { who: u.id, period: 'now' }), 5);

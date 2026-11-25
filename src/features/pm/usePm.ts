@@ -101,6 +101,11 @@ export function usePmMutations(me: string, nameOf?: (id: string) => string) {
     commentTicket: m(({ no, text }: { no: string; text: string }) => s.commentTicket(no, text, me)),
     addTicketFile: m(({ no, name }: { no: string; name: string }) => s.addTicketFile(no, name, me)),
     removeTicketFile: m(({ no, index }: { no: string; index: number }) => s.removeTicketFile(no, index, me)),
+    // 5단계: 이슈 (여러 화면에서 등록 창을 열어서 여기 둠)
+    addIssue: m((x: Parameters<typeof s.addIssue>[0]) => s.addIssue(x, me)),
+    updateIssue: m(({ id, x }: { id: string; x: Parameters<typeof s.updateIssue>[1] }) => s.updateIssue(id, x)),
+    removeIssue: m((id: string) => s.removeIssue(id)),
+    escalateIssue: m((id: string) => s.escalateIssue(id)),
   };
 }
 

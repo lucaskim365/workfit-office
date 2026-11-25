@@ -100,8 +100,8 @@ export function myAlerts(me: string, X: AlertInputs): PmAlert[] {
   for (const a of X.actions) if (actOpen(a) && a.whoId === me && a.due && a.due <= T) out.push({ lv: a.due < T ? 'bad' : 'warn', txt: `액션 아이템 · ${trunc(a.text, 34)} (${dday(a.due, T)})`, go: view('doc/meet') });
 
   // 이슈: 내 담당 · 관련 (남이 올린 것) · 내가 올린 이슈 해결됨 (30일)
-  for (const i of X.issues) if (i.status !== '해결' && (i.ownerId === me || i.watchIds.includes(me)) && i.by !== me) out.push({ lv: i.sev === '긴급' ? 'bad' : 'warn', txt: `${i.sev === '긴급' ? '긴급 ' : ''}이슈 · ${i.id} ${trunc(i.title, 26)} (${i.ownerId === me ? '내 담당' : '관련자'} · ${i.status})`, go: view('risk/issue') });
-  for (const i of X.issues) if (i.status === '해결' && i.by === me && i.ownerId !== me && i.at && diffDays(i.at, T) <= 30) out.push({ lv: 'warn', txt: `내가 올린 이슈 해결됨 · ${i.id} ${trunc(i.title, 26)}`, go: view('risk/issue') });
+  for (const i of X.issues) if (i.status !== '해결' && (i.ownerId === me || i.watchIds.includes(me)) && i.by !== me) out.push({ lv: i.sev === '긴급' ? 'bad' : 'warn', txt: `${i.sev === '긴급' ? '긴급 ' : ''}이슈 · ${i.id} ${trunc(i.title, 26)} (${i.ownerId === me ? '내 담당' : '관련자'} · ${i.status})`, go: view('risk/issue', { issue: i.id }) });
+  for (const i of X.issues) if (i.status === '해결' && i.by === me && i.ownerId !== me && i.at && diffDays(i.at, T) <= 30) out.push({ lv: 'warn', txt: `내가 올린 이슈 해결됨 · ${i.id} ${trunc(i.title, 26)}`, go: view('risk/issue', { issue: i.id }) });
 
   // 수주 → 착수: 선정평가 끝 · 영업→PM 인수인계
   for (const c of live.filter((c) => isPm(c) && c.p.start)) {

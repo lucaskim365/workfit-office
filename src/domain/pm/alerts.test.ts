@@ -90,3 +90,9 @@ test('4단계 CR: 사업 PM 에게 검토 대기(내가 접수한 건 빼고) ·
   assert.deepEqual(myAlerts('pm', x)[0].go, { kind: 'view', v: 'site/cr', params: { cr: 'CR-001', review: '1' } });
   assert.deepEqual(txt('u', x), ['ok|CR 승인 · CR-003 설비 추가 (pm)|site/cr'], '7일 지난 반려는 안 뜸');
 });
+
+test('5단계 이슈 알림: 누르면 그 이슈 창 (issueEdit)', () => {
+  const issues = [pmIssueSchema.parse({ id: 'I-001', projectId: 'P9', title: '통신 끊김', ownerId: 'me', by: 'u', sev: '긴급' })];
+  const a = myAlerts('me', X({ issues }));
+  assert.deepEqual(a.map((x) => [x.txt, x.go]), [['긴급 이슈 · I-001 통신 끊김 (내 담당 · 열림)', { kind: 'view', v: 'risk/issue', params: { issue: 'I-001' } }]]);
+});

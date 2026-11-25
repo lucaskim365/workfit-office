@@ -86,7 +86,7 @@ export function OverviewView() {
     <div className="space-y-4">
       <ScreenHead title="통합 사업 현황" desc="사업마다 기한 · 보완 · 협약변경 · 갱신 상태를 한 줄로 보고, 줄을 누르면 그 사업 화면으로 들어갑니다">
         <Button size="sm" variant="secondary" disabled title="사업 등록은 기준정보 › 사업 화면과 같이 6단계에서 옮깁니다">+ 사업 등록 (6단계)</Button>
-        <Button size="sm" variant="secondary" disabled title="이슈 등록은 이슈 화면과 같이 5단계에서 옮깁니다">+ 이슈 등록 (5단계)</Button>
+        <Button size="sm" variant="secondary" onClick={() => modals.openIssue(null)}>+ 이슈 등록</Button>
       </ScreenHead>
 
       <SiteChips rows={rows} all={all} cur={null} shortOf={shortOf} onAll={() => go('dash/overview')} onPick={(id) => openSite(id)} />

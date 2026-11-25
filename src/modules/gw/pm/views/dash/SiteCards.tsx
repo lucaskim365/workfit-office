@@ -184,7 +184,7 @@ export function BidCard({ c, nameOf, onBidRes }: { c: SiteCtx; nameOf: (id: stri
 }
 
 /** 사후관리 (afterCard) — 하자보증 · 인수인계 · 집중AS · 하자/AS 요청(= 협약 종료 뒤 이슈) */
-export function AfterCard({ c, nameOf }: { c: SiteCtx; nameOf: (id: string) => string }) {
+export function AfterCard({ c, nameOf, onAsAdd }: { c: SiteCtx; nameOf: (id: string) => string; onAsAdd: () => void }) {
   const s = c.p;
   const we = warrantyEnd(s);
   const L = asIssues(c);
@@ -219,7 +219,7 @@ export function AfterCard({ c, nameOf }: { c: SiteCtx; nameOf: (id: string) => s
           <tr><td className="px-4 py-1.5 font-bold">하자 · AS 요청</td>
             <td>{L.length ? <>처리 중 <b className={open.length ? 'text-danger' : ''}>{open.length}</b> · 해결 {L.length - open.length}</> : <span className="text-ink3">접수된 요청 없음</span>}
               {open.slice(0, 5).map((i) => <div key={i.id}>· {trunc(i.title, 40)} <span className="text-ink3">{monthDay(i.date)} · {nameOf(i.ownerId)} · {i.status}</span></div>)}</td>
-            <td /><td><Button size="sm" disabled title="하자 · AS 접수는 이슈 화면과 같이 5단계에서 옮깁니다">+ 하자 · AS 접수 (5단계)</Button></td></tr>
+            <td /><td><Button size="sm" onClick={onAsAdd} title="이 사업으로 이슈를 등록합니다 (협약 종료 뒤 이슈 = 하자 · AS 요청)">+ 하자 · AS 접수</Button></td></tr>
         </tbody>
       </table>
       <p className="px-4 py-2 text-[11px] text-ink3">※ 협약 종료일({monthDay(s.end)}) 이후 이 사업으로 등록한 이슈를 하자 · AS 요청으로 셉니다. 하자보증은 협약 종료일부터 계산합니다.</p>
