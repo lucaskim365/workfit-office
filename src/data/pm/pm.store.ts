@@ -9,6 +9,7 @@ import type { PmPlan } from '@/domain/pm/site';
 import { LOAD_MAX_DEFAULT } from '@/domain/pm/team';
 import { SEED_BASE_DATE, SEED_VERSION, seedFunctions, seedItems, seedPlanFunctions, seedPlans, seedProjects, seedSubtasks, seedTasks } from './seed';
 import { defaultMoneyCfg, pmFundRuleSchema, pmItemSchema, pmMoneyCfgSchema, seedFundRules, type PmFundRule, type PmItem, type PmMoneyCfg } from '@/domain/pm/money';
+import { fundOf, lineToItem, paysFromTerms, pmContractSchema, pmPaySchema, qHist, qLines, qOv, quoteCheck, seedMoney, type FundCtx, type PmContract, type PmFund, type PmPay, type PmQuoteItem, type QuoteDraft } from '@/domain/pm/quote';
 import { moveTicket, nextTicketNo, setTicketProg, syncTicketWithTask, tkOpen, type PmTicket } from '@/domain/pm/ticket';
 import { weekStart } from '@/domain/pm/site';
 import type { PmAiMeas, PmKpiDef, PmKpiMeas } from '@/domain/pm/kpi';
@@ -99,6 +100,10 @@ export interface PmSnapshot {
   moneyCfg: PmMoneyCfg;
   fundRules: PmFundRule[];
   items: PmItem[];
+  // ── 6-5: 견적 · 계약 · 재원 · 대금 (데모 S.money.contracts · fund · pays) — 화면은 pm.manage 만. 사업별 수익 · 손익 화면은 6-6 ──
+  contracts: PmContract[];
+  funds: PmFund[];
+  pays: PmPay[];
 }
 
 const clone = <T>(v: T): T => structuredClone(v);
@@ -152,7 +157,11 @@ export function createPmStore(today = todayStr()) {
     reports: [],
     orgs: [], codes: [], stdTasks: [], templates: [], tlinks: [],
     moneyCfg: defaultMoneyCfg(), fundRules: seedFundRules(), items: seedItems(),
+    // 처음 값: 신광 계약 2건 · 효광(제조AI) 최종 견적 (데모 moneySeed · moneySeed2)
+    ...seedMoney(projects),
   };
+  /** 사업비 계산에 쓰는 값 (fundOf) */
+  const fundCtx = (day: string): FundCtx => ({ projects: state.projects, plans: state.plans, rules: state.fundRules, cfg: state.moneyCfg, contracts: state.contracts, funds: state.funds, today: day });
 
   /** 기준정보를 사업 · 업무 목록에 맞춤 (ensureMaster) — 새 이름만 더함. 표준 세부 업무는 처음 한 번만 */
   let stdSeeded = false;
@@ -678,7 +687,8 @@ export function createPmStore(today = todayStr()) {
       for (const m of state.meetings) if (m.projectId === id) m.projectId = '';
       state.templates = state.templates.filter((x) => x.baseId !== id);
       state.baselines = state.baselines.filter((x) => x.id !== id);
-      for (const k of ['gov', 'planChecks', 'govLinks', 'agreements', 'docs', 'reports', 'weekChecks'] as const) (state[k] as Array<{ projectId: string }>) = (state[k] as Array<{ projectId: string }>).filter((x) => x.projectId !== id);
+      state.funds = state.funds.filter((x) => x.id !== id);
+      for (const k of ['gov', 'planChecks', 'govLinks', 'agreements', 'docs', 'reports', 'weekChecks', 'contracts', 'pays'] as const) (state[k] as Array<{ projectId: string }>) = (state[k] as Array<{ projectId: string }>).filter((x) => x.projectId !== id);
       log(id, '-', '삭제', `사업 삭제 — TASK ${n}건`, by, day);
     },
 
@@ -839,6 +849,39 @@ export function createPmStore(today = todayStr()) {
     async removeItem(id: string) {
       state.items = state.items.filter((x) => x.id !== id);
     },
+
+    // ── 6-5: 견적 작성 ─────────────────────────────────
+    /**
+     * 견적 저장 (qSave) — 계약 · 견적 새로 / 고치기, 고른 품목의 지난 견적에 이 견적 쌓기(qHist),
+     * 정부지원이고 사업에 다른 정부지원 계약이 없으면 사업 재원(지원 기준 · 현물 · 지방비 확정)도 이 값으로,
+     * 새 견적이면 지불조건 글(선급금 50% 등)로 대금 단계를 만듦. src = 사업 짧은 이름 (지난 견적 이름)
+     */
+    async saveQuote(E: QuoteDraft, src: string, day = todayStr()): Promise<{ c: PmContract; isNew: boolean }> {
+      const e = quoteCheck(E);
+      if (e) throw new Error(e[0]);
+      if (!state.projects.some((p) => p.id === E.projectId)) throw new Error('사업을 찾을 수 없습니다');
+      const ov = qOv(fundCtx(day), E);
+      let c = E.cid ? state.contracts.find((x) => x.id === E.cid) : undefined;
+      const isNew = !c;
+      const next = pmContractSchema.parse({ id: c?.id ?? nid('C'), projectId: E.projectId, name: E.name.trim(), kind: E.kind, status: E.status, conf: true, note: E.note, q: clone(E.q), lines: qLines(E.q) });
+      if (c) Object.assign(c, next); else { c = next; state.contracts.push(c); }
+      qHist(state.items, c, src, day);
+      // 다른 정부지원 계약이 있으면 사업 재원(확정 금액 등)은 건드리지 않음
+      if (E.kind === '정부지원' && ov.solo) state.funds = [...state.funds.filter((x) => x.id !== E.projectId), clone(ov.f)];
+      if (isNew && !state.pays.some((x) => x.cid === c!.id)) for (const p of paysFromTerms(E.q.pay)) state.pays.push(pmPaySchema.parse({ id: nid('D'), projectId: E.projectId, cid: c.id, ...p }));
+      return { c: clone(c), isNew };
+    },
+    /** 계약 · 견적 삭제 (qDelC) — 그 계약의 대금 일정도 같이. 품목의 지난 견적 기록은 남음 (데모 그대로) */
+    async removeContract(id: string) {
+      state.contracts = state.contracts.filter((x) => x.id !== id);
+      state.pays = state.pays.filter((x) => x.cid !== id);
+    },
+    /** 직접 쓴 줄 → 품목 · 단가 목록에 추가 (qReg1 · qRegister) — 새 품목 ID 들 (줄 순서) */
+    async registerItems(lines: readonly PmQuoteItem[], src: string, date: string): Promise<string[]> {
+      return lines.map((it) => { const x = lineToItem(it, nid('P'), src, date); state.items.push(x); return x.id; });
+    },
+    /** 사업비 구성 (fundOf) — 테스트 · 화면 확인용 */
+    fundOf(k: string, day = todayStr()) { return fundOf(fundCtx(day), k); },
 
     // ── 5단계: 주간 진행률 · 보고서 ──────────────────────
     /** 금주 특이사항 · 협조 요청 저장 (wcNote · wcReq · rptNote · rptReq) — 주마다 */

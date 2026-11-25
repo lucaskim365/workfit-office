@@ -34,6 +34,7 @@ import { ActLogView } from './views/master/ActLogView';
 import { BaseView } from './views/master/BaseView';
 import { RulesView } from './views/money/RulesView';
 import { ItemsView } from './views/money/ItemsView';
+import { SiteMoneyView } from './views/money/SiteMoneyView';
 
 /** 옮긴 보기 → 화면. 없는 보기는 '옮기는 중' 자리 */
 const VIEWS: Record<string, ComponentType> = {
@@ -59,6 +60,7 @@ const VIEWS: Record<string, ComponentType> = {
   'doc/report': ReportView,
   'master/base': BaseView,
   'master/log': ActLogView,
+  'money/site': SiteMoneyView,
   'money/rules': RulesView,
   'money/items': ItemsView,
 };
@@ -93,7 +95,7 @@ export default function PmScreen() {
     next.set('v', viewId);
     // 화면을 바꾸면 업무 목록 사업 선택(k)·단계(stage)는 그 화면 것만 — 업무 목록 안에서만 유지
     if (!viewId.startsWith('task/wbs')) { next.delete('k'); next.delete('stage'); next.delete('period'); next.delete('who'); next.delete('st'); }
-    for (const x of ['q', 'board', 'inbox', 'pop', 'side', 'fix', 'cr', 'review', 'issue', 'mt', 'act', 'site']) next.delete(x);
+    for (const x of ['q', 'board', 'inbox', 'pop', 'side', 'fix', 'cr', 'review', 'issue', 'mt', 'act', 'site', 'qt']) next.delete(x);
     setParams(next);
   };
   /** 알림 · 검색 · 즐겨찾기에서 갈 곳 */

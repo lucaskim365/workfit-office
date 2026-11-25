@@ -351,3 +351,54 @@ test('6-4 검수: 창에서 새로 추가 (id 없음) → 저장소가 id 를 �
   snap = await s.snapshot();
   assert.deepEqual([snap.fundRules.length, snap.items.length], [13, 89]);
 });
+
+test('6-5 견적: 새로 저장(대금 단계 · 재원 · 지난 견적) · 고치기 · 직접 쓴 줄 등록 · 삭제(대금 같이) · 사업 삭제 때 같이', async () => {
+  const { quoteDraft, pickToLine, qIt } = await import('@/domain/pm/quote');
+  const { fillMyungsung } = await import('@/domain/pm/quoteDemo');
+  const s = createPmStore(TODAY);
+  let snap = await s.snapshot();
+  // 처음 값: 신광 C1 · C2, 효광(AI) C3, 대금 4
+  assert.deepEqual(snap.contracts.map((c) => c.id), ['C1', 'C2', 'C3']);
+  assert.equal(snap.pays.length, 4);
+  // 한일(P4)에 새 견적 — 명성 값 + 목록 품목 1줄
+  const kio = snap.items.find((x) => x.name === '키오스크 Panel PC')!;
+  let E = fillMyungsung(quoteDraft(null, 'P4', undefined, snap.moneyCfg, TODAY), 'F2');
+  E = { ...E, name: '검수 견적', q: { ...E.q, pay: '선급금 30%, 중도금 30%, 잔금 40%', items: [...E.q.items, pickToLine(kio, 'hw', 2)] } };
+  await assert.rejects(s.saveQuote({ ...E, name: ' ' }, '한일', TODAY), /계약 이름/);
+  const { c, isNew } = await s.saveQuote(E, '한일', TODAY);
+  assert.equal(isNew, true);
+  snap = await s.snapshot();
+  assert.deepEqual(snap.pays.filter((x) => x.cid === c.id).map((x) => [x.name, x.rate]), [['선급금 30%', 30], ['중도금 30%', 30], ['잔금 40%', 40]]);
+  assert.deepEqual(snap.funds.find((f) => f.id === 'P4'), { id: 'P4', rule: 'F2', ruleSet: true, man: 18000000, cloudMonthly: 350000, cloudM: 36, fix: {}, fixNote: '' });
+  assert.equal(s.fundOf('P4', TODAY).total, 399581000 + kio.price * 2);
+  const k1 = snap.items.find((x) => x.id === kio.id)!;
+  const h1 = k1.hist.find((h) => h.cid === c.id)!;
+  assert.deepEqual([h1.src, h1.date, h1.qty, k1.hist.length], ['한일', '2026-11-06', 2, kio.hist.length + 1]);
+  // 같은 날(11/6) 지난 견적이 이미 앞에 있어 새 견적은 그 뒤 → 기본 단가는 그대로 (데모 qHist: 가장 최근일 때만)
+  assert.equal(k1.hist[0].cid, '');
+  assert.equal(k1.price, kio.price);
+  // 고치기: 대금 단계는 다시 안 만듦, 지난 견적 줄은 하나
+  await s.saveQuote({ ...quoteDraft(snap.contracts.find((x) => x.id === c.id)!, 'P4', snap.funds.find((f) => f.id === 'P4'), snap.moneyCfg, TODAY), status: '계약' }, '한일', TODAY);
+  snap = await s.snapshot();
+  assert.equal(snap.contracts.find((x) => x.id === c.id)?.status, '계약');
+  assert.equal(snap.pays.filter((x) => x.cid === c.id).length, 3);
+  assert.equal(snap.items.find((x) => x.id === kio.id)!.hist.filter((h) => h.cid === c.id).length, 1);
+  // 신광(다른 정부지원 계약 있음)에 견적 저장 → 사업 재원(확정 정부지원금)은 그대로
+  const before = snap.funds.find((f) => f.id === 'P2');
+  await s.saveQuote(fillMyungsung(quoteDraft(null, 'P2', before, snap.moneyCfg, TODAY), 'F2'), '신광', TODAY);
+  snap = await s.snapshot();
+  assert.deepEqual(snap.funds.find((f) => f.id === 'P2'), before);
+  // 직접 쓴 줄 → 품목 목록
+  const ids = await s.registerItems([qIt('hw', { name: '검수용\n태블릿', price: 900000, cost: 600000 })], '한일', '2026-11-06');
+  snap = await s.snapshot();
+  assert.deepEqual(snap.items.filter((x) => ids.includes(x.id)).map((x) => [x.name, x.price, x.cost, x.hist.length]), [['검수용 태블릿', 900000, 600000, 1]]);
+  // 삭제: 계약 + 그 대금
+  await s.removeContract(c.id);
+  snap = await s.snapshot();
+  assert.ok(!snap.contracts.some((x) => x.id === c.id));
+  assert.ok(!snap.pays.some((x) => x.cid === c.id));
+  // 사업 삭제 때 계약 · 재원 · 대금도 같이 (티켓 없는 사업 P7)
+  await s.removeProject('P7', 'u1', TODAY);
+  snap = await s.snapshot();
+  assert.ok(!snap.contracts.some((x) => x.projectId === 'P7') && !snap.funds.some((x) => x.id === 'P7') && !snap.pays.some((x) => x.projectId === 'P7'));
+});

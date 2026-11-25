@@ -109,7 +109,7 @@ export function SiteFormModal({ s, presetTpl, d, people, mut, smut, money, short
   const del = async () => {
     if (!s) return;
     const n = snap.tasks.filter((t) => t.projectId === s.id).length;
-    if (!confirm(`'${shortOf(s.id)}' 사업을 삭제할까요?\n\n함께 삭제: 업무 ${n}건(세부 작업 포함) · 이슈 · CR · 액션 아이템 · 점검 결과 기록 · 계획서 약속 체크 · 필수 업무 연결 · 협약변경 기록 · 산출물 상태 · 주간 보고 · 변동 없음 확인 · 기준선\n남는 것: 회의록(사업이 '공통'으로 바뀜) · 변경 이력`)) return;
+    if (!confirm(`'${shortOf(s.id)}' 사업을 삭제할까요?\n\n함께 삭제: 업무 ${n}건(세부 작업 포함) · 이슈 · CR · 액션 아이템 · 점검 결과 기록 · 계획서 약속 체크 · 필수 업무 연결 · 협약변경 기록 · 산출물 상태 · 주간 보고 · 변동 없음 확인 · 기준선 · 계약 · 견적 · 재원 · 대금 일정\n남는 것: 회의록(사업이 '공통'으로 바뀜) · 변경 이력`)) return;
     try { await mut.removeProject.mutateAsync(s.id); } catch (e) { setErr([(e as Error).message, '']); return; }
     onDone(`${s.company} 삭제됨`);
     onClose();
