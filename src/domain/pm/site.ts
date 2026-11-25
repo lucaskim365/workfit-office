@@ -48,7 +48,7 @@ export interface PmPlan {
   file?: string; doc?: string; date?: string; ver?: string; co?: string; sup?: string; no?: string;
   level?: [string, string]; region?: string; founded?: string; industry?: string; product?: string;
   goal?: string[];
-  /** 비목 A~G: [정부, 민간 현금, 민간 현물] 천원 */
+  /** 비목 A~G: 칸 3개, 천원. 세 번째 칸 = 정부 (데모 사업 개요 '정부' = planSum(p, 2), 신광 1.9억 확인) */
   budget?: Record<string, [number, number, number]>;
   kpis?: PmPlanKpi[];
   post?: string;
@@ -649,4 +649,120 @@ export function siteCtxOf(p: PmProject, x: SiteInputs, today: string): SiteCtx {
     baseline: x.baselines.find((b) => b.id === p.id) ?? null,
     issues: by(x.issues),
   };
+}
+
+// ── 사업별 화면 (3-3) ─────────────────────────────────
+
+export interface StageBucket { L: PmTask[]; n: number; p: number; late: number; on: number; od: number }
+/**
+ * 업무를 사업 단계에 나눔 (stageBuckets 7579) — 기준 = 업무 종료일.
+ * 협약 이전 = 수주, 협약일+15일 전 = 착수, 종료 31일 전 뒤 = 마무리, 그 외(날짜 없음 포함) = 구축.
+ * 산출물 제출 여부(docOf)는 4단계 산출물 화면 → 그때까지 `docDone` 없음 = 모두 미제출.
+ */
+export function stageBuckets(c: SiteCtx, docDone: (t: PmTask) => boolean = () => false): StageBucket[] {
+  const s = c.p;
+  const B: PmTask[][] = [[], [], [], [], []];
+  if (isDrop(s)) return B.map(bucket);
+  const a1 = s.start ? addDays(s.start, 15) : null;
+  const a2 = s.end ? addDays(s.end, -31) : null;
+  for (const t of c.ts) {
+    const j = isPre(t) ? 0 : !t.end ? 2 : a1 && t.end < a1 ? 1 : a2 && t.end > a2 ? 3 : 2;
+    B[j].push(t);
+  }
+  return B.map(bucket);
+  function bucket(L: PmTask[]): StageBucket {
+    const outs = L.filter((t) => t.output && !isPre(t));
+    return {
+      L, n: L.length,
+      p: L.length ? Math.round(L.reduce((a, t) => a + (c.live(t).pct || 0), 0) / L.length) : 0,
+      late: L.filter((t) => late(c, t)).length,
+      on: outs.length,
+      od: outs.filter(docDone).length,
+    };
+  }
+}
+/** 단계 주요 업무 — 안 끝난 것, 늦은 일 · 마일스톤 · 마감 가까운 순 (flowCard key) */
+export function stageKeyTasks(c: SiteCtx, b: StageBucket): PmTask[] {
+  const L = b.L.filter((t) => !done(c, t));
+  return L.sort((a, b2) => {
+    const la = late(c, a) ? 1 : 0;
+    const lb = late(c, b2) ? 1 : 0;
+    return lb - la || (b2.milestone ? 1 : 0) - (a.milestone ? 1 : 0) || ((a.end || '9') < (b2.end || '9') ? -1 : 1);
+  });
+}
+
+// 계획서 약속 기능 ↔ 업무 자동 연결 (fnLinks 7052)
+/** 띄어쓰기 · 괄호 · 끝의 관리/현황/조회/등록을 뺌 (fnNorm) */
+const fnNorm = (s: string) => String(s || '').replace(/\s|\(.*?\)|관리$|현황$|조회$|등록$/g, '');
+const fnBig = (s: string) => { const x = fnNorm(s); const r = new Set<string>(); for (let i = 0; i < x.length - 1; i++) r.add(x.slice(i, i + 2)); return r; };
+/** 이름 비슷한 정도 — 두 글자 묶음이 겹치는 비율 (fnSim) */
+export function fnSim(a: string, b: string) {
+  const A = fnBig(a);
+  const B = fnBig(b);
+  if (!A.size || !B.size) return 0;
+  let n = 0;
+  A.forEach((x) => { if (B.has(x)) n++; });
+  return (2 * n) / (A.size + B.size);
+}
+export type FnKind = '추가' | '변경' | '기존' | string;
+export interface FnLink { mod: string; name: string; kind: FnKind; t: PmTask | null }
+/**
+ * 계획서 기능 → 업무 자동 연결 (fnLinks). 대상 업무 = 번호가 '5.16.1'처럼 세 단계 이상인 단위 기능 업무 ([FP]·협약 이전 제외).
+ * 기존(패키지) 기능은 개발 대상이 아니라 연결 안 함. 비슷한 정도 0.5 이상만. 계획서 기능 목록이 없으면 null.
+ */
+export function fnLinks(c: SiteCtx, list: ReadonlyArray<readonly [string, string, string]> | undefined): FnLink[] | null {
+  if (!list) return null;
+  const ts = c.ts.filter((t) => /^\d+\.\d+\.\d+/.test(t.code) && !isFP(t) && !isPre(t));
+  return list.map(([mod, name, kind]) => {
+    let best: PmTask | null = null;
+    let b = 0;
+    if (kind !== '기존') for (const t of ts) { const v = Math.max(fnSim(name, t.name), fnSim(mod + name, t.name)); if (v > b) { b = v; best = t; } }
+    return { mod, name, kind, t: b >= 0.5 ? best : null };
+  });
+}
+export type FnState = '완료' | '지연' | '진행 중' | '시작 전' | '연결 없음' | '기존';
+/** 기능 상태 (fnSt) */
+export const fnSt = (c: SiteCtx, f: FnLink): FnState =>
+  !f.t ? (f.kind === '기존' ? '기존' : '연결 없음') : done(c, f.t) ? '완료' : late(c, f.t) ? '지연' : c.live(f.t).pct > 0 || nowOf(c, f.t) ? '진행 중' : '시작 전';
+
+/** 최근 업데이트 (siteUpdates 7338) — 점검 결과 · 협약변경. 주간 특이사항은 5단계(주간 점검)에서 더함 */
+export interface SiteUpdate { d: string; tag: '주간 특이사항' | '점검 결과' | '협약변경'; who: string; txt: string; res?: string }
+export function siteUpdates(c: SiteCtx): SiteUpdate[] {
+  const out: SiteUpdate[] = [];
+  for (const g of govItems(c) ?? []) {
+    const r = c.gov.get(g.id);
+    if (r && r.v) out.push({ d: r.date, tag: '점검 결과', who: r.by, txt: `${g.t.replace(/ —.*$/, '')} — ${r.v}${r.memo ? ` · ${r.memo}` : ''}`, res: r.v });
+  }
+  for (const x of c.agr) out.push({ d: x.date, tag: '협약변경', who: x.by, txt: `${AGR_KINDS.find((y) => y[0] === x.kind)?.[1] ?? ''}${x.to ? ` → ${x.to}` : ''} · ${x.st}${x.text ? ` · ${x.text}` : ''}` });
+  return out.sort((a, b) => (a.d < b.d ? 1 : -1));
+}
+
+/** 점검 결과 팝업 안내 (GOV_HINT) */
+export const GOV_HINT: Record<string, string> = {
+  g_mid: '보완 → 위 기한으로 수정 중간보고서 · 재점검 할 일이 기한 목록에 생깁니다',
+  g_audit: '보완 → 위 기한으로 시정조치 할 일이 생깁니다',
+  g_audit_fix: '판정일 기준으로 최종평가 예정일이 바뀝니다',
+  g_eval: '성공 → 7일 안에 인수인계서 · 기술임치 제출 기한 / 보완 → 집중AS · 최종재평가(집중AS 종료 + 14일) 기한이 생깁니다',
+  g_reeval: '성공 → 7일 안에 인수인계서 · 기술임치 제출 기한이 생깁니다',
+};
+/** 보완일 때 직접 정하는 후속 기한: [칸 이름, 기본값, 설명] (GOV_FIX) */
+export const GOV_FIX: Record<string, readonly [string, ((p: PmProject) => string) | null, string]> = {
+  g_mid: ['보완 기한 (수정 중간보고서 제출)', null, '통보 공문에 적힌 기한을 넣으세요 (규정상 최대 30일, 29조)'],
+  g_audit: ['시정조치 기한 (시정조치결과서 제출)', null, '통보 공문에 적힌 기한을 넣으세요 (규정상 최대 30일, 31조⑥)'],
+  g_eval: ['집중AS 종료일', (p) => (p.end ? addMonths(p.end, 6) : ''), '기본값은 구축완료일 + 6개월 (33조)'],
+};
+/** 판정 꼬리표 색 (govResCls) */
+export const govResTone = (v: string): 'ok' | 'warn' | 'bad' => (GOV_BAD.includes(v) ? 'bad' : v === '보완' ? 'warn' : 'ok');
+
+export const AGR_DOC = { 승인: '협약변경 승인 필요 — 변경신청서 + 도입 · 공급기업 서명 회의록 + 수정사업계획서 (협약변경위원회)', 등록: '사업관리시스템에 즉시 등록' } as const;
+/** 협약변경 입력 확인 (agrForm validate) — 문제 있으면 [글, 칸] */
+export function agrCheck(v: { kind: string; to: string; why: string; date: string }, from: string): [string, string] | null {
+  if (!v.date) return ['기록일을 넣어 주세요', 'date'];
+  if (!v.why.trim()) return ['사유를 적어 주세요', 'why'];
+  if (v.kind === 'ext') {
+    if (!v.to) return ['새 협약 종료일을 넣어 주세요', 'to'];
+    if (v.to <= from) return [`새 종료일은 지금 종료일(${from}) 이후여야 합니다`, 'to'];
+    if (addMonths(from, 6) < v.to) return ['구축기간은 최대 6개월까지만 연장할 수 있습니다 (세부관리기준 24조)', 'to'];
+  }
+  return null;
 }

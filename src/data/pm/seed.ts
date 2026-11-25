@@ -38,6 +38,8 @@ const s = (v: unknown) => (v == null ? '' : String(v));
 const n = (v: unknown) => (v === '' || v == null ? 0 : Number(v) || 0);
 const st = (v: unknown): PmTask['status'] => (v === '진행중' || v === '완료' ? v : '계획');
 
+const PLANS = (planData as unknown as { plans: Record<string, PmPlan> }).plans;
+
 export function seedProjects(): PmProject[] {
   return DEMO.projects
     .filter((p) => !DROPPED_PROJECTS.has(p.k))
@@ -58,7 +60,8 @@ export function seedProjects(): PmProject[] {
       closed: false,
       order: i,
       annDue: '', evalDate: '', bidRes: '', bidAt: null, warrantyM: null,
-      ceo: '', industry: '', region: '', bizRegNo: '', contactName: '', contactPhone: '', contactEmail: '',
+      // 업종 · 소재지는 계획서 값으로 한 번 채움 (데모 applyPlanInfo 6902 — 켤 때 빈 칸만)
+      ceo: '', industry: s(PLANS[p.k]?.industry), region: s(PLANS[p.k]?.region), bizRegNo: '', contactName: '', contactPhone: '', contactEmail: '',
     }) satisfies PmProject);
 }
 

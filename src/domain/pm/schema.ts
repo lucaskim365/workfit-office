@@ -65,7 +65,18 @@ export type PmProject = z.infer<typeof pmProjectSchema>;
 // ── 3단계: 사업 현황이 쓰는 기록 (데모 S.gov · S.planChk · S.govLink · S.agrChg · S.msOk). 지금 데이터는 모두 0건 ──
 
 /** 점검 지적 사항 (보완 항목) */
-export const PM_FIX_STATES = ['미조치', '조치 완료', '확인'] as const;
+/** 데모 GI: 조치 전 → (담당) 조치 완료 → (PM) 확인 · 반려 = 조치 전으로 */
+export const PM_FIX_STATES = ['조치 전', '조치 완료', '확인'] as const;
+export const pmFixItemSchema = z.object({
+  id: z.string().min(1),
+  text: z.string(),
+  /** 조치 담당 — 그룹웨어 사용자 ID */
+  whoId: z.string().default(''),
+  st: z.enum(PM_FIX_STATES).default('조치 전'),
+  /** a = 조치 완료 · 확인 · 반려 · 조치 전(되돌리기) */
+  hist: z.array(z.object({ date: day, by: z.string(), a: z.string(), note: z.string().default('') })).default([]),
+});
+export type PmFixItem = z.infer<typeof pmFixItemSchema>;
 
 /** 관리기준 기한 기록 (`pmGovRecords`) — 완료 체크 또는 점검 판정. id = `${projectId}|${itemId}` */
 export const pmGovRecordSchema = z.object({
@@ -82,7 +93,7 @@ export const pmGovRecordSchema = z.object({
   /** 보완일 때 직접 정한 후속 기한 */
   fix: day.default(''),
   /** 지적 사항 */
-  items: z.array(z.object({ text: z.string(), st: z.enum(PM_FIX_STATES) })).default([]),
+  items: z.array(pmFixItemSchema).default([]),
   /** 지난 기한 정리로 한꺼번에 처리한 날 */
   bulk: day.default(''),
 });
@@ -121,6 +132,8 @@ export const pmAgreementChangeSchema = z.object({
   text: z.string().default(''),
   why: z.string().default(''),
   st: z.enum(PM_AGR_STATES).default('준비 중'),
+  /** 기간 연장이 협약 종료일에 반영됨 (한 번만) */
+  applied: z.boolean().default(false),
   by: z.string().default(''),
 });
 export type PmAgreementChange = z.infer<typeof pmAgreementChangeSchema>;

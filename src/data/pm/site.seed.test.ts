@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { liveOf, type Live } from '@/domain/pm/rules';
-import { siteBrief, siteCtxOf, siteStage, sumDeadlines, type SiteInputs } from '@/domain/pm/site';
-import { SEED_BASE_DATE, seedPlans, seedProjects, seedTasks } from './seed';
+import { fnLinks, fnSt, siteBrief, siteCtxOf, siteStage, stageBuckets, sumDeadlines, type SiteInputs } from '@/domain/pm/site';
+import { SEED_BASE_DATE, seedPlanFunctions, seedPlans, seedProjects, seedTasks } from './seed';
 
 /**
  * 3단계 확인 숫자 — 데모(같은 내장 데이터, 기록 0건)를 2026-11-25 에 띄워 `siteBrief`·`siteStage`·`sumDeadlines` 로 직접 뽑은 값.
@@ -72,4 +72,32 @@ test('사업 상태: 업무 있는 정부사업 = 착수 전(계획 0%), 업무 
   assert.equal(brief('P2').status, '착수 전');
   assert.equal(Number(brief('P2').stats.act.toFixed(3)), 7.133);
   assert.equal(brief('P9').status, '준비');
+});
+
+test('사업별 화면: 단계별 업무 수 · 평균 실적 · 단계 기간 (데모 stageBuckets · siteStage.per)', () => {
+  const want: Record<string, string> = {
+    P2: '0/0 0/0 72/21 0/0 0/0', P3: '0/0 0/0 60/10 0/0 0/0', P4: '0/0 0/0 0/0 0/0 0/0', P5: '0/0 0/0 60/13 0/0 0/0', P6: '0/0 0/0 43/0 0/0 0/0',
+    P7: '0/0 0/0 63/3 0/0 0/0', P8: '0/0 0/0 40/0 0/0 0/0', P9: '0/0 0/0 0/0 0/0 0/0', P10: '0/0 0/0 0/0 0/0 0/0',
+  };
+  for (const [k, w] of Object.entries(want)) {
+    const B = stageBuckets(ctx(k));
+    assert.equal(B.map((b) => `${b.n}/${b.p}`).join(' '), w, k);
+    assert.equal(B.reduce((a, b) => a + b.late + b.on, 0), 0, k);
+  }
+  assert.equal(siteStage(ctx('P2')).per.join('|'), '|7/1~7/15|~2/28|3/1~6/27|6/27~');
+  assert.equal(siteStage(ctx('P7')).per.join('|'), '|8/25~9/8|~4/23|4/24~8/20|8/20~');
+});
+
+test('계획서 약속 기능: 기능 수 · 추가/변경 중 연결 없음 (데모 fnLinks — 새 업무 번호가 01-01 꼴이라 모두 연결 없음)', () => {
+  const FN = seedPlanFunctions();
+  const want: Record<string, [number, number]> = { P2: [51, 36], P3: [43, 38], P5: [48, 40], P6: [26, 26], P7: [58, 56], P8: [17, 17], P9: [46, 29] };
+  for (const [k, [n, none]] of Object.entries(want)) {
+    const c = ctx(k);
+    const fl = fnLinks(c, FN[k])!;
+    assert.equal(fl.length, n, k);
+    const dev = fl.filter((f) => f.kind !== '기존');
+    assert.equal(dev.length, none, k);
+    assert.ok(dev.every((f) => fnSt(c, f) === '연결 없음'), k);
+  }
+  assert.equal(fnLinks(ctx('P4'), FN.P4), null);
 });

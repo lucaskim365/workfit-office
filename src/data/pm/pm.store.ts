@@ -268,6 +268,86 @@ export function createPmStore(today = todayStr()) {
       if (kind === 'gov') state.gov = state.gov.filter((r) => r.id !== id);
       else state.planChecks = state.planChecks.filter((r) => r.id !== id);
     },
+    /**
+     * 점검 판정 기록 (govResSave). 보완이 아니면 지적 사항·후속 기한은 지움.
+     * 지적 사항은 id 로 이전 상태·이력을 이어 받음
+     */
+    async setGovResult(projectId: string, itemId: string, x: { v: string; date: string; memo: string; fix: string; items: Array<{ id: string; text: string; whoId: string }> }, by: string) {
+      const id = `${projectId}|${itemId}`;
+      const old = state.gov.find((r) => r.id === id);
+      const items = x.v === '보완'
+        ? x.items.filter((it) => it.text.trim()).map((it) => {
+          const o = old?.items.find((y) => y.id === it.id);
+          return o ? { ...clone(o), text: it.text.trim(), whoId: it.whoId } : { id: it.id || nid('GI'), text: it.text.trim(), whoId: it.whoId, st: '조치 전' as const, hist: [] };
+        })
+        : [];
+      state.gov = state.gov.filter((r) => r.id !== id);
+      state.gov.push({ id, projectId, itemId, v: x.v, date: x.date, by, memo: x.memo.trim(), fix: x.v === '보완' ? x.fix : '', items, bulk: '' });
+    },
+    /** 판정 기록 지우기 (govResDel) */
+    async removeGovResult(projectId: string, itemId: string) {
+      const id = `${projectId}|${itemId}`;
+      state.gov = state.gov.filter((r) => r.id !== id);
+    },
+    /** 지적 사항 상태 (govItemSt) — 반려 = 사유 필수, 조치 전으로 */
+    async setFixItemState(projectId: string, itemId: string, fixId: string, action: '조치 완료' | '확인' | '반려' | '조치 전', note: string, by: string, day = todayStr()) {
+      const r = state.gov.find((x) => x.id === `${projectId}|${itemId}`);
+      const it = r?.items.find((x) => x.id === fixId);
+      if (!it) throw new Error('지적 사항을 찾을 수 없습니다');
+      if (action === '반려' && !note.trim()) throw new Error('반려 사유를 적어 주세요');
+      it.hist.push({ date: day, by, a: action, note: note.trim() });
+      it.st = action === '반려' ? '조치 전' : action;
+    },
+    /**
+     * 협약변경 기록 저장 (agrForm onSubmit). 기간 연장을 '승인' · '등록 완료'로 처음 저장하면 협약 종료일을 바꿈
+     * → 돌려주는 글: 종료일을 바꿨으면 그 안내
+     */
+    async saveAgreement(x: PmAgreementChange, by: string): Promise<string> {
+      const rec = { ...clone(x), by, to: x.kind === 'ext' ? x.to : '' };
+      const i = state.agreements.findIndex((a) => a.id === rec.id);
+      if (i >= 0) state.agreements[i] = rec; else state.agreements.push(rec);
+      if (rec.kind === 'ext' && (rec.st === '승인' || rec.st === '등록 완료') && !rec.applied) {
+        rec.applied = true;
+        const p = state.projects.find((v) => v.id === rec.projectId);
+        if (p) p.end = rec.to;
+        return rec.to;
+      }
+      return '';
+    },
+    /** 협약변경 기록 지우기 — 이미 바뀐 협약 종료일은 그대로 */
+    async removeAgreement(id: string) {
+      state.agreements = state.agreements.filter((a) => a.id !== id);
+    },
+    /** 관리기준 필수 TASK 직접 연결 (glSave) · null = 자동으로 되돌리기 (glAuto) */
+    async setGovLink(projectId: string, itemId: string, taskIds: string[] | null) {
+      const id = `${projectId}|${itemId}`;
+      state.govLinks = state.govLinks.filter((r) => r.id !== id);
+      if (taskIds) state.govLinks.push({ id, projectId, itemId, taskIds: [...taskIds] });
+    },
+    /** 업무 일정만 고침 (govDateSave · msRevert) — 변경 이력 "일정 A~B → C~D (note)" + 티켓 반영. 바뀐 개수 */
+    async setTaskDates(items: ReadonlyArray<{ id: string; start: string; end: string }>, note: string, by: string, day = todayStr()) {
+      let n = 0;
+      for (const x of items) {
+        const i = findTask(x.id);
+        const old = state.tasks[i];
+        if (old.start === x.start && old.end === x.end) continue;
+        const next = { ...clone(old), start: x.start, end: x.end };
+        state.tasks[i] = next;
+        const tk = syncTickets(old, next, by, day);
+        log(old.projectId, old.code, '수정', `일정 ${old.start || '-'}~${old.end || '-'} → ${x.start}~${x.end} (${note})${tk}`, by, day);
+        n++;
+      }
+      return n;
+    },
+    /** 선정 결과 (bidSetRes) — 탈락 = 현황·알림에서 빠짐, 업무와 기록은 그대로 */
+    async setBidResult(projectId: string, v: '' | '선정' | '탈락', by: string, day = todayStr()) {
+      const p = state.projects.find((x) => x.id === projectId);
+      if (!p || p.bidRes === v) return;
+      const old = p.bidRes;
+      p.bidRes = v;
+      p.bidAt = v ? { date: day, by } : null;
+      log(projectId, '-', '수정', v ? `선정 결과 '${v}' 기록` : `선정 결과 지움 (이전: ${old})`, by, day);
+    },
 
     /** 기준선 재설정 (baseSet) */
     async resetBaseline(projectId: string, label: string, by: string, day = todayStr()) {

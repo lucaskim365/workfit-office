@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { pmStore, type PmSnapshot } from '@/data/pm/pm.store';
 import { doneInfoOf, liveOf, todayStr, type FilterCtx, type Live } from '@/domain/pm/rules';
-import type { PmProject, PmSubtask, PmTask, PmTaskDone, PmTaskFunctions } from '@/domain/pm/schema';
+import type { PmAgreementChange, PmProject, PmSubtask, PmTask, PmTaskDone, PmTaskFunctions } from '@/domain/pm/schema';
 import { isDrop, lastUpdate, siteBrief, siteCtxOf, siteStage, type SiteBrief, type SiteCtx, type SiteInputs, type SiteStage } from '@/domain/pm/site';
 import { taskTicketIndex, ticketDoneInfo, type PmTicket } from '@/domain/pm/ticket';
 
@@ -136,5 +136,13 @@ export function usePmSiteMutations(me: string) {
   return {
     checkDeadlines: m(({ items, date, bulk }: { items: Array<{ projectId: string; kind: 'gov' | 'plan'; id: string }>; date: string; bulk: boolean }) => s.checkDeadlines(items, date, me, bulk)),
     uncheckDeadline: m(({ projectId, kind, id }: { projectId: string; kind: 'gov' | 'plan'; id: string }) => s.uncheckDeadline(projectId, kind, id)),
+    setGovResult: m(({ projectId, itemId, x }: { projectId: string; itemId: string; x: Parameters<typeof s.setGovResult>[2] }) => s.setGovResult(projectId, itemId, x, me)),
+    removeGovResult: m(({ projectId, itemId }: { projectId: string; itemId: string }) => s.removeGovResult(projectId, itemId)),
+    setFixItemState: m(({ projectId, itemId, fixId, action, note }: { projectId: string; itemId: string; fixId: string; action: '조치 완료' | '확인' | '반려' | '조치 전'; note: string }) => s.setFixItemState(projectId, itemId, fixId, action, note, me)),
+    saveAgreement: m((x: PmAgreementChange) => s.saveAgreement(x, me)),
+    removeAgreement: m((id: string) => s.removeAgreement(id)),
+    setGovLink: m(({ projectId, itemId, taskIds }: { projectId: string; itemId: string; taskIds: string[] | null }) => s.setGovLink(projectId, itemId, taskIds)),
+    setTaskDates: m(({ items, note }: { items: Array<{ id: string; start: string; end: string }>; note: string }) => s.setTaskDates(items, note, me)),
+    setBidResult: m(({ projectId, v }: { projectId: string; v: '' | '선정' | '탈락' }) => s.setBidResult(projectId, v, me)),
   };
 }

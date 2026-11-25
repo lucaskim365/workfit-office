@@ -51,3 +51,37 @@ test('업무를 고치면 티켓도 따라가고 변경 이력에 "티켓 반영
   assert.equal(snap.tickets[0].title, `${t.name} (수정)`);
   assert.match(snap.logs.at(-1)!.text, /티켓 P2-0001 반영/);
 });
+
+test('사업별 화면 저장: 점검 보완 → 후속 기한 · 지적 사항, 협약 연장 승인 → 종료일 1번만 바뀜, 일정 고치기 이력', async () => {
+  const s = createPmStore(TODAY);
+  await s.setGovResult('P2', 'g_mid', { v: '보완', date: TODAY, memo: ' 공문 ', fix: '2026-12-10', items: [{ id: '', text: '실데이터 미입력', whoId: 'u1' }, { id: 'x', text: '  ', whoId: 'u1' }] }, 'u3');
+  let snap = await s.snapshot();
+  const r = snap.gov.find((x) => x.id === 'P2|g_mid')!;
+  assert.deepEqual([r.v, r.fix, r.memo, r.items.length, r.items[0].st], ['보완', '2026-12-10', '공문', 1, '조치 전']);
+  await assert.rejects(s.setFixItemState('P2', 'g_mid', r.items[0].id, '반려', ' ', 'u3', TODAY));
+  await s.setFixItemState('P2', 'g_mid', r.items[0].id, '조치 완료', '했음', 'u1', TODAY);
+  await s.setFixItemState('P2', 'g_mid', r.items[0].id, '반려', '아직', 'u3', TODAY);
+  snap = await s.snapshot();
+  const it = snap.gov.find((x) => x.id === 'P2|g_mid')!.items[0];
+  assert.deepEqual([it.st, it.hist.map((h) => h.a).join(',')], ['조치 전', '조치 완료,반려']);
+  // 판정을 계속으로 바꾸면 지적 사항 · 후속 기한은 지움
+  await s.setGovResult('P2', 'g_mid', { v: '계속', date: TODAY, memo: '', fix: '2026-12-10', items: [] }, 'u3');
+  snap = await s.snapshot();
+  assert.deepEqual([snap.gov.find((x) => x.id === 'P2|g_mid')!.fix, snap.gov.find((x) => x.id === 'P2|g_mid')!.items.length], ['', 0]);
+
+  const a = { id: 'A1', projectId: 'P2', date: TODAY, kind: 'ext', from: '2027-03-31', to: '2027-07-31', text: '', why: 'H/W', st: '승인' as const, by: '', applied: false };
+  assert.equal(await s.saveAgreement(a, 'u3'), '2027-07-31');
+  snap = await s.snapshot();
+  assert.equal(snap.projects.find((p) => p.id === 'P2')!.end, '2027-07-31');
+  assert.equal(await s.saveAgreement({ ...snap.agreements[0], text: '수정' }, 'u3'), '');
+
+  const t = snap.tasks.find((x) => x.projectId === 'P2')!;
+  assert.equal(await s.setTaskDates([{ id: t.id, start: '2026-12-01', end: '2026-12-20' }], '관리기준 필수 TASK', 'u3', TODAY), 1);
+  snap = await s.snapshot();
+  assert.match(snap.logs.at(-1)!.text, /^일정 .*→ 2026-12-01~2026-12-20 \(관리기준 필수 TASK\)$/);
+  await s.setGovLink('P2', 'g_start', []);
+  await s.setGovLink('P2', 'g_mid', [t.id]);
+  await s.setGovLink('P2', 'g_start', null);
+  snap = await s.snapshot();
+  assert.deepEqual(snap.govLinks.map((x) => x.id), ['P2|g_mid']);
+});
