@@ -2,6 +2,7 @@ import { useState, type ReactNode } from 'react';
 import { diffDays, leftText, monthDay, type PmSiteStatus } from '@/domain/pm/rules';
 import { GOV_BAD, SIDE_TEXT, SITE_STAGES, type Deadline, type SiteStage } from '@/domain/pm/site';
 import { ProjectTag, Tag } from '../wbs/parts';
+import { FavStar } from '../../ui/PmShell';
 
 /**
  * 대시보드 작은 부품 — 데모 stBadge · stageBadge · dlRow 를 그룹웨어 토큰으로 (PM 전용, §3.2.2).
@@ -105,6 +106,7 @@ export function ScreenHead({ title, desc, children }: { title: ReactNode; desc: 
     <div>
       <div className="flex flex-wrap items-center gap-2">
         <h2 className="text-[15px] font-bold text-ink">{title}</h2>
+        <FavStar />
         <button type="button" onClick={() => setOn((o) => !o)} title={on ? '설명 닫기' : '이 화면 설명 보기'}
           className={`grid h-5 w-5 place-items-center rounded-full border text-[11px] font-bold ${on ? 'border-teal bg-teal text-white' : 'border-border-hi text-ink3'}`}>?</button>
         <span className="flex-1" />

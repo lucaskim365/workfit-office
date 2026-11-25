@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { FavStar } from '../../ui/PmShell';
 import { Button } from '@/shared/ui/Button';
 import { defaultAssignee, diffDays, monthDay, shortName } from '@/domain/pm/rules';
 import {
@@ -91,6 +92,7 @@ export function TicketListView() {
     <>
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <h2 className="text-[15px] font-bold text-ink">티켓 목록</h2>
+        <FavStar />
         <button type="button" onClick={() => setHelp((o) => !o)} title={help ? '설명 닫기' : '이 화면 설명 보기'} className={`grid h-5 w-5 place-items-center rounded-full border text-[11px] font-bold ${help ? 'border-teal bg-teal text-white' : 'border-border-hi text-ink3'}`}>?</button>
         <span className="flex-1" />
         <Button size="sm" onClick={csv}>⬇ CSV 내보내기 (Jira)</Button>

@@ -18,6 +18,8 @@ export interface PmScreenDef {
   label: string;
   /** 화면 안 전환 버튼 (데모의 3단). 없으면 화면 하나 */
   views?: PmView[];
+  /** 메뉴 탭에 없는 화면 (데모 HIDDEN_PARENT) — 다른 화면 버튼 · 검색 · 즐겨찾기로만 들어옴 */
+  hidden?: boolean;
 }
 
 export interface PmMenuDef {
@@ -40,6 +42,9 @@ export const PM_MENUS: PmMenuDef[] = [
       { id: 'dash/team', label: '팀 현황', views: [{ id: 'dash/team', label: '오늘' }, { id: 'sched/load', label: '앞으로 4주' }, { id: 'dash/hours', label: '투입 시간' }] },
       { id: 'dash/my', label: '내 업무' },
       { id: 'dash/plan', label: '업무계획' },
+      // 탭에 없는 화면 (데모 HIDDEN_PARENT: doc/log · site/kpi → 대시보드)
+      { id: 'doc/log', label: '업무 기록 · 과제 수행일지', hidden: true },
+      { id: 'site/kpi', label: '성과지표 실측', hidden: true },
     ],
   },
   {

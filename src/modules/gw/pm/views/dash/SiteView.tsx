@@ -174,7 +174,7 @@ export function SiteView() {
 
       <div className="grid items-stretch gap-4 lg:grid-cols-2">
         <div className="flex min-w-0 flex-col gap-4">
-          <InfoCard c={c} short={short} />
+          <InfoCard c={c} short={short} onKpi={() => go('site/kpi', { k: c.p.id })} />
           <UpdatesCard L={siteUpdates(c)} nameOf={people.nameOf} />
           <AgreementCard c={c} onNew={() => setPop({ kind: 'agr', x: null })} onEdit={(x) => setPop({ kind: 'agr', x })} />
         </div>

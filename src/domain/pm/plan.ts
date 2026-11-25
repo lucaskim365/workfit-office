@@ -426,6 +426,26 @@ export function planHourRows(C: PlanCtx, shortOf: (projectId: string) => string)
   }
   return R;
 }
+/**
+ * 과제 수행일지 줄 (allLogs 5384) — 업무계획 '시간' 칸에 적은 것. 수행 내용 = 그날 일일 보고 임시저장본의 비고 →
+ * 계획 메모 → (업무가 아니면) 할 일 글자. 데모의 예전 작업일지(S.logs)는 새로 쓰지 않는 기록이고 옮길 것이 없어 뺌.
+ */
+export interface LogRow { who: string; date: string; projectId: string; taskId: string; ticketNo: string; title: string; content: string; hours: number }
+export function planLogRows(C: PlanCtx, shortOf: (projectId: string) => string): LogRow[] {
+  const out: LogRow[] = [];
+  for (const p of C.X.plans) {
+    const dr = C.draft(p.who, p.date);
+    for (const it of p.items) {
+      const h = +(it.hours ?? 0) || 0;
+      if (!h) continue;
+      const t = C.task(it.taskId);
+      const txt = planText(C, it, shortOf);
+      const row = dr?.rows.find((r) => r[0] === txt);
+      out.push({ who: p.who, date: p.date, projectId: t ? t.projectId : '', taskId: it.taskId ?? '', ticketNo: it.ticketNo ?? '', title: t ? '' : txt, content: (row ? row[1] : it.memo) || (t ? '' : txt), hours: h });
+    }
+  }
+  return out;
+}
 /** 마지막 업데이트에 더할 날 — 직접 고친 날 (오늘까지) */
 export const planDaysOf = (C: PlanCtx, who: string) => C.savedDays(who).map(([d]) => d).filter((d) => d <= C.today);
 /** 진행률 갱신으로 치는 날 — 업무 줄을 체크 · 메모한 날 (updIdx) */

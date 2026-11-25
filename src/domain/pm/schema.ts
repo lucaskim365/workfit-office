@@ -169,6 +169,8 @@ export const pmActionSchema = z.object({
   meetingId: z.string().default(''),
   text: z.string().min(1),
   whoId: z.string().default(''),
+  /** 등록한 사람 (🔔 '새 액션 아이템' 알림 — 등록 화면은 5단계) */
+  by: z.string().default(''),
   due: day.default(''),
   done: z.boolean().default(false),
   /** 완료한 날 · 사람 (actDone — 내 업무 '처리할 일'에서 체크) */

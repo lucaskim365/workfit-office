@@ -218,7 +218,7 @@ export function AfterCard({ c, nameOf }: { c: SiteCtx; nameOf: (id: string) => s
 }
 
 /** 사업 개요 (pSiteSum info) — 사업 정보 + 계획서 내장 데이터 */
-export function InfoCard({ c, short }: { c: SiteCtx; short: string }) {
+export function InfoCard({ c, short, onKpi }: { c: SiteCtx; short: string; onKpi: () => void }) {
   const s = c.p;
   const p = c.plan;
   const kv = (k: ReactNode, v: ReactNode, title?: string) => (
@@ -247,7 +247,7 @@ export function InfoCard({ c, short }: { c: SiteCtx; short: string }) {
             {kv('구축 목표', (p.goal ?? []).length ? <div>{p.goal!.map((g) => <div key={g}>· {g}</div>)}</div> : '-')}
             {kv('성과지표', (p.kpis ?? []).length ? (
               <div>{p.kpis!.map((x) => <div key={x.name}>· {x.name} <span>{fmtN(x.base)} → <b>{fmtN(x.target)}</b> {x.unit ?? ''}</span></div>)}
-                <Button size="sm" variant="secondary" disabled title="구축 후 실측값 기록 · 목표 달성도는 성과지표 화면을 옮길 때(3-7) 켭니다">실측 기록 › (3-7)</Button></div>
+                <Button size="sm" variant="secondary" onClick={onKpi} title="구축 후 실측값을 기록하고 목표 달성도를 봅니다 (최종평가 대비)">실측 기록 ›</Button></div>
             ) : '-')}
           </>
         ) : kv('사업계획서', <span className="text-ink3">이 사업은 계획서 내용이 들어 있지 않습니다. 계획서 등록(PDF에서 기능 목록 · 성과지표 읽기)은 파일 저장소를 연결하는 7단계에서 켭니다.</span>)}

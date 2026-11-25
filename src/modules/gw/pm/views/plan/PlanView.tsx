@@ -14,6 +14,7 @@ import { usePmModals } from '../ticket/usePmModals';
 import { SubtaskBox } from '../wbs/TaskDetailModal';
 import { EmptyHint, MiniBar, ProjectTag, Tag } from '../wbs/parts';
 import { CardHead, ScreenHead } from '../dash/parts';
+import { usePmShell } from '../../ui/PmShell';
 import { PlanAddModal, PlanPdfModal, PlanRepModal, PlanTextModal, TeamPdfModal } from './PlanModals';
 
 /**
@@ -38,6 +39,7 @@ export function canTeamPdf(me: string, people: ReturnType<typeof usePmPeople>, d
 }
 
 export function PlanView() {
+  const shell = usePmShell();
   const people = usePmPeople();
   const { me } = people;
   const d = usePmDerived(people.nameOf);
@@ -60,7 +62,7 @@ export function PlanView() {
   const weeks = planWeeks(d.today);
   const head = (
     <ScreenHead title="업무계획" desc={`${people.labelOf(me)} · 업무 기간에 맞춰 미리 채운 계획을 그날 고쳐 쓰고, 큰 업무는 세부 작업으로 쪼개 시간을 나눕니다`}>
-      <Button size="sm" disabled title="지난 업무 기록과 과제 수행일지(인건비 증빙) — 수행일지(3-7)를 옮기면 켭니다">지난 기록 · 수행일지 (3-7)</Button>
+      <Button size="sm" onClick={() => shell?.go({ kind: 'view', v: 'doc/log' })} title="지난 업무 기록과 과제 수행일지(인건비 증빙)">지난 기록 · 수행일지</Button>
     </ScreenHead>
   );
 

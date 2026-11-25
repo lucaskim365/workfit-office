@@ -63,15 +63,16 @@ export function MyView() {
   const mut = usePmMutations(me, people.nameOf);
   const smut = usePmSiteMutations(me);
   const C = usePmPlanCtx(d);
-  const [, setParams] = useSearchParams();
+  const [params, setParams] = useSearchParams();
   const shortOf = (id: string) => { const p = d?.snap.projects.find((x) => x.id === id); return p ? shortName(p, d!.snap.projects) : id; };
   const modals = usePmModals({ d, people, mut, shortOf });
-  const [board, setBoard] = useState<string | null>(null);
-  const [sort, setSort] = useState<MySort>('prog');
+  // 🔔 알림에서 오면 ?board=all (지금 할 일, 지연 우선) · ?inbox=1 (처리할 일 › 승인 대기) — 한 번만 읽음 (myLateGo · inboxAlertGo)
+  const [board, setBoard] = useState<string | null>(() => params.get('board'));
+  const [sort, setSort] = useState<MySort>(() => (params.get('board') ? 'late' : 'prog'));
   const [sortL, setSortL] = useState<MySort>('prog');
   const [pg, setPg] = useState(1);
   const [pgL, setPgL] = useState(1);
-  const [inbox, setInbox] = useState<number | null>(null);
+  const [inbox, setInbox] = useState<number | null>(() => { const i = Number(params.get('inbox')); return params.get('inbox') && i >= 0 && i < 4 ? i : null; });
   const [msg, setMsg] = useState<{ text: string; bad?: boolean } | null>(null);
   const [upd, setUpd] = useState<UpdPages>({ list: [], i: 0 });
 
@@ -270,7 +271,7 @@ export function MyView() {
         <span className="text-[11.5px] text-ink3">{rec.rows.length ? `${recDone} / ${rec.rows.length}건 완료${rec.auto ? ' · 자동 초안' : ''}` : '아직 없음'} — 업무계획의 '오늘 할 일'에서 체크 · 메모하면 기록됩니다</span>
         <span className="flex-1" />
         <Button size="sm" onClick={() => goView('dash/plan')}>업무계획 열기</Button>
-        <Button size="sm" disabled title="수행일지(3-7)를 옮기면 켭니다">지난 기록 (3-7)</Button>
+        <Button size="sm" onClick={() => goView('doc/log')} title="지난 업무 기록과 과제 수행일지(인건비 증빙)">지난 기록</Button>
       </div>
 
       <section className={sec} id={inboxRef}>

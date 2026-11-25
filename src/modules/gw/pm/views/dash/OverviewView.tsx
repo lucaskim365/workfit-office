@@ -30,7 +30,8 @@ export function OverviewView() {
   const smut = usePmSiteMutations(people.me);
   const [params, setParams] = useSearchParams();
   const [urgent, setUrgent] = useState(false);
-  const [pop, setPop] = useState<Pop | null>(null);
+  // 검색 '지난 기한 정리'에서 오면 ?pop=past (한 번만 읽음, 데모 pastOpen)
+  const [pop, setPop] = useState<Pop | null>(() => (params.get('pop') === 'past' ? { kind: 'past' } : null));
   const shortOf = (id: string) => { const p = d?.snap.projects.find((x) => x.id === id); return p ? shortName(p, d!.snap.projects) : id; };
   const modals = usePmModals({ d, people, mut, shortOf });
 

@@ -159,5 +159,13 @@ export function usePmSiteMutations(me: string) {
     removePlanRep: m((index: number) => s.removePlanRep(me, index)),
     savePdfDraft: m((x: { date: string; dept: string; name: string; rows: Array<[string, string, string]>; at: string }) => s.savePdfDraft({ ...x, who: me })),
     removePdfDraft: m((date: string) => s.removePdfDraft(me, date)),
+    // 3-7: 성과지표 · 알림 · 즐겨찾기
+    saveKpiDef: m((x: Parameters<typeof s.saveKpiDef>[0]) => s.saveKpiDef(x)),
+    removeKpiDef: m((id: string) => s.removeKpiDef(id)),
+    saveKpiMeas: m((x: Parameters<typeof s.saveKpiMeas>[0]) => s.saveKpiMeas(x, me)),
+    removeKpiMeas: m((id: string) => s.removeKpiMeas(id)),
+    addAiMeas: m((x: Parameters<typeof s.addAiMeas>[0]) => s.addAiMeas(x, me)),
+    setSeen: m(({ txt, on }: { txt: string; on: boolean }) => s.setSeen(me, txt, on)),
+    toggleFav: m((f: { v: string; k: string }) => s.toggleFav(me, f)),
   };
 }

@@ -1,5 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { FavStar } from '../../ui/PmShell';
 import { Button } from '@/shared/ui/Button';
 import {
   defaultAssignee, filterTasks, groupsOf, isLate, countsAllStatus, liveOf, PM_FILTER_DEFAULT, PM_PERIOD_TABS,
@@ -71,8 +72,10 @@ export function WbsListView() {
     ...(initPeriod ? { period: initPeriod } : {}),
     ...(who ? { who } : {}),
     ...(st === '완료' || st === 'all' ? { st } : {}),
+    // 검색 '업무 n건 모두 보기' → ?q= (한 번만 읽음, 데모 gsWbs)
+    ...(params.get('q') ? { q: params.get('q')! } : {}),
   };
-  return <WbsList key={k + (params.get('stage') ?? '') + (per ?? '') + who + (st ?? '')} d={d} k={k} setK={setK} people={people} init={init} initPeriod={initPeriod || (who ? 'all' : null)} />;
+  return <WbsList key={k + (params.get('stage') ?? '') + (per ?? '') + who + (st ?? '') + (params.get('q') ?? '')} d={d} k={k} setK={setK} people={people} init={init} initPeriod={initPeriod || (who ? 'all' : null)} />;
 }
 
 type People = ReturnType<typeof usePmPeople>;
@@ -525,6 +528,7 @@ function WbsList({ d, k, setK, people, init, initPeriod }: { d: PmDerived; k: st
     <div>
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <h2 className="text-[15px] font-bold text-ink">업무 목록</h2>
+        <FavStar />
         <button type="button" onClick={() => setHelp((o) => !o)} title={help ? '설명 닫기' : '이 화면 설명 보기'} className={`grid h-5 w-5 place-items-center rounded-full border text-[11px] font-bold ${help ? 'border-teal bg-teal text-white' : 'border-border-hi text-ink3'}`}>?</button>
         <span className="flex-1" />
         <Button size="sm" onClick={() => setLogOpen(true)}>🕘 변경 이력</Button>

@@ -9,6 +9,7 @@ import { LOAD_MAX_DEFAULT } from '@/domain/pm/team';
 import { SEED_BASE_DATE, SEED_VERSION, seedFunctions, seedPlanFunctions, seedPlans, seedProjects, seedSubtasks, seedTasks } from './seed';
 import { moveTicket, nextTicketNo, setTicketProg, syncTicketWithTask, tkOpen, type PmTicket } from '@/domain/pm/ticket';
 import { weekStart } from '@/domain/pm/site';
+import type { PmAiMeas, PmKpiDef, PmKpiMeas } from '@/domain/pm/kpi';
 
 /**
  * PM 저장소 — 1단계는 **메모리 전용** (§5.1: `pm*` 컬렉션이 아직 없어 `VITE_DB_DRIVER=appwrite` 여도 메모리).
@@ -61,6 +62,15 @@ export interface PmSnapshot {
   planReps: PmPlanRep[];
   /** 일일 업무 보고 임시저장 (사람 · 날짜마다, 30일) */
   pdfDrafts: PmPdfDraft[];
+  // ── 3-7 ──
+  /** 직접 등록한 성과지표 · 실측 기록 · AI 성능 측정 (데모 S.kpiDefs · kpiMeas · aiMeas) */
+  kpiDefs: PmKpiDef[];
+  kpiMeas: PmKpiMeas[];
+  aiMeas: PmAiMeas[];
+  /** 🔔 확인한 알림 (사람 → 알림 문구 → 확인한 날, 데모 S.seen). 문구가 바뀌면 새 알림 */
+  seen: Array<{ id: string; items: Record<string, string> }>;
+  /** ☆ 즐겨찾기 (사람마다, 데모 S.fav) — v = 보기 id, k = 사업별 화면에서 고른 사업 */
+  favs: Array<{ id: string; items: Array<{ v: string; k: string }> }>;
 }
 
 const clone = <T>(v: T): T => structuredClone(v);
@@ -107,6 +117,7 @@ export function createPmStore(today = todayStr()) {
     settings: { loadMax: LOAD_MAX_DEFAULT, carryFrom: '' },
     weekChecks: [], later: [], updReq: [],
     planDays: [], planReps: [], pdfDrafts: [],
+    kpiDefs: [], kpiMeas: [], aiMeas: [], seen: [], favs: [],
   };
 
   const log = (projectId: string, code: string, kind: PmChangeLog['kind'], text: string, by: string, day: string) => {
@@ -447,6 +458,48 @@ export function createPmStore(today = todayStr()) {
     },
     async removePdfDraft(who: string, date: string) {
       state.pdfDrafts = state.pdfDrafts.filter((r) => !(r.who === who && r.date === date));
+    },
+
+    // ── 3-7: 성과지표 · 알림 · 즐겨찾기 ───────────────
+    /** 성과지표 직접 등록 · 수정 (kpiDefForm) */
+    async saveKpiDef(x: Omit<PmKpiDef, 'id'> & { id?: string }) {
+      const id = x.id || nid('KD');
+      state.kpiDefs = [...state.kpiDefs.filter((r) => r.id !== id), { ...clone(x), id }];
+      return id;
+    },
+    /** 직접 등록 지표 지우기 — 그 지표 실측 기록도 같이 */
+    async removeKpiDef(id: string) {
+      const d = state.kpiDefs.find((r) => r.id === id);
+      state.kpiDefs = state.kpiDefs.filter((r) => r.id !== id);
+      if (d) state.kpiMeas = state.kpiMeas.filter((m) => !(m.projectId === d.projectId && m.kid === id));
+    },
+    /** 실측 기록 (kpiMeasForm) — 수정이면 기록한 사람은 그대로 */
+    async saveKpiMeas(x: Omit<PmKpiMeas, 'id' | 'who'> & { id?: string }, by: string) {
+      const old = x.id ? state.kpiMeas.find((r) => r.id === x.id) : undefined;
+      const id = old?.id || nid('KM');
+      state.kpiMeas = [...state.kpiMeas.filter((r) => r.id !== id), { ...clone(x), id, who: old?.who ?? by }];
+    },
+    async removeKpiMeas(id: string) {
+      state.kpiMeas = state.kpiMeas.filter((r) => r.id !== id);
+    },
+    /** AI 성능 측정 기록 (aiMeasForm) — 추가만 (데모도 수정 · 삭제 없음) */
+    async addAiMeas(x: Omit<PmAiMeas, 'id' | 'who'>, by: string) {
+      state.aiMeas.push({ ...clone(x), id: nid('AM'), who: by });
+    },
+    /** 알림 확인 · 되돌리기 (bellSeen) */
+    async setSeen(who: string, txt: string, on: boolean, day = todayStr()) {
+      const cur = state.seen.find((r) => r.id === who) ?? { id: who, items: {} };
+      const items = { ...cur.items };
+      if (on) items[txt] = day; else delete items[txt];
+      state.seen = [...state.seen.filter((r) => r.id !== who), { id: who, items }];
+    },
+    /** 즐겨찾기 켜기 · 끄기 (favTog) — 새 것은 맨 뒤 */
+    async toggleFav(who: string, f: { v: string; k: string }) {
+      const cur = state.favs.find((r) => r.id === who)?.items ?? [];
+      const has = cur.some((x) => x.v === f.v && x.k === f.k);
+      const items = has ? cur.filter((x) => !(x.v === f.v && x.k === f.k)) : [...cur, { ...f }];
+      state.favs = [...state.favs.filter((r) => r.id !== who), { id: who, items }];
+      return !has;
     },
 
     /** 몰림 기준 주당 마감 (loadMax 6008: 1 이상, 잘못 넣으면 8) */

@@ -133,3 +133,24 @@ test('업무계획(3-6): 그날 저장 · 반복 업무가 고친 앞날에도 �
   await s.ensureCarryFrom('2026-12-01');
   assert.equal((await s.snapshot()).settings.carryFrom, '2026-11-26', '처음 한 번만');
 });
+
+test('3-7 저장: 즐겨찾기 켜고 끄기 · 알림 확인 · 지표 지우면 실측 기록도 지움', async () => {
+  const s = createPmStore('2026-11-25');
+  assert.equal(await s.toggleFav('me', { v: 'dash/site', k: 'P2' }), true);
+  await s.toggleFav('me', { v: 'task/wbs', k: '' });
+  assert.equal(await s.toggleFav('me', { v: 'dash/site', k: 'P2' }), false);
+  assert.deepEqual((await s.snapshot()).favs, [{ id: 'me', items: [{ v: 'task/wbs', k: '' }] }]);
+  await s.setSeen('me', '새 티켓 · P2-0001', true);
+  await s.setSeen('me', '다른 알림', true);
+  await s.setSeen('me', '다른 알림', false);
+  assert.deepEqual((await s.snapshot()).seen, [{ id: 'me', items: { '새 티켓 · P2-0001': '2026-11-25' } }]);
+  const kid = await s.saveKpiDef({ projectId: 'P4', f: 'Q', name: '불량률', unit: '%', dir: 'down', base: 2, target: 1, w: 1, period: '', method: '' });
+  await s.saveKpiMeas({ projectId: 'P4', kid, date: '2026-11-25', val: 1.5, memo: '' }, 'me');
+  await s.saveKpiMeas({ projectId: 'P2', kid: 'P0', date: '2026-11-25', val: 25, memo: '' }, 'me');
+  const m = (await s.snapshot()).kpiMeas.find((x) => x.kid === 'P0')!;
+  await s.saveKpiMeas({ ...m, val: 24 }, 'other');
+  assert.deepEqual((await s.snapshot()).kpiMeas.filter((x) => x.kid === 'P0').map((x) => [x.val, x.who]), [[24, 'me']], '고쳐도 기록한 사람은 그대로');
+  await s.removeKpiDef(kid);
+  const snap = await s.snapshot();
+  assert.deepEqual([snap.kpiDefs.length, snap.kpiMeas.map((x) => x.kid)], [0, ['P0']]);
+});
