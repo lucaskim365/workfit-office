@@ -1,0 +1,2458 @@
+[
+ {
+  "id": "P1",
+  "name": "미들웨어 전처리",
+  "sec": "sw",
+  "kind": "",
+  "cat": "전처리",
+  "unit": "식",
+  "desc": "■ 설비데이터 전처리(미들웨어)\n ▪ 설비데이터 Read 기준\n ▪ LS Modbus TCP/IP 기준",
+  "price": 5000000,
+  "cost": null,
+  "pass": false,
+  "vendor": "",
+  "grp": "",
+  "vary": false,
+  "note": "",
+  "hist": [
+   {
+    "src": "명성ENG",
+    "date": "2026-11-06",
+    "price": 5000000,
+    "cost": null,
+    "qty": 1
+   },
+   {
+    "src": "비티씨스템",
+    "date": "2026-11-06",
+    "price": 5000000,
+    "cost": null,
+    "qty": 1
+   },
+   {
+    "src": "메라톤",
+    "date": "2026-10-29",
+    "price": 5000000,
+    "cost": null,
+    "qty": 1
+   },
+   {
+    "src": "신광테크",
+    "date": "2026-06-29",
+    "price": 5000000,
+    "cost": null,
+    "qty": 1
+   }
+  ]
+ },
+ {
+  "id": "P2",
+  "name": "스마트팩토리 진행경비",
+  "sec": "sw",
+  "kind": "",
+  "cat": "경비",
+  "unit": "set",
+  "desc": "■ 업무수행과제\n ▪ 사업신청서 작성   ▪ 사업계획서 작성\n ▪ 스마트공장 신청 및 접수   ▪ 기술성평가 수검\n ▪ 현장점검 수검   ▪ 원가계산 자료 작성 및 제출\n ▪ 과제협약   ▪ 착수계 작성 및 사업 일정표 작성\n ▪ 각종 회의록 작성   ▪ 일일 / 주간 / 월간 업무수행일지 작성\n ▪ 중간점검보고서 작성   ▪ 완료점검보고서 작성\n ▪ 사업감리 수행   ▪ 지방비 공고 확인 및 지원 신청서 작성 등",
+  "price": 15000000,
+  "cost": null,
+  "pass": false,
+  "vendor": "",
+  "grp": "",
+  "vary": false,
+  "note": "",
+  "hist": [
+   {
+    "src": "명성ENG",
+    "date": "2026-11-06",
+    "price": 15000000,
+    "cost": null,
+    "qty": 1
+   },
+   {
+    "src": "비티씨스템",
+    "date": "2026-11-06",
+    "price": 15000000,
+    "cost": null,
+    "qty": 1
+   },
+   {
+    "src": "메라톤",
+    "date": "2026-10-29",
+    "price": 15000000,
+    "cost": null,
+    "qty": 1
+   },
+   {
+    "src": "에코블록",
+    "date": "2026-10-29",
+    "price": 15000000,
+    "cost": null,
+    "qty": 1
+   },
+   {
+    "src": "효광(제조AI)",
+    "date": "2026-05-08",
+    "price": 15000000,
+    "cost": null,
+    "qty": 1
+   }
+  ]
+ },
+ {
+  "id": "P3",
+  "name": "바코드스캐너",
+  "sec": "hw",
+  "kind": "",
+  "cat": "디바이스",
+  "unit": "set",
+  "desc": "■ DS2278 (지브라)\n스캔 거리: 표준 범위 ▪ 무선형 / 배터리 용량: 최대 72시간\n※ 키오스크에 연결 및 장착",
+  "price": 500000,
+  "cost": 370000,
+  "pass": false,
+  "vendor": "",
+  "grp": "",
+  "vary": false,
+  "note": "",
+  "hist": [
+   {
+    "src": "메라톤",
+    "date": "2026-10-29",
+    "price": 500000,
+    "cost": 370000,
+    "qty": 4
+   },
+   {
+    "src": "신광테크",
+    "date": "2026-06-29",
+    "price": 380000,
+    "cost": 450000,
+    "qty": 7
+   },
+   {
+    "src": "신광테크 추가계약",
+    "date": "2026-06-29",
+    "price": 550000,
+    "cost": null,
+    "qty": 10
+   }
+  ]
+ },
+ {
+  "id": "P4",
+  "name": "키오스크 Panel PC",
+  "sec": "hw",
+  "kind": "",
+  "cat": "디바이스",
+  "unit": "set",
+  "desc": "Display : 21.5\" TFT LCD 1280*1024 (LED Backlight)\nBrightness : 250 (cd/㎡)\nTouchscreen Type : Capacitive Touch\nCPU : Intel® Core™ i5-6300U (@3.0GHz)\nMemory : DDR4 8G RAM\nStorage : SSD 256G\nUSB : 2 x USB 3.0, 2 x USB 2.0\nSerial : 2 x RS232\nEthernet : 1 x 1000 Mbps\nDisplay Port : 1 x HDMI, 1 x VGA\nPower : DC 12V 5A\nHousing Type : Kiosk Mounting, Front Power Switch\nHousing Color : Blue\nHousing Material : Steel",
+  "price": 2500000,
+  "cost": 1650000,
+  "pass": false,
+  "vendor": "",
+  "grp": "",
+  "vary": false,
+  "note": "",
+  "hist": [
+   {
+    "src": "비티씨스템",
+    "date": "2026-11-06",
+    "price": 2500000,
+    "cost": 1650000,
+    "qty": 1
+   },
+   {
+    "src": "메라톤",
+    "date": "2026-10-29",
+    "price": 2000000,
+    "cost": 1710000,
+    "qty": 4
+   }
+  ]
+ },
+ {
+  "id": "P5",
+  "name": "라벨프린터",
+  "sec": "hw",
+  "kind": "",
+  "cat": "디바이스",
+  "unit": "set",
+  "desc": "■ ZT-231\n ▪ 해상도 : 203 dpi(1밀리미터당 8도트)\n ▪ 메모리 : 256MB SDRAM 메모리\n ▪ 프린트 속도 : 12 ips(203 dpi)\n ▪ 최대 프린트 길이 : 203dpi: 157인치/3988밀리미터\n ▪ 통신 : 10/100 이더넷\n ▪ 현장 납품 및 설치 조건",
+  "price": 1200000,
+  "cost": 1200000,
+  "pass": false,
+  "vendor": "",
+  "grp": "",
+  "vary": false,
+  "note": "",
+  "hist": [
+   {
+    "src": "명성ENG",
+    "date": "2026-11-06",
+    "price": 1200000,
+    "cost": 1200000,
+    "qty": 2
+   },
+   {
+    "src": "메라톤",
+    "date": "2026-10-29",
+    "price": 1100000,
+    "cost": 900000,
+    "qty": 4
+   }
+  ]
+ },
+ {
+  "id": "P6",
+  "name": "현황판 TV",
+  "sec": "hw",
+  "kind": "",
+  "cat": "디바이스",
+  "unit": "set",
+  "desc": "■ LH65QBCEBGCXKR (삼성전자)\n실내용 / 디스플레이모듈 / 65인치(164cm) / LED / 4K UHD / VA패널계열 / 명암비: 4천:1 / 밝기: 350cd / 응답속도: 8ms / 4K업스케일링 / 스마트캘리브레이션 / 프로세서: 퀀텀4K Lite / 스마트: 삼성TV플러스 / OS: 타이젠 / HDMI(전체): 3개 / HDMI2.0: 3개 / USB: 2개 / 지원: HDMI2.0, HDCP2.2 / Wi-Fi / LAN / 블루투스 / 헤드폰 / 소비전력: 187W / 베사홀: 400x300mm / 크기(가로x세로x깊이): 1457x832x29mm\n※ 이동식 및 벽걸이 까지 가능",
+  "price": 1200000,
+  "cost": 650000,
+  "pass": false,
+  "vendor": "",
+  "grp": "",
+  "vary": false,
+  "note": "",
+  "hist": [
+   {
+    "src": "비티씨스템",
+    "date": "2026-11-06",
+    "price": 1200000,
+    "cost": 650000,
+    "qty": 1
+   },
+   {
+    "src": "메라톤",
+    "date": "2026-10-29",
+    "price": 1200000,
+    "cost": 1174000,
+    "qty": 3
+   }
+  ]
+ },
+ {
+  "id": "P7",
+  "name": "현황판 PC",
+  "sec": "hw",
+  "kind": "",
+  "cat": "디바이스",
+  "unit": "set",
+  "desc": "■ HP Pro Mini 260 G9 (HP)\nCPU: Intel Celeron 7305 / RAM: 4GB (DDR4 4GB * 1) / SSD: 256GB (M.2, NVMe) / VGA: Intel UHD Graphics / NIC: Gigabit, WiFi 6E, BT5.3 / KB'd: KBD & Mouse 미포함 / O/S: Windows 11 IoT LTSC",
+  "price": 650000,
+  "cost": 550000,
+  "pass": false,
+  "vendor": "",
+  "grp": "",
+  "vary": false,
+  "note": "",
+  "hist": [
+   {
+    "src": "메라톤",
+    "date": "2026-10-29",
+    "price": 650000,
+    "cost": 550000,
+    "qty": 3
+   }
+  ]
+ },
+ {
+  "id": "P8",
+  "name": "산업용 PC (엣지 PC)",
+  "sec": "hw",
+  "kind": "",
+  "cat": "디바이스",
+  "unit": "set",
+  "desc": "■ DM501TGA-U08/C (삼성전자)\nCPU: Intel Core i7-14700 / RAM: 32GB (DDR5 16GB*2) / SSD: 1TB (M.2, 교체장착) / VGA: Intel UHD 770 Graphics / NIC: Gigabit Ethernet / POWER: 500w/5TGA / KB'd: USB KBD & Mouse(Black) / O/S: Windows 11 Pro 64",
+  "price": 2600000,
+  "cost": 2100000,
+  "pass": false,
+  "vendor": "",
+  "grp": "",
+  "vary": false,
+  "note": "",
+  "hist": [
+   {
+    "src": "메라톤",
+    "date": "2026-10-29",
+    "price": 2600000,
+    "cost": 2100000,
+    "qty": 3
+   }
+  ]
+ },
+ {
+  "id": "P9",
+  "name": "MASTER PLC",
+  "sec": "hw",
+  "kind": "",
+  "cat": "PLC",
+  "unit": "set",
+  "desc": "■ Master 1\n(1) 엔지니어링 : 시운전 포함\n ▪ PLC Program\n ▪MCCB&CP\n ▪EBS32fb 5A\n ▪LCP 32FM\n ▪Master PLC Program\n ▪OPC-UA ▪CT 4~20mA 센서(설비 30대 기준)\n■ 현장공사\n(1) 엔지니어링\n ▪ 회로구성\n ▪ 연동프로그램 및 시운전\n ▪ Documents",
+  "price": 51000000,
+  "cost": 41500000,
+  "pass": false,
+  "vendor": "",
+  "grp": "",
+  "vary": true,
+  "note": "",
+  "hist": [
+   {
+    "src": "비티씨스템",
+    "date": "2026-11-06",
+    "price": 51000000,
+    "cost": 41500000,
+    "qty": 1
+   },
+   {
+    "src": "메라톤",
+    "date": "2026-10-29",
+    "price": 134952000,
+    "cost": 114952000,
+    "qty": 1
+   }
+  ]
+ },
+ {
+  "id": "P10",
+  "name": "네트워크 공사",
+  "sec": "hw",
+  "kind": "",
+  "cat": "네트워크",
+  "unit": "set",
+  "desc": "■ 명성이엔지(인천공장) 공장동 설비인터페이스구축 공사\n(1) 통신자재\n ▪ UTP CABLE CAT6 4P 노랑색(부속자재포함) : 720M\n ▪ 전선보호관 후렉시블 16mm(350m), 난연CD배관 22mm(200m)\n ▪ 전선관 부속자재 : 전선관의 15%\n ▪ 기타 잡자재 : 케이블타이 외 8종\n ▪ 튜브 작업 : CAT.6 네임작업 24EA\n ▪ 마스터 PLC : 장착 및 타공작업\n(2) 노무비\n ▪ 통신케이블공 5인, 통신내선공 2인",
+  "price": 6200000,
+  "cost": 4900000,
+  "pass": false,
+  "vendor": "",
+  "grp": "",
+  "vary": true,
+  "note": "",
+  "hist": [
+   {
+    "src": "명성ENG",
+    "date": "2026-11-06",
+    "price": 6200000,
+    "cost": 4900000,
+    "qty": 1
+   },
+   {
+    "src": "비티씨스템",
+    "date": "2026-11-06",
+    "price": 4000000,
+    "cost": 2100000,
+    "qty": 1
+   },
+   {
+    "src": "메라톤",
+    "date": "2026-10-29",
+    "price": 16500000,
+    "cost": 14200000,
+    "qty": 1
+   },
+   {
+    "src": "신광테크",
+    "date": "2026-06-29",
+    "price": 33500000,
+    "cost": 45463000,
+    "qty": 1
+   },
+   {
+    "src": "신광테크 추가계약",
+    "date": "2026-06-29",
+    "price": 15000000,
+    "cost": null,
+    "qty": 1
+   }
+  ]
+ },
+ {
+  "id": "P11",
+  "name": "교육비",
+  "sec": "etc",
+  "kind": "",
+  "cat": "기타(임치·정산·교육)",
+  "unit": "set",
+  "desc": "▪ 스마트공장 의무 교육",
+  "price": 1000000,
+  "cost": null,
+  "pass": true,
+  "vendor": "",
+  "grp": "",
+  "vary": false,
+  "note": "",
+  "hist": [
+   {
+    "src": "명성ENG",
+    "date": "2026-11-06",
+    "price": 1000000,
+    "cost": null,
+    "qty": 1
+   },
+   {
+    "src": "비티씨스템",
+    "date": "2026-11-06",
+    "price": 1000000,
+    "cost": null,
+    "qty": 1
+   },
+   {
+    "src": "메라톤",
+    "date": "2026-10-29",
+    "price": 1000000,
+    "cost": null,
+    "qty": 1
+   },
+   {
+    "src": "효광(제조AI)",
+    "date": "2026-05-08",
+    "price": 1000000,
+    "cost": null,
+    "qty": 1
+   }
+  ]
+ },
+ {
+  "id": "P12",
+  "name": "기술임치비용",
+  "sec": "etc",
+  "kind": "",
+  "cat": "기타(임치·정산·교육)",
+  "unit": "set",
+  "desc": "▪ MES 프로그램 기술임치(2년)",
+  "price": 450000,
+  "cost": null,
+  "pass": true,
+  "vendor": "",
+  "grp": "",
+  "vary": false,
+  "note": "",
+  "hist": [
+   {
+    "src": "명성ENG",
+    "date": "2026-11-06",
+    "price": 450000,
+    "cost": null,
+    "qty": 1
+   },
+   {
+    "src": "비티씨스템",
+    "date": "2026-11-06",
+    "price": 450000,
+    "cost": null,
+    "qty": 1
+   },
+   {
+    "src": "메라톤",
+    "date": "2026-10-29",
+    "price": 450000,
+    "cost": null,
+    "qty": 1
+   },
+   {
+    "src": "에코블록",
+    "date": "2026-10-29",
+    "price": 450000,
+    "cost": null,
+    "qty": 1
+   },
+   {
+    "src": "효광(제조AI)",
+    "date": "2026-05-08",
+    "price": 450000,
+    "cost": null,
+    "qty": 1
+   }
+  ]
+ },
+ {
+  "id": "P13",
+  "name": "회계법인정산수수료",
+  "sec": "etc",
+  "kind": "",
+  "cat": "기타(임치·정산·교육)",
+  "unit": "set",
+  "desc": "▪ 회계정산 수수료 (사업비 4억 미만 기준)",
+  "price": 910000,
+  "cost": null,
+  "pass": true,
+  "vendor": "",
+  "grp": "",
+  "vary": false,
+  "note": "",
+  "hist": [
+   {
+    "src": "명성ENG",
+    "date": "2026-11-06",
+    "price": 910000,
+    "cost": null,
+    "qty": 1
+   },
+   {
+    "src": "비티씨스템",
+    "date": "2026-11-06",
+    "price": 910000,
+    "cost": null,
+    "qty": 1
+   },
+   {
+    "src": "메라톤",
+    "date": "2026-10-29",
+    "price": 910000,
+    "cost": null,
+    "qty": 1
+   },
+   {
+    "src": "효광(제조AI)",
+    "date": "2026-05-08",
+    "price": 910000,
+    "cost": null,
+    "qty": 1
+   }
+  ]
+ },
+ {
+  "id": "P14",
+  "name": "PDA",
+  "sec": "hw",
+  "kind": "",
+  "cat": "디바이스",
+  "unit": "set",
+  "desc": "■ 포인트모바일 Model : PM95\n ▪ 크기 : (L x W x D) : 164.8 x 78 x 17.6 mm  ▪ 무게 : 283 g\n ▪ 배터리 : 기본 배터리: 4,950 mAh\n ▪ 디스플레이 : 6” (1080 x 2160 픽셀)  ▪  FHD+LED 백라이트\n ▪ 주간 시인성 (500 nits, typical)  ▪  멀티 터치 정전식 스크린\n ▪ Corning Gorilla Glass\n ▪ 운영체제 : Android 13 (Android 18까지 업그레이드 가능)\n ▪ CPU : Octa-core @2.4GHz  ▪ 메모리 : 6 GB/64GN (UFS)\n ▪ 무선 데이터",
+  "price": 1200000,
+  "cost": 500000,
+  "pass": false,
+  "vendor": "",
+  "grp": "",
+  "vary": false,
+  "note": "",
+  "hist": [
+   {
+    "src": "명성ENG",
+    "date": "2026-11-06",
+    "price": 1200000,
+    "cost": 500000,
+    "qty": 2
+   }
+  ]
+ },
+ {
+  "id": "P15",
+  "name": "키오스크",
+  "sec": "hw",
+  "kind": "",
+  "cat": "디바이스",
+  "unit": "set",
+  "desc": "■ 모니터 21.5\" 1920*1080  Intel UHD Graphics\n■ 하프 미니PC   모델 : 6235ANHMW\n ▪ 12th Intel®Alder-lake-N :  N100 (Quad-Core 0.7GHz)\n ▪ 250cd/m²   ▪ DDR4 8G  ▪  M.2 NVMe SSD 128G\n ▪ 저항막(압력식) 터치\n ▪ VGA*1/RS232C*2/HDMI*1 * DC 12V*1/USB*4/LAN*1\n ▪ Win11 IoT Enterprise Entry",
+  "price": 2400000,
+  "cost": 2400000,
+  "pass": false,
+  "vendor": "",
+  "grp": "",
+  "vary": false,
+  "note": "",
+  "hist": [
+   {
+    "src": "명성ENG",
+    "date": "2026-11-06",
+    "price": 2400000,
+    "cost": 2400000,
+    "qty": 2
+   },
+   {
+    "src": "신광테크",
+    "date": "2026-06-29",
+    "price": 2000000,
+    "cost": 2100000,
+    "qty": 7
+   },
+   {
+    "src": "신광테크 추가계약",
+    "date": "2026-06-29",
+    "price": 2000000,
+    "cost": null,
+    "qty": 10
+   }
+  ]
+ },
+ {
+  "id": "P16",
+  "name": "엣지PC",
+  "sec": "hw",
+  "kind": "",
+  "cat": "디바이스",
+  "unit": "set",
+  "desc": "■ OPC-UA Edge PC(설비데이터 클라우드 연계)\n ▪ CPU : intel Core i7-13700(내장 UHD 탑재)\n ▪ OS : Windows 11Pro\n ▪ 메인보드 : Asus Prime B660M-k D4 인텍앤컴퍼니\n ▪ RAM : DDR4-3200 16GB * 2\n ▪ HDD : SSD 1TB",
+  "price": 2760000,
+  "cost": 1750000,
+  "pass": false,
+  "vendor": "",
+  "grp": "",
+  "vary": false,
+  "note": "",
+  "hist": [
+   {
+    "src": "명성ENG",
+    "date": "2026-11-06",
+    "price": 2760000,
+    "cost": 1750000,
+    "qty": 1
+   },
+   {
+    "src": "비티씨스템",
+    "date": "2026-11-06",
+    "price": 2500000,
+    "cost": 2300000,
+    "qty": 1
+   }
+  ]
+ },
+ {
+  "id": "P17",
+  "name": "현황판TV 및 현황판PC",
+  "sec": "hw",
+  "kind": "",
+  "cat": "디바이스",
+  "unit": "set",
+  "desc": "■ 현황판TV\n ▪ 삼성전자 : LH65(발주시 모델명 계속변경)\n ▪ 상업용디스플레이  ▪ 65인치(164cm)  ▪ 실내용\n ▪ 디스플레이모듈  ▪ 4K UHD 기본 벽걸이 ▪ 기본스텐드 포함\n■ 현황판PC\n ▪ 프로미니 260 G9 7305\n ▪ 4GB RAM ▪ 256GB SSD  ▪ HDD 미포함  ▪ 운영체제 미포함\n ▪ 내장그래픽 ▪ DisplayPort ▪ HDMI ▪ 시리얼포트 ▪ USB-C\n ▪ LAN ▪ USB3.2 ▪ USB3.1 ▪ USB3.0 ▪ USB2.0 ▪ USB-A\n ▪ ODD미포함 ▪ 블루투스 ▪ 무선랜 ▪ Pro Mini ▪ 미니타워\n ▪ 현장 설치 + 랙마운트",
+  "price": 2880000,
+  "cost": 2300000,
+  "pass": false,
+  "vendor": "",
+  "grp": "",
+  "vary": false,
+  "note": "",
+  "hist": [
+   {
+    "src": "명성ENG",
+    "date": "2026-11-06",
+    "price": 2880000,
+    "cost": 2300000,
+    "qty": 2
+   },
+   {
+    "src": "신광테크",
+    "date": "2026-06-29",
+    "price": 2300000,
+    "cost": 2200000,
+    "qty": 1
+   }
+  ]
+ },
+ {
+  "id": "P18",
+  "name": "디지매틱 캘리퍼스",
+  "sec": "hw",
+  "kind": "",
+  "cat": "디바이스",
+  "unit": "set",
+  "desc": "■ 디지매틱 캘리퍼스\n ▪ 캘리퍼스\n ▪ U-WAVE 송신기\n ▪ U-WAVE 수신기\n ▪ 연결 유닛",
+  "price": 925500,
+  "cost": 925500,
+  "pass": false,
+  "vendor": "",
+  "grp": "",
+  "vary": false,
+  "note": "",
+  "hist": [
+   {
+    "src": "명성ENG",
+    "date": "2026-11-06",
+    "price": 925500,
+    "cost": 925500,
+    "qty": 2
+   }
+  ]
+ },
+ {
+  "id": "P19",
+  "name": "설비 I/F (기공설비 10대)",
+  "sec": "hw",
+  "kind": "",
+  "cat": "PLC",
+  "unit": "set",
+  "desc": "■ 기공설비 10대 설비 I/F\n(1) 자재\n ▪ PANEL 600*800*250 1LOT\n ▪ MCCB & CP : EBS32fb 5A 1EA, LCP 32FM 1EA\n ▪ PLC : XBM-DN32H, XTB-40H & CABLE, XBI-C41B, Ethernet module\n ▪ POWER SUPPLY & HUB 5A 1EA\n ▪ Fanuc S/W : MT-LINK, CNC Set-Up\n ▪ OPC Server : DXP OPC Server\n(2) 인건비/기타\n ▪ 제작 인건비  ▪ 설치 인건비  ▪ PROGRAM  ▪ 기타 경비",
+  "price": 28450000,
+  "cost": 22000000,
+  "pass": false,
+  "vendor": "",
+  "grp": "",
+  "vary": true,
+  "note": "",
+  "hist": [
+   {
+    "src": "명성ENG",
+    "date": "2026-11-06",
+    "price": 28450000,
+    "cost": 22000000,
+    "qty": 1
+   }
+  ]
+ },
+ {
+  "id": "P20",
+  "name": "프린터",
+  "sec": "hw",
+  "kind": "",
+  "cat": "디바이스",
+  "unit": "set",
+  "desc": "SL-M2843DW\n흑백 / 정부24 가능 / 흑백 속도: 27ppm / 첫 장 인쇄: 8.5초 / 인쇄 해상도: 4800 x 600dpi / 자동양면인쇄 / A4 출력 / 연결방식: USB , 유선랜(RJ-45) , WiFi / Mac 지원 / 에코 프린팅 / RAM: 256MB / 월 최대 인쇄량: 12000매 / 가로: 368mm / 세로: 334.5mm / 높이: 202mm",
+  "price": 310000,
+  "cost": 260000,
+  "pass": false,
+  "vendor": "",
+  "grp": "",
+  "vary": false,
+  "note": "",
+  "hist": [
+   {
+    "src": "비티씨스템",
+    "date": "2026-11-06",
+    "price": 310000,
+    "cost": 260000,
+    "qty": 1
+   }
+  ]
+ },
+ {
+  "id": "P21",
+  "name": "키오스크 PC",
+  "sec": "hw",
+  "kind": "",
+  "cat": "디바이스",
+  "unit": "대",
+  "desc": "■ 1) 키오스크 PC\n ▪모델명: CPP-170T\n▪ 17\" Touch Panel PC( IP65 전면 방수)\n▪CPU: Intel Core i5-7200U 3.1GHz\n▪ RAM: 8GB\n▪ mSATA 256GB\n▪ 1000cd/m² 고휘도",
+  "price": 3000000,
+  "cost": null,
+  "pass": false,
+  "vendor": "",
+  "grp": "원자재/골재 입고 입력 장치(키오스크)",
+  "vary": false,
+  "note": "",
+  "hist": [
+   {
+    "src": "에코블록",
+    "date": "2026-10-29",
+    "price": 3000000,
+    "cost": null,
+    "qty": 2
+   }
+  ]
+ },
+ {
+  "id": "P22",
+  "name": "키오스크 PC 케이스",
+  "sec": "hw",
+  "kind": "",
+  "cat": "디바이스",
+  "unit": "EA",
+  "desc": "■ 2) 키오스크 PC 케이스\n(주문제작 케이스, 송장 보관함, 인터폰 케이스)",
+  "price": 1400000,
+  "cost": null,
+  "pass": false,
+  "vendor": "",
+  "grp": "원자재/골재 입고 입력 장치(키오스크)",
+  "vary": false,
+  "note": "",
+  "hist": [
+   {
+    "src": "에코블록",
+    "date": "2026-10-29",
+    "price": 1400000,
+    "cost": null,
+    "qty": 2
+   }
+  ]
+ },
+ {
+  "id": "P23",
+  "name": "키오스크 PC 케이스 폴대",
+  "sec": "hw",
+  "kind": "",
+  "cat": "디바이스",
+  "unit": "EA",
+  "desc": "■3) 키오스크 PC 케이스 폴대\n(150⌀*1910, 아연 지지대)",
+  "price": 900000,
+  "cost": null,
+  "pass": false,
+  "vendor": "",
+  "grp": "원자재/골재 입고 입력 장치(키오스크)",
+  "vary": false,
+  "note": "",
+  "hist": [
+   {
+    "src": "에코블록",
+    "date": "2026-10-29",
+    "price": 900000,
+    "cost": null,
+    "qty": 2
+   }
+  ]
+ },
+ {
+  "id": "P24",
+  "name": "키오스크 PC 안전 가이드",
+  "sec": "hw",
+  "kind": "",
+  "cat": "디바이스",
+  "unit": "EA",
+  "desc": "■ 4) 키오스크 PC 안전 가이드\n(150⌀*3703 *1850*3703, 아연 안전 가이드)",
+  "price": 1600000,
+  "cost": null,
+  "pass": false,
+  "vendor": "",
+  "grp": "원자재/골재 입고 입력 장치(키오스크)",
+  "vary": false,
+  "note": "",
+  "hist": [
+   {
+    "src": "에코블록",
+    "date": "2026-10-29",
+    "price": 1600000,
+    "cost": null,
+    "qty": 2
+   }
+  ]
+ },
+ {
+  "id": "P25",
+  "name": "키오스크 음성 안내 장치",
+  "sec": "hw",
+  "kind": "",
+  "cat": "디바이스",
+  "unit": "EA",
+  "desc": "■5) 키오스크 음성 안내 장치",
+  "price": 400000,
+  "cost": null,
+  "pass": false,
+  "vendor": "",
+  "grp": "원자재/골재 입고 입력 장치(키오스크)",
+  "vary": false,
+  "note": "",
+  "hist": [
+   {
+    "src": "에코블록",
+    "date": "2026-10-29",
+    "price": 400000,
+    "cost": null,
+    "qty": 2
+   }
+  ]
+ },
+ {
+  "id": "P26",
+  "name": "키오스크 PC N/W 구축비",
+  "sec": "hw",
+  "kind": "",
+  "cat": "네트워크",
+  "unit": "식",
+  "desc": "■ 6) 키오스크 PC N/W 구축비\n(전기 배선 작업, 키오스크 설치 작업, 노무비 및 기타 잡자재, 제품 이송비 포함)",
+  "price": 8000000,
+  "cost": null,
+  "pass": false,
+  "vendor": "",
+  "grp": "원자재/골재 입고 입력 장치(키오스크)",
+  "vary": true,
+  "note": "",
+  "hist": [
+   {
+    "src": "에코블록",
+    "date": "2026-10-29",
+    "price": 8000000,
+    "cost": null,
+    "qty": 1
+   }
+  ]
+ },
+ {
+  "id": "P27",
+  "name": "키오스크 입·출차 프로그램",
+  "sec": "hw",
+  "kind": "",
+  "cat": "디바이스",
+  "unit": "식",
+  "desc": "■ 7) 키오스크 입·출차 프로그램\n(원자재 입고 입력 및 전송, 차량 번호판/적재함 사진 전송, 음성 안내 기능)",
+  "price": 3000000,
+  "cost": null,
+  "pass": false,
+  "vendor": "",
+  "grp": "원자재/골재 입고 입력 장치(키오스크)",
+  "vary": true,
+  "note": "",
+  "hist": [
+   {
+    "src": "에코블록",
+    "date": "2026-10-29",
+    "price": 3000000,
+    "cost": null,
+    "qty": 2
+   }
+  ]
+ },
+ {
+  "id": "P28",
+  "name": "RF 리더기",
+  "sec": "hw",
+  "kind": "",
+  "cat": "디바이스",
+  "unit": "EA",
+  "desc": "■1) RF 리더기",
+  "price": 2000000,
+  "cost": null,
+  "pass": false,
+  "vendor": "",
+  "grp": "키오스크 RF 인식",
+  "vary": false,
+  "note": "",
+  "hist": [
+   {
+    "src": "에코블록",
+    "date": "2026-10-29",
+    "price": 2000000,
+    "cost": null,
+    "qty": 2
+   }
+  ]
+ },
+ {
+  "id": "P29",
+  "name": "RF 카드",
+  "sec": "hw",
+  "kind": "",
+  "cat": "디바이스",
+  "unit": "EA",
+  "desc": "■2) RF 카드",
+  "price": 4000,
+  "cost": null,
+  "pass": false,
+  "vendor": "",
+  "grp": "키오스크 RF 인식",
+  "vary": false,
+  "note": "",
+  "hist": [
+   {
+    "src": "에코블록",
+    "date": "2026-10-29",
+    "price": 4000,
+    "cost": null,
+    "qty": 100
+   }
+  ]
+ },
+ {
+  "id": "P30",
+  "name": "RF 카드 홀더",
+  "sec": "hw",
+  "kind": "",
+  "cat": "디바이스",
+  "unit": "EA",
+  "desc": "■ 3) RF 카드 홀더",
+  "price": 20000,
+  "cost": null,
+  "pass": false,
+  "vendor": "",
+  "grp": "키오스크 RF 인식",
+  "vary": false,
+  "note": "",
+  "hist": [
+   {
+    "src": "에코블록",
+    "date": "2026-10-29",
+    "price": 20000,
+    "cost": null,
+    "qty": 100
+   }
+  ]
+ },
+ {
+  "id": "P31",
+  "name": "인쇄비 용역",
+  "sec": "hw",
+  "kind": "",
+  "cat": "디바이스",
+  "unit": "식",
+  "desc": "■ 4) 인쇄비 용역",
+  "price": 300000,
+  "cost": null,
+  "pass": false,
+  "vendor": "",
+  "grp": "키오스크 RF 인식",
+  "vary": true,
+  "note": "",
+  "hist": [
+   {
+    "src": "에코블록",
+    "date": "2026-10-29",
+    "price": 300000,
+    "cost": null,
+    "qty": 1
+   }
+  ]
+ },
+ {
+  "id": "P32",
+  "name": "IP 카메라",
+  "sec": "hw",
+  "kind": "",
+  "cat": "디바이스",
+  "unit": "대",
+  "desc": "■ 1) IP 카메라\n(모델명: QNO-C6083R, 차량 번호판 촬영용 2대, 차량 적재함 촬영용 1대)",
+  "price": 1650000,
+  "cost": null,
+  "pass": false,
+  "vendor": "",
+  "grp": "CCTV 설치 작업 (원자재/골재 입고 확인용)",
+  "vary": false,
+  "note": "",
+  "hist": [
+   {
+    "src": "에코블록",
+    "date": "2026-10-29",
+    "price": 1650000,
+    "cost": null,
+    "qty": 3
+   }
+  ]
+ },
+ {
+  "id": "P33",
+  "name": "차량 번호판 촬영용 IP 카메라 폴대(Pole)",
+  "sec": "hw",
+  "kind": "",
+  "cat": "디바이스",
+  "unit": "EA",
+  "desc": "■2) 차량 번호판 촬영용 IP 카메라 폴대(Pole)\n(I형 GAL 1.5m, 4\", 1.5T)",
+  "price": 500000,
+  "cost": null,
+  "pass": false,
+  "vendor": "",
+  "grp": "CCTV 설치 작업 (원자재/골재 입고 확인용)",
+  "vary": false,
+  "note": "",
+  "hist": [
+   {
+    "src": "에코블록",
+    "date": "2026-10-29",
+    "price": 500000,
+    "cost": null,
+    "qty": 2
+   }
+  ]
+ },
+ {
+  "id": "P34",
+  "name": "차량 적재함 촬영용 IP 카메라 폴대(Pole)",
+  "sec": "hw",
+  "kind": "",
+  "cat": "디바이스",
+  "unit": "EA",
+  "desc": "■4) 차량 적재함 촬영용 IP 카메라 폴대(Pole)\n(I형 GAL 5m, 4\", 1.5T)",
+  "price": 900000,
+  "cost": null,
+  "pass": false,
+  "vendor": "",
+  "grp": "CCTV 설치 작업 (원자재/골재 입고 확인용)",
+  "vary": false,
+  "note": "",
+  "hist": [
+   {
+    "src": "에코블록",
+    "date": "2026-10-29",
+    "price": 900000,
+    "cost": null,
+    "qty": 1
+   }
+  ]
+ },
+ {
+  "id": "P35",
+  "name": "IP 카메라 N/W 구축비",
+  "sec": "hw",
+  "kind": "",
+  "cat": "네트워크",
+  "unit": "식",
+  "desc": "■5) IP 카메라 N/W 구축비\n(노무비 및 기타자재, 장비 사용료 포함)",
+  "price": 6000000,
+  "cost": null,
+  "pass": false,
+  "vendor": "",
+  "grp": "CCTV 설치 작업 (원자재/골재 입고 확인용)",
+  "vary": true,
+  "note": "",
+  "hist": [
+   {
+    "src": "에코블록",
+    "date": "2026-10-29",
+    "price": 6000000,
+    "cost": null,
+    "qty": 1
+   }
+  ]
+ },
+ {
+  "id": "P36",
+  "name": "광 케이블",
+  "sec": "hw",
+  "kind": "",
+  "cat": "네트워크",
+  "unit": "m",
+  "desc": "■ 1) 광 케이블\n(Single Mode 4Core)",
+  "price": 6000,
+  "cost": null,
+  "pass": false,
+  "vendor": "",
+  "grp": "광케이블 및 네트워크 작업",
+  "vary": false,
+  "note": "",
+  "hist": [
+   {
+    "src": "에코블록",
+    "date": "2026-10-29",
+    "price": 6000,
+    "cost": null,
+    "qty": 400
+   }
+  ]
+ },
+ {
+  "id": "P37",
+  "name": "광 컨버터",
+  "sec": "hw",
+  "kind": "",
+  "cat": "네트워크",
+  "unit": "EA",
+  "desc": "■2) 광 컨버터\n(10/100/1000m 1Core SC Type)",
+  "price": 150000,
+  "cost": null,
+  "pass": false,
+  "vendor": "",
+  "grp": "광케이블 및 네트워크 작업",
+  "vary": false,
+  "note": "",
+  "hist": [
+   {
+    "src": "에코블록",
+    "date": "2026-10-29",
+    "price": 150000,
+    "cost": null,
+    "qty": 4
+   }
+  ]
+ },
+ {
+  "id": "P38",
+  "name": "S/W Hub",
+  "sec": "hw",
+  "kind": "",
+  "cat": "네트워크",
+  "unit": "EA",
+  "desc": "■3) S/W Hub\n(1Gbps 8 Port Hub)",
+  "price": 100000,
+  "cost": null,
+  "pass": false,
+  "vendor": "",
+  "grp": "광케이블 및 네트워크 작업",
+  "vary": false,
+  "note": "",
+  "hist": [
+   {
+    "src": "에코블록",
+    "date": "2026-10-29",
+    "price": 100000,
+    "cost": null,
+    "qty": 2
+   }
+  ]
+ },
+ {
+  "id": "P39",
+  "name": "광 케이블 N/W 구축비",
+  "sec": "hw",
+  "kind": "",
+  "cat": "네트워크",
+  "unit": "식",
+  "desc": "■ 4) 광 케이블 N/W 구축비\n(노무비 및 기타 자재비 포함)",
+  "price": 6500000,
+  "cost": null,
+  "pass": false,
+  "vendor": "",
+  "grp": "광케이블 및 네트워크 작업",
+  "vary": true,
+  "note": "",
+  "hist": [
+   {
+    "src": "에코블록",
+    "date": "2026-10-29",
+    "price": 6500000,
+    "cost": null,
+    "qty": 1
+   }
+  ]
+ },
+ {
+  "id": "P40",
+  "name": "인터폰",
+  "sec": "hw",
+  "kind": "",
+  "cat": "디바이스",
+  "unit": "대",
+  "desc": "■1) 인터폰\n (모델명: KOCOM IP-201P, 입·출차 키오스크 2대, 사무실 1대 설치)",
+  "price": 50000,
+  "cost": null,
+  "pass": false,
+  "vendor": "",
+  "grp": "인터폰 설치 작업",
+  "vary": false,
+  "note": "",
+  "hist": [
+   {
+    "src": "에코블록",
+    "date": "2026-10-29",
+    "price": 50000,
+    "cost": null,
+    "qty": 3
+   }
+  ]
+ },
+ {
+  "id": "P41",
+  "name": "인터폰UTP 통신 케이블 (S/M 4C)",
+  "sec": "hw",
+  "kind": "",
+  "cat": "네트워크",
+  "unit": "m",
+  "desc": "■2) 인터폰UTP 통신 케이블 (S/M 4C)",
+  "price": 5000,
+  "cost": null,
+  "pass": false,
+  "vendor": "",
+  "grp": "인터폰 설치 작업",
+  "vary": false,
+  "note": "",
+  "hist": [
+   {
+    "src": "에코블록",
+    "date": "2026-10-29",
+    "price": 5000,
+    "cost": null,
+    "qty": 100
+   }
+  ]
+ },
+ {
+  "id": "P42",
+  "name": "인터폰 N/W 구축비",
+  "sec": "hw",
+  "kind": "",
+  "cat": "네트워크",
+  "unit": "식",
+  "desc": "■3) 인터폰 N/W 구축비\n(인터폰 설치 및 통신 케이블 포설 작업, 노무비 및 기타 자재비 포함)",
+  "price": 700000,
+  "cost": null,
+  "pass": false,
+  "vendor": "",
+  "grp": "인터폰 설치 작업",
+  "vary": true,
+  "note": "",
+  "hist": [
+   {
+    "src": "에코블록",
+    "date": "2026-10-29",
+    "price": 700000,
+    "cost": null,
+    "qty": 1
+   }
+  ]
+ },
+ {
+  "id": "P43",
+  "name": "1D Radar Sensor",
+  "sec": "hw",
+  "kind": "",
+  "cat": "디바이스",
+  "unit": "대",
+  "desc": "■1) 1D Radar Sensor\n (모델명: MHC-1D, 시멘트 사일로 2기)",
+  "price": 4800000,
+  "cost": null,
+  "pass": false,
+  "vendor": "",
+  "grp": "원자재 레벨측정 시스템",
+  "vary": false,
+  "note": "",
+  "hist": [
+   {
+    "src": "에코블록",
+    "date": "2026-10-29",
+    "price": 4800000,
+    "cost": null,
+    "qty": 2
+   }
+  ]
+ },
+ {
+  "id": "P44",
+  "name": "2D Radar Sensor",
+  "sec": "hw",
+  "kind": "",
+  "cat": "디바이스",
+  "unit": "대",
+  "desc": "■2) 2D Radar Sensor\n(모델명: MHC-2D, 시멘트 사일로 300톤 1기, 400톤 1기, 500톤 2기)",
+  "price": 6800000,
+  "cost": null,
+  "pass": false,
+  "vendor": "",
+  "grp": "원자재 레벨측정 시스템",
+  "vary": false,
+  "note": "",
+  "hist": [
+   {
+    "src": "에코블록",
+    "date": "2026-10-29",
+    "price": 6800000,
+    "cost": null,
+    "qty": 0
+   }
+  ]
+ },
+ {
+  "id": "P45",
+  "name": "재고 표시 Indicator",
+  "sec": "hw",
+  "kind": "",
+  "cat": "디바이스",
+  "unit": "대",
+  "desc": "■2) 재고 표시 Indicator\n (모델명: MHC-100B, 7 Segment Digital Indicator)",
+  "price": 500000,
+  "cost": null,
+  "pass": false,
+  "vendor": "",
+  "grp": "원자재 레벨측정 시스템",
+  "vary": false,
+  "note": "",
+  "hist": [
+   {
+    "src": "에코블록",
+    "date": "2026-10-29",
+    "price": 500000,
+    "cost": null,
+    "qty": 2
+   }
+  ]
+ },
+ {
+  "id": "P46",
+  "name": "Joint Flange",
+  "sec": "hw",
+  "kind": "",
+  "cat": "디바이스",
+  "unit": "식",
+  "desc": "■3) Joint Flange\n(150A/250A Welding Flange, 시멘트 사일로 2기)",
+  "price": 200000,
+  "cost": null,
+  "pass": false,
+  "vendor": "",
+  "grp": "원자재 레벨측정 시스템",
+  "vary": false,
+  "note": "",
+  "hist": [
+   {
+    "src": "에코블록",
+    "date": "2026-10-29",
+    "price": 200000,
+    "cost": null,
+    "qty": 2
+   }
+  ]
+ },
+ {
+  "id": "P47",
+  "name": "이더넷 통신 모듈",
+  "sec": "hw",
+  "kind": "",
+  "cat": "디바이스",
+  "unit": "식",
+  "desc": "■4) 이더넷 통신 모듈\n (모델명: MH-Ethernet)",
+  "price": 1500000,
+  "cost": null,
+  "pass": false,
+  "vendor": "",
+  "grp": "원자재 레벨측정 시스템",
+  "vary": false,
+  "note": "",
+  "hist": [
+   {
+    "src": "에코블록",
+    "date": "2026-10-29",
+    "price": 1500000,
+    "cost": null,
+    "qty": 1
+   }
+  ]
+ },
+ {
+  "id": "P48",
+  "name": "전원공급 모듈",
+  "sec": "hw",
+  "kind": "",
+  "cat": "디바이스",
+  "unit": "식",
+  "desc": "■6) 전원공급 모듈\n (DC 24V Power Supply, 차단기, Hi-Box 포함)",
+  "price": 400000,
+  "cost": null,
+  "pass": false,
+  "vendor": "",
+  "grp": "원자재 레벨측정 시스템",
+  "vary": false,
+  "note": "",
+  "hist": [
+   {
+    "src": "에코블록",
+    "date": "2026-10-29",
+    "price": 400000,
+    "cost": null,
+    "qty": 1
+   }
+  ]
+ },
+ {
+  "id": "P49",
+  "name": "미들웨어 PC",
+  "sec": "hw",
+  "kind": "",
+  "cat": "디바이스",
+  "unit": "식",
+  "desc": "■7) 미들웨어 PC\n(전용 PC 1대, 전용 24인치 모니터 1대)",
+  "price": 1300000,
+  "cost": null,
+  "pass": false,
+  "vendor": "",
+  "grp": "원자재 레벨측정 시스템",
+  "vary": false,
+  "note": "",
+  "hist": [
+   {
+    "src": "에코블록",
+    "date": "2026-10-29",
+    "price": 1300000,
+    "cost": null,
+    "qty": 1
+   }
+  ]
+ },
+ {
+  "id": "P50",
+  "name": "Radar Sensor N/W 부자재비",
+  "sec": "hw",
+  "kind": "",
+  "cat": "네트워크",
+  "unit": "식",
+  "desc": "■8) Radar Sensor N/W 부자재비\n (CVV-SB 4P 1SQ, VCTF 2P 1SQ, 기타 잡자재 포함)",
+  "price": 400000,
+  "cost": null,
+  "pass": false,
+  "vendor": "",
+  "grp": "원자재 레벨측정 시스템",
+  "vary": false,
+  "note": "",
+  "hist": [
+   {
+    "src": "에코블록",
+    "date": "2026-10-29",
+    "price": 400000,
+    "cost": null,
+    "qty": 1
+   }
+  ]
+ },
+ {
+  "id": "P51",
+  "name": "Radar Sensor N/W 구축비",
+  "sec": "hw",
+  "kind": "",
+  "cat": "네트워크",
+  "unit": "식",
+  "desc": "■9) Radar Sensor N/W 구축비\n (전원 및 통신 케이블 포설, 용접 및 커팅, 시운전 및 노무비 포함)",
+  "price": 1800000,
+  "cost": null,
+  "pass": false,
+  "vendor": "",
+  "grp": "원자재 레벨측정 시스템",
+  "vary": true,
+  "note": "",
+  "hist": [
+   {
+    "src": "에코블록",
+    "date": "2026-10-29",
+    "price": 1800000,
+    "cost": null,
+    "qty": 1
+   }
+  ]
+ },
+ {
+  "id": "P52",
+  "name": "재고 조회 모니터링 프로그램",
+  "sec": "hw",
+  "kind": "",
+  "cat": "디바이스",
+  "unit": "식",
+  "desc": "■10) 재고 조회 모니터링 프로그램\n (Radar Sensor UI 프로그램, 모바일 App 포함)",
+  "price": 2000000,
+  "cost": null,
+  "pass": false,
+  "vendor": "",
+  "grp": "원자재 레벨측정 시스템",
+  "vary": true,
+  "note": "",
+  "hist": [
+   {
+    "src": "에코블록",
+    "date": "2026-10-29",
+    "price": 2000000,
+    "cost": null,
+    "qty": 1
+   }
+  ]
+ },
+ {
+  "id": "P53",
+  "name": "BP 생산 제어시스템",
+  "sec": "hw",
+  "kind": "",
+  "cat": "디바이스",
+  "unit": "식",
+  "desc": "■1) BP 생산 제어시스템\n▪ 모델명: MH-3500Plus_BP\n▪ 화면 표시방법: 24인치 Wide LCD * 2대\n▪ 원격 제어방식: LAN\n▪ 오피스 데스크형(크기: 1600W * 750D)\n▪ Window 10\n▪ 모터 기동 & 감시반 & 디지털 전류방식\n▪ 24인치 LCD에 의한 공정관리(HMI 탑재)",
+  "price": 20000000,
+  "cost": null,
+  "pass": false,
+  "vendor": "",
+  "grp": "BP(레미콘) 생산 제어시스템 교체",
+  "vary": false,
+  "note": "",
+  "hist": [
+   {
+    "src": "에코블록",
+    "date": "2026-10-29",
+    "price": 20000000,
+    "cost": null,
+    "qty": 0
+   }
+  ]
+ },
+ {
+  "id": "P54",
+  "name": "BP 생산 제어시스템 N/W 구축비",
+  "sec": "hw",
+  "kind": "",
+  "cat": "네트워크",
+  "unit": "식",
+  "desc": "■2) BP 생산 제어시스템 N/W 구축비\n▪ 기존 제품 철거 작업\n▪ 신규 제품 설치 작업\n▪ 라인 결선 및 단동 테스트\n▪ 시운전 및 사용자 교육",
+  "price": 2000000,
+  "cost": null,
+  "pass": false,
+  "vendor": "",
+  "grp": "BP(레미콘) 생산 제어시스템 교체",
+  "vary": true,
+  "note": "",
+  "hist": [
+   {
+    "src": "에코블록",
+    "date": "2026-10-29",
+    "price": 2000000,
+    "cost": null,
+    "qty": 0
+   }
+  ]
+ },
+ {
+  "id": "P55",
+  "name": "로드셀 감시장치",
+  "sec": "hw",
+  "kind": "",
+  "cat": "디바이스",
+  "unit": "대",
+  "desc": "■1) 로드셀 감시장치\n (모델명: MH-100LDM)",
+  "price": 900000,
+  "cost": null,
+  "pass": false,
+  "vendor": "",
+  "grp": "로드셀 모니터링 시스템",
+  "vary": false,
+  "note": "",
+  "hist": [
+   {
+    "src": "에코블록",
+    "date": "2026-10-29",
+    "price": 900000,
+    "cost": null,
+    "qty": 10
+   }
+  ]
+ },
+ {
+  "id": "P56",
+  "name": "로드셀 감시장치 N/W 부자재비",
+  "sec": "hw",
+  "kind": "",
+  "cat": "네트워크",
+  "unit": "식",
+  "desc": "■2) 로드셀 감시장치 N/W 부자재비",
+  "price": 1000000,
+  "cost": null,
+  "pass": false,
+  "vendor": "",
+  "grp": "로드셀 모니터링 시스템",
+  "vary": false,
+  "note": "",
+  "hist": [
+   {
+    "src": "에코블록",
+    "date": "2026-10-29",
+    "price": 1000000,
+    "cost": null,
+    "qty": 1
+   }
+  ]
+ },
+ {
+  "id": "P57",
+  "name": "로드셀 감시장치 N/W 구축비",
+  "sec": "hw",
+  "kind": "",
+  "cat": "네트워크",
+  "unit": "식",
+  "desc": "■ 3) 로드셀 감시장치 N/W 구축비\n(로드셀 감시장치 설치 작업, 시운전 및 노무비 포함)",
+  "price": 5000000,
+  "cost": null,
+  "pass": false,
+  "vendor": "",
+  "grp": "로드셀 모니터링 시스템",
+  "vary": true,
+  "note": "",
+  "hist": [
+   {
+    "src": "에코블록",
+    "date": "2026-10-29",
+    "price": 5000000,
+    "cost": null,
+    "qty": 1
+   }
+  ]
+ },
+ {
+  "id": "P58",
+  "name": "로드셀 감시장치 모니터링 프로그램(1, 2호기)",
+  "sec": "hw",
+  "kind": "",
+  "cat": "디바이스",
+  "unit": "식",
+  "desc": "■4) 로드셀 감시장치 모니터링 프로그램(1, 2호기)\n (로드셀별 mV 확인 및 생산장치 연동 모니터링)",
+  "price": 2000000,
+  "cost": null,
+  "pass": false,
+  "vendor": "",
+  "grp": "로드셀 모니터링 시스템",
+  "vary": true,
+  "note": "",
+  "hist": [
+   {
+    "src": "에코블록",
+    "date": "2026-10-29",
+    "price": 2000000,
+    "cost": null,
+    "qty": 2
+   }
+  ]
+ },
+ {
+  "id": "P59",
+  "name": "지능형 EOCR",
+  "sec": "hw",
+  "kind": "",
+  "cat": "디바이스",
+  "unit": "EA",
+  "desc": "■2)지능형 EOCR\n▪EOCR – 주요 모터  모니터링",
+  "price": 750000,
+  "cost": null,
+  "pass": false,
+  "vendor": "",
+  "grp": "지능형 MCC 시스템",
+  "vary": false,
+  "note": "",
+  "hist": [
+   {
+    "src": "에코블록",
+    "date": "2026-10-29",
+    "price": 750000,
+    "cost": null,
+    "qty": 10
+   }
+  ]
+ },
+ {
+  "id": "P60",
+  "name": "클립형 CT(100:100mA)",
+  "sec": "hw",
+  "kind": "",
+  "cat": "디바이스",
+  "unit": "EA",
+  "desc": "▪클립형 CT(100:100mA)",
+  "price": 50000,
+  "cost": null,
+  "pass": false,
+  "vendor": "",
+  "grp": "지능형 MCC 시스템",
+  "vary": false,
+  "note": "",
+  "hist": [
+   {
+    "src": "에코블록",
+    "date": "2026-10-29",
+    "price": 50000,
+    "cost": null,
+    "qty": 0
+   }
+  ]
+ },
+ {
+  "id": "P61",
+  "name": "클립형 CT(300:5 A)",
+  "sec": "hw",
+  "kind": "",
+  "cat": "디바이스",
+  "unit": "EA",
+  "desc": "▪클립형 CT(300:5 A)",
+  "price": 60000,
+  "cost": null,
+  "pass": false,
+  "vendor": "",
+  "grp": "지능형 MCC 시스템",
+  "vary": false,
+  "note": "",
+  "hist": [
+   {
+    "src": "에코블록",
+    "date": "2026-10-29",
+    "price": 60000,
+    "cost": null,
+    "qty": 0
+   }
+  ]
+ },
+ {
+  "id": "P62",
+  "name": "지능형 MCC 시스템 N/W 구축비",
+  "sec": "hw",
+  "kind": "",
+  "cat": "네트워크",
+  "unit": "식",
+  "desc": "■3) 지능형 MCC 시스템 N/W 구축비\n▪지능형 EOCR 설치 작업, 시운전 및 노무비 포함",
+  "price": 1500000,
+  "cost": null,
+  "pass": false,
+  "vendor": "",
+  "grp": "지능형 MCC 시스템",
+  "vary": true,
+  "note": "",
+  "hist": [
+   {
+    "src": "에코블록",
+    "date": "2026-10-29",
+    "price": 1500000,
+    "cost": null,
+    "qty": 1
+   }
+  ]
+ },
+ {
+  "id": "P63",
+  "name": "지능형 MCC 프로그램 작업비",
+  "sec": "hw",
+  "kind": "",
+  "cat": "디바이스",
+  "unit": "식",
+  "desc": "■4) 지능형 MCC 프로그램 작업비\n▪주요 모터 최고 / 최저 암페어 모니터링\n▪주요 모터 단락 및 접촉이상 체크 기능\n▪주요 모터 지락 체크 기능",
+  "price": 10000000,
+  "cost": null,
+  "pass": false,
+  "vendor": "",
+  "grp": "지능형 MCC 시스템",
+  "vary": true,
+  "note": "",
+  "hist": [
+   {
+    "src": "에코블록",
+    "date": "2026-10-29",
+    "price": 10000000,
+    "cost": null,
+    "qty": 1
+   }
+  ]
+ },
+ {
+  "id": "P64",
+  "name": "믹서 슬럼프 측정 센서",
+  "sec": "hw",
+  "kind": "",
+  "cat": "디바이스",
+  "unit": "식",
+  "desc": "■ 1) 믹서 슬럼프 측정 센서",
+  "price": 13000000,
+  "cost": null,
+  "pass": false,
+  "vendor": "",
+  "grp": "품질관리시스템",
+  "vary": false,
+  "note": "",
+  "hist": [
+   {
+    "src": "에코블록",
+    "date": "2026-10-29",
+    "price": 13000000,
+    "cost": null,
+    "qty": 2
+   }
+  ]
+ },
+ {
+  "id": "P65",
+  "name": "잔골재 표면수 측정 센서",
+  "sec": "hw",
+  "kind": "",
+  "cat": "디바이스",
+  "unit": "EA",
+  "desc": "■ 2) 잔골재 표면수 측정 센서",
+  "price": 6800000,
+  "cost": null,
+  "pass": false,
+  "vendor": "",
+  "grp": "품질관리시스템",
+  "vary": false,
+  "note": "",
+  "hist": [
+   {
+    "src": "에코블록",
+    "date": "2026-10-29",
+    "price": 6800000,
+    "cost": null,
+    "qty": 4
+   }
+  ]
+ },
+ {
+  "id": "P66",
+  "name": "센서 브라켓",
+  "sec": "hw",
+  "kind": "",
+  "cat": "디바이스",
+  "unit": "EA",
+  "desc": "■ 3) 센서 브라켓",
+  "price": 700000,
+  "cost": null,
+  "pass": false,
+  "vendor": "",
+  "grp": "품질관리시스템",
+  "vary": false,
+  "note": "",
+  "hist": [
+   {
+    "src": "에코블록",
+    "date": "2026-10-29",
+    "price": 700000,
+    "cost": null,
+    "qty": 4
+   }
+  ]
+ },
+ {
+  "id": "P67",
+  "name": "이더넷통신모듈",
+  "sec": "hw",
+  "kind": "",
+  "cat": "디바이스",
+  "unit": "식",
+  "desc": "■ 4) 이더넷통신모듈",
+  "price": 6000000,
+  "cost": null,
+  "pass": false,
+  "vendor": "",
+  "grp": "품질관리시스템",
+  "vary": false,
+  "note": "",
+  "hist": [
+   {
+    "src": "에코블록",
+    "date": "2026-10-29",
+    "price": 6000000,
+    "cost": null,
+    "qty": 2
+   }
+  ]
+ },
+ {
+  "id": "P68",
+  "name": "모니터링 PC(시험실 )",
+  "sec": "hw",
+  "kind": "",
+  "cat": "디바이스",
+  "unit": "식",
+  "desc": "■ 5) 모니터링 PC(시험실 )",
+  "price": 1500000,
+  "cost": null,
+  "pass": false,
+  "vendor": "",
+  "grp": "품질관리시스템",
+  "vary": false,
+  "note": "",
+  "hist": [
+   {
+    "src": "에코블록",
+    "date": "2026-10-29",
+    "price": 1500000,
+    "cost": null,
+    "qty": 1
+   }
+  ]
+ },
+ {
+  "id": "P69",
+  "name": "부자재(통신 케이블, SMPS, Hi-Box, 볼트류 등)",
+  "sec": "hw",
+  "kind": "",
+  "cat": "네트워크",
+  "unit": "식",
+  "desc": "■ 6) 부자재(통신 케이블, SMPS, Hi-Box, 볼트류 등)",
+  "price": 2000000,
+  "cost": null,
+  "pass": false,
+  "vendor": "",
+  "grp": "품질관리시스템",
+  "vary": false,
+  "note": "",
+  "hist": [
+   {
+    "src": "에코블록",
+    "date": "2026-10-29",
+    "price": 2000000,
+    "cost": null,
+    "qty": 1
+   }
+  ]
+ },
+ {
+  "id": "P70",
+  "name": "슬럼프 및 표면수 측정 센서 N/W 구축비",
+  "sec": "hw",
+  "kind": "",
+  "cat": "네트워크",
+  "unit": "식",
+  "desc": "■ 7) 슬럼프 및 표면수 측정 센서 N/W 구축비",
+  "price": 5000000,
+  "cost": null,
+  "pass": false,
+  "vendor": "",
+  "grp": "품질관리시스템",
+  "vary": true,
+  "note": "",
+  "hist": [
+   {
+    "src": "에코블록",
+    "date": "2026-10-29",
+    "price": 5000000,
+    "cost": null,
+    "qty": 1
+   }
+  ]
+ },
+ {
+  "id": "P71",
+  "name": "품질관리 시스템 전용 UI 프로그램(시험실)",
+  "sec": "hw",
+  "kind": "",
+  "cat": "디바이스",
+  "unit": "식",
+  "desc": "■ 8) 품질관리 시스템 전용 UI 프로그램(시험실)",
+  "price": 6000000,
+  "cost": null,
+  "pass": false,
+  "vendor": "",
+  "grp": "품질관리시스템",
+  "vary": true,
+  "note": "",
+  "hist": [
+   {
+    "src": "에코블록",
+    "date": "2026-10-29",
+    "price": 6000000,
+    "cost": null,
+    "qty": 1
+   }
+  ]
+ },
+ {
+  "id": "P72",
+  "name": "COP 연동관계 수정작업",
+  "sec": "hw",
+  "kind": "",
+  "cat": "디바이스",
+  "unit": "식",
+  "desc": "■ 9) COP 연동관계 수정작업",
+  "price": 5000000,
+  "cost": null,
+  "pass": false,
+  "vendor": "",
+  "grp": "품질관리시스템",
+  "vary": false,
+  "note": "",
+  "hist": [
+   {
+    "src": "에코블록",
+    "date": "2026-10-29",
+    "price": 5000000,
+    "cost": null,
+    "qty": 0
+   }
+  ]
+ },
+ {
+  "id": "P73",
+  "name": "IP 카메라",
+  "sec": "hw",
+  "kind": "",
+  "cat": "디바이스",
+  "unit": "대",
+  "desc": "■1) IP 카메라\n ▪ 모델명: DC-S4236THRX\n• QR코드 인식",
+  "price": 1650000,
+  "cost": null,
+  "pass": false,
+  "vendor": "",
+  "grp": "R/T 오적재 방지 및 자동적재 시스템",
+  "vary": false,
+  "note": "",
+  "hist": [
+   {
+    "src": "에코블록",
+    "date": "2026-10-29",
+    "price": 1650000,
+    "cost": null,
+    "qty": 0
+   }
+  ]
+ },
+ {
+  "id": "P74",
+  "name": "거리감지 센서",
+  "sec": "hw",
+  "kind": "",
+  "cat": "디바이스",
+  "unit": "대",
+  "desc": "■2) 거리감지 센서\n ▪R/T 표시센서(정위치)",
+  "price": 700000,
+  "cost": null,
+  "pass": false,
+  "vendor": "",
+  "grp": "R/T 오적재 방지 및 자동적재 시스템",
+  "vary": false,
+  "note": "",
+  "hist": [
+   {
+    "src": "에코블록",
+    "date": "2026-10-29",
+    "price": 700000,
+    "cost": null,
+    "qty": 0
+   }
+  ]
+ },
+ {
+  "id": "P75",
+  "name": "호퍼 출입·닫힘 리미트",
+  "sec": "hw",
+  "kind": "",
+  "cat": "디바이스",
+  "unit": "EA",
+  "desc": "■3) 호퍼 출입·닫힘 리미트",
+  "price": 30000,
+  "cost": null,
+  "pass": false,
+  "vendor": "",
+  "grp": "R/T 오적재 방지 및 자동적재 시스템",
+  "vary": false,
+  "note": "",
+  "hist": [
+   {
+    "src": "에코블록",
+    "date": "2026-10-29",
+    "price": 30000,
+    "cost": null,
+    "qty": 0
+   }
+  ]
+ },
+ {
+  "id": "P76",
+  "name": "R/T 표시등(정위치) 삼색등",
+  "sec": "hw",
+  "kind": "",
+  "cat": "디바이스",
+  "unit": "EA",
+  "desc": "■4) R/T 표시등(정위치) 삼색등",
+  "price": 800000,
+  "cost": null,
+  "pass": false,
+  "vendor": "",
+  "grp": "R/T 오적재 방지 및 자동적재 시스템",
+  "vary": false,
+  "note": "",
+  "hist": [
+   {
+    "src": "에코블록",
+    "date": "2026-10-29",
+    "price": 800000,
+    "cost": null,
+    "qty": 0
+   }
+  ]
+ },
+ {
+  "id": "P77",
+  "name": "R/T 오 적재 및 자동 적재 N/W 부자재비",
+  "sec": "hw",
+  "kind": "",
+  "cat": "네트워크",
+  "unit": "식",
+  "desc": "■5) R/T 오 적재 및 자동 적재 N/W 부자재비\n ▪ 전선 및 기타 잡자재 포함",
+  "price": 2000000,
+  "cost": null,
+  "pass": false,
+  "vendor": "",
+  "grp": "R/T 오적재 방지 및 자동적재 시스템",
+  "vary": false,
+  "note": "",
+  "hist": [
+   {
+    "src": "에코블록",
+    "date": "2026-10-29",
+    "price": 2000000,
+    "cost": null,
+    "qty": 0
+   }
+  ]
+ },
+ {
+  "id": "P78",
+  "name": "R/T 오 적재 및 자동 적재 N/W 구축비",
+  "sec": "hw",
+  "kind": "",
+  "cat": "네트워크",
+  "unit": "식",
+  "desc": "■6) R/T 오 적재 및 자동 적재 N/W 구축비\n ▪ IP 카메라 및 각종 센서 등 설치 작업\n▪ 노무비 및 시운전",
+  "price": 2600000,
+  "cost": null,
+  "pass": false,
+  "vendor": "",
+  "grp": "R/T 오적재 방지 및 자동적재 시스템",
+  "vary": true,
+  "note": "",
+  "hist": [
+   {
+    "src": "에코블록",
+    "date": "2026-10-29",
+    "price": 2600000,
+    "cost": null,
+    "qty": 0
+   }
+  ]
+ },
+ {
+  "id": "P79",
+  "name": "생산 제어시스템 프로그램 수정(1,2 호기)",
+  "sec": "hw",
+  "kind": "",
+  "cat": "디바이스",
+  "unit": "대",
+  "desc": "■7) 생산 제어시스템 프로그램 수정(1,2 호기)\n ▪ PLC 프로그램 수정 작업 및 차량번호 연동",
+  "price": 5000000,
+  "cost": null,
+  "pass": false,
+  "vendor": "",
+  "grp": "R/T 오적재 방지 및 자동적재 시스템",
+  "vary": true,
+  "note": "",
+  "hist": [
+   {
+    "src": "에코블록",
+    "date": "2026-10-29",
+    "price": 5000000,
+    "cost": null,
+    "qty": 0
+   }
+  ]
+ },
+ {
+  "id": "P80",
+  "name": "옥외 전광판",
+  "sec": "hw",
+  "kind": "",
+  "cat": "디바이스",
+  "unit": "식",
+  "desc": "■1) 옥외 전광판\n▪Dual Type 방식(본체 설치)\n▪가시거리 : 140m, 45°\n▪Size : 2,000(W) × 1,410(H) × 300(D)\n▪표시방법 : 역광차단형 LED Display\n▪표시구분 : 4자리수(9999), 4단 4열(금회, 차회, 대기1, 대기2)\n▪통신사양 : RS485 & 422(출하관리와 통신)\n▪설치 시운전(전선배선 및 포설작업)\n▪기술사양\n-Main Control CPU Board - LED Display\n-Sub Control 1Lot - LED Display\n-LED Modul 1Lot - LED Display\n-Power DC 전원함\n-RS422 통신 장치\n-하우징 : 전면판 샌딩처리 후 분체도장\n*통신 케이블 : 1.5SQ × 4C Shield Type\n*출하실 상단 지붕에 설치",
+  "price": 18000000,
+  "cost": null,
+  "pass": false,
+  "vendor": "",
+  "grp": "출하차량 대기 전광판",
+  "vary": false,
+  "note": "",
+  "hist": [
+   {
+    "src": "에코블록",
+    "date": "2026-10-29",
+    "price": 18000000,
+    "cost": null,
+    "qty": 0
+   }
+  ]
+ },
+ {
+  "id": "P81",
+  "name": "N/W 구성비",
+  "sec": "hw",
+  "kind": "",
+  "cat": "네트워크",
+  "unit": "EA",
+  "desc": "■2) N/W 구성비\n▪장비 사용료(운반비 및 크레인 사용료)\n▪설치 자재비 포함, 설치 인건비\n▪작업내용\n-전광판 설치\n-통신장치 설치\n-시운전",
+  "price": 6000000,
+  "cost": null,
+  "pass": false,
+  "vendor": "",
+  "grp": "출하차량 대기 전광판",
+  "vary": false,
+  "note": "",
+  "hist": [
+   {
+    "src": "에코블록",
+    "date": "2026-10-29",
+    "price": 6000000,
+    "cost": null,
+    "qty": 0
+   }
+  ]
+ },
+ {
+  "id": "P82",
+  "name": "생산현황판 모니터",
+  "sec": "hw",
+  "kind": "",
+  "cat": "디바이스",
+  "unit": "식",
+  "desc": "■1) 생산현황판 모니터\n▪65인치\n▪해상도 지원 : 4K HDR 지원\n▪벽걸이 지원\n▪설치비 포함",
+  "price": 1400000,
+  "cost": null,
+  "pass": false,
+  "vendor": "",
+  "grp": "생산현황 디스플레이어 장치",
+  "vary": false,
+  "note": "",
+  "hist": [
+   {
+    "src": "에코블록",
+    "date": "2026-10-29",
+    "price": 1400000,
+    "cost": null,
+    "qty": 1
+   }
+  ]
+ },
+ {
+  "id": "P83",
+  "name": "생산현황판 PC",
+  "sec": "hw",
+  "kind": "",
+  "cat": "디바이스",
+  "unit": "식",
+  "desc": "■2)생산현황판 PC\n▪생산현황판 전용 PC –1대",
+  "price": 1200000,
+  "cost": null,
+  "pass": false,
+  "vendor": "",
+  "grp": "생산현황 디스플레이어 장치",
+  "vary": false,
+  "note": "",
+  "hist": [
+   {
+    "src": "에코블록",
+    "date": "2026-10-29",
+    "price": 1200000,
+    "cost": null,
+    "qty": 1
+   }
+  ]
+ },
+ {
+  "id": "P84",
+  "name": "레이저프린터",
+  "sec": "hw",
+  "kind": "",
+  "cat": "디바이스",
+  "unit": "set",
+  "desc": "■ ZT-231\n ▪ 모델 : SL-M2843DW\n ▪ 인쇄 : 자동양면인쇄\n ▪ 프린트 속도 : 27ppm\n ▪ 방식 : 흑백레이저(토너포함)\n ▪ 통신 :USB/wifi\n ▪ 현장 납품 및 설치 조건",
+  "price": 1200000,
+  "cost": 285000,
+  "pass": false,
+  "vendor": "",
+  "grp": "",
+  "vary": false,
+  "note": "",
+  "hist": [
+   {
+    "src": "신광테크",
+    "date": "2026-06-29",
+    "price": 1200000,
+    "cost": 285000,
+    "qty": 1
+   },
+   {
+    "src": "신광테크 추가계약",
+    "date": "2026-06-29",
+    "price": 370000,
+    "cost": null,
+    "qty": 10
+   }
+  ]
+ },
+ {
+  "id": "P85",
+  "name": "워크스테이션",
+  "sec": "hw",
+  "kind": "",
+  "cat": "디바이스",
+  "unit": "set",
+  "desc": "■ PLC OPC-UA Data 수집용(서버)\n■ Model : Precision 5860 Tower\n인텔 제온 W5-2465X (33.75 MB 캐시, 16 코어, 32 threads, 3.1 GHz to 4.7 GHz Turbo, 200 W)\n32GB, 2x16GB, DDR5, 4800MHz, RDIMM ECC 메모리\nSATA Upper/Lower Flexbay Assembly 섀시 포함\n통합형 스토리지 컨트롤러 (SSD Raid 구성 필요 , Intel VROC Upgrade Key 포함)\n512GB, M.2, PCIe NVMe, SSD, Class 40 * 2EA\n2TB, 3.5인치 7200rpm SATA AG-엔터프라이즈 하드 드라이브 * 2EA\nNVIDIA T400, 4 GB GDDR6, 3 mDP to DP 어댑터 사용 가능한 수량\n8x DVD+/-RW/RAM 9.5mm Slimline 옵티컬 디스크 드라이브\n■ Windows OS\n ▪ Windows Server 2025 Standard  COEM(DSP) 16core  64bit\n ▪ Windows Server 2025 USER 5CAL\n■ DBMS\n ▪ SQL Server 2022 Standard Edition 'SQL Server 2022 - 1 User 5CAL",
+  "price": 19500000,
+  "cost": 8000000,
+  "pass": false,
+  "vendor": "",
+  "grp": "",
+  "vary": false,
+  "note": "",
+  "hist": [
+   {
+    "src": "신광테크",
+    "date": "2026-06-29",
+    "price": 19500000,
+    "cost": 8000000,
+    "qty": 3
+   }
+  ]
+ },
+ {
+  "id": "P86",
+  "name": "미들웨어",
+  "sec": "hw",
+  "kind": "",
+  "cat": "디바이스",
+  "unit": "set",
+  "desc": "■ WCD-S200\n ▪ 스마트 데이터 게이트웨이\n ▪ CPU : 1.5-GHz ARM Cortex Processor\n ▪ I/O : Ethernet 10/100 2 ports,\n ▪ RS-232 1port, RS-485 1port, HDMI 1port,\n ▪ Micro SD card 1port, USB Micro B 1port\n ▪ 설치비 포함",
+  "price": 2000000,
+  "cost": null,
+  "pass": false,
+  "vendor": "",
+  "grp": "",
+  "vary": false,
+  "note": "",
+  "hist": [
+   {
+    "src": "신광테크",
+    "date": "2026-06-29",
+    "price": 2000000,
+    "cost": null,
+    "qty": 2
+   }
+  ]
+ },
+ {
+  "id": "P87",
+  "name": "설비 I/F (Master PLC#1,#2,#3)",
+  "sec": "hw",
+  "kind": "",
+  "cat": "PLC",
+  "unit": "set",
+  "desc": "■ PLC 가공 설비 (131대)\n  - 가공 데이터 수집(MT-LINKI)\n     1. FS0i-MD 99대 , 2. FS0i-MF 02대 ,  3. FS0i-MF-PLUS 20대\n     4. FS0i-TB 09대  , 5. FS31i-B5 1대\n  - 다케비시 프로그램 적용\n■ A 동\n   - 야스낙 컨트로롤러 7대 (DIG.& AL 신호)\n   - 세척기 구형, 신형, 인입PLC 6대 (압력계, PLC 정보 신호)\n■ B 동\n  - 주조 기계 10대 (DIG.& AL 신호)\n  - 인입기 기계 2대 (DIG.& AL 신호)\n■ 현장공사\n(1) 자재\n ▪  Ethernet외 통신모듈(기존 장비 사용, 필요시 설치)\n(2) 엔지니어링\n ▪ 가공기 판넬 개조 및 회로구성",
+  "price": 78500000,
+  "cost": 91015000,
+  "pass": false,
+  "vendor": "",
+  "grp": "",
+  "vary": true,
+  "note": "",
+  "hist": [
+   {
+    "src": "신광테크",
+    "date": "2026-06-29",
+    "price": 78500000,
+    "cost": 91015000,
+    "qty": 1
+   },
+   {
+    "src": "신광테크 추가계약",
+    "date": "2026-06-29",
+    "price": 22000000,
+    "cost": null,
+    "qty": 1
+   }
+  ]
+ },
+ {
+  "id": "P88",
+  "name": "반자동조립 및 비전검사기",
+  "sec": "hw",
+  "kind": "",
+  "cat": "설비",
+  "unit": "set",
+  "desc": "■ 반자동조립·비전검사기\n • Main Control : 산업용 PC(Advantechi7(Win10))\n • Sub Control : LS-PLC( CPU & A/D, I/O)\n • Display & Control : 24” Touch Monitor\n • Vision Camera:5M급 4Set(조명 포함)\n • Load Cell : 0~50Kg 인장 압축 하중 측정(A/D방식 4~20mA)\n • Torque Sensor : 토크 값 확인 후 선정(A/D방식 0~20mA)\n • Current Sensor : 0~5A 측정용(A/D방식 0~5V)\n • 점등센서 : 점등 검사용 (A/D방식 0~5V)",
+  "price": 100000000,
+  "cost": 100000000,
+  "pass": false,
+  "vendor": "",
+  "grp": "",
+  "vary": false,
+  "note": "",
+  "hist": [
+   {
+    "src": "효광(제조AI)",
+    "date": "2026-05-08",
+    "price": 100000000,
+    "cost": 100000000,
+    "qty": 1
+   }
+  ]
+ },
+ {
+  "id": "P89",
+  "name": "AI 시스템 서버",
+  "sec": "hw",
+  "kind": "",
+  "cat": "디바이스",
+  "unit": "set",
+  "desc": "■ Supermicro AS-2126HS-TN\n ▪ CPU: AMD EPYC 9115 16Core\n ▪ RAM: 32GB DDR5-6400\n ▪ Storage OS SSD: 480GB SATA SSD ×2 (RAID1)\n ▪ Storage DATA: 3.84TB SATA SSD × 4EA\n ▪ GPU: NVIDIA L40S, PCIe Gen5 슬롯 장착, 300W, 48GB 패시브\n ▪ SMC : SMC System Management Software Suite Node License\n■ windows Sever 2025 DSP  (5 CAL)\n■ DBMS\n ▪ SQL Server 2022 Standard Edition 'SQL Server 2022 - 1 User 5CAL",
+  "price": 84600000,
+  "cost": 47690000,
+  "pass": false,
+  "vendor": "",
+  "grp": "",
+  "vary": false,
+  "note": "",
+  "hist": [
+   {
+    "src": "효광(제조AI)",
+    "date": "2026-05-08",
+    "price": 84600000,
+    "cost": 47690000,
+    "qty": 1
+   }
+  ]
+ }
+]

@@ -7,7 +7,8 @@ import { wdOf } from '@/domain/pm/plan';
 import { pmTaskSchema } from '@/domain/pm/schema';
 import type { PmPlan } from '@/domain/pm/site';
 import { LOAD_MAX_DEFAULT } from '@/domain/pm/team';
-import { SEED_BASE_DATE, SEED_VERSION, seedFunctions, seedPlanFunctions, seedPlans, seedProjects, seedSubtasks, seedTasks } from './seed';
+import { SEED_BASE_DATE, SEED_VERSION, seedFunctions, seedItems, seedPlanFunctions, seedPlans, seedProjects, seedSubtasks, seedTasks } from './seed';
+import { defaultMoneyCfg, pmFundRuleSchema, pmItemSchema, pmMoneyCfgSchema, seedFundRules, type PmFundRule, type PmItem, type PmMoneyCfg } from '@/domain/pm/money';
 import { moveTicket, nextTicketNo, setTicketProg, syncTicketWithTask, tkOpen, type PmTicket } from '@/domain/pm/ticket';
 import { weekStart } from '@/domain/pm/site';
 import type { PmAiMeas, PmKpiDef, PmKpiMeas } from '@/domain/pm/kpi';
@@ -94,6 +95,10 @@ export interface PmSnapshot {
   templates: PmTemplate[];
   /** 사업 업무 ↔ 표준 세부 업무 직접 연결 (데모 S.tlink, id = 업무 ID) */
   tlinks: Array<{ id: string; stdId: string }>;
+  // ── 6-4: 사업 · 손익 기준정보 (데모 S.money.cfg · rules · items) — 화면은 pm.manage 만 ──
+  moneyCfg: PmMoneyCfg;
+  fundRules: PmFundRule[];
+  items: PmItem[];
 }
 
 const clone = <T>(v: T): T => structuredClone(v);
@@ -146,6 +151,7 @@ export function createPmStore(today = todayStr()) {
     meetings: [],
     reports: [],
     orgs: [], codes: [], stdTasks: [], templates: [], tlinks: [],
+    moneyCfg: defaultMoneyCfg(), fundRules: seedFundRules(), items: seedItems(),
   };
 
   /** 기준정보를 사업 · 업무 목록에 맞춤 (ensureMaster) — 새 이름만 더함. 표준 세부 업무는 처음 한 번만 */
@@ -806,6 +812,32 @@ export function createPmStore(today = todayStr()) {
       const used = orgUse(o, state.projects);
       if (used.length) throw new Error(`사업 ${used.length}개(${used.map((p) => p.id).join(', ')})에서 쓰는 중이라 지울 수 없습니다`);
       state.orgs = state.orgs.filter((x) => x.id !== id);
+    },
+
+    // ── 6-4: 지원 기준 · 단가 · 품목 · 단가 ─────────────────
+    /** 단가 · 계산 기준 (mnCfgForm) */
+    async saveMoneyCfg(c: PmMoneyCfg) {
+      state.moneyCfg = pmMoneyCfgSchema.parse(clone(c));
+    },
+    /** 지원 기준 추가 · 수정 (mnRuleForm) — id 가 없으면 새로 */
+    async saveFundRule(r: PmFundRule): Promise<PmFundRule> {
+      const x = pmFundRuleSchema.parse({ ...clone(r), id: r.id || nid('F') });
+      const i = state.fundRules.findIndex((v) => v.id === x.id);
+      if (i < 0) state.fundRules.push(x); else state.fundRules[i] = x;
+      return clone(x);
+    },
+    async removeFundRule(id: string) {
+      state.fundRules = state.fundRules.filter((x) => x.id !== id);
+    },
+    /** 품목 추가 · 수정 (ciForm) — 이미 만든 견적은 그대로 (견적은 품목을 복사해 씀) */
+    async saveItem(it: PmItem): Promise<PmItem> {
+      const x = pmItemSchema.parse({ ...clone(it), id: it.id || nid('P') });
+      const i = state.items.findIndex((v) => v.id === x.id);
+      if (i < 0) state.items.push(x); else state.items[i] = x;
+      return clone(x);
+    },
+    async removeItem(id: string) {
+      state.items = state.items.filter((x) => x.id !== id);
     },
 
     // ── 5단계: 주간 진행률 · 보고서 ──────────────────────

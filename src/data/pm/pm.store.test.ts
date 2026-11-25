@@ -304,3 +304,26 @@ test('6-2 기준정보 고치기: 단계명 바꾸면 업무도 · 사업구분 
   await s.removeStd(std.id);
   assert.ok(!(await s.snapshot()).tlinks.some((l) => l.stdId === std.id), '표준을 지우면 연결도');
 });
+
+test('6-4 저장: 단가 · 계산 기준 · 지원 기준 추가/수정/삭제 · 품목 추가/수정/삭제 (처음 값 = 데모 13줄 · 89개)', async () => {
+  const s = createPmStore(TODAY);
+  let snap = await s.snapshot();
+  assert.deepEqual([snap.fundRules.length, snap.items.length, snap.moneyCfg.cloudMonthly, snap.moneyCfg.kosaMonthly, snap.moneyCfg.laborOn], [13, 89, 150000, 7754124, false]);
+  await s.saveMoneyCfg({ ...snap.moneyCfg, cloudMonthly: 350000, laborOn: true });
+  const r = await s.saveFundRule({ ...snap.fundRules[0], id: '', region: '경남', biz: '테스트 기준' });
+  assert.match(r.id, /^F/);
+  await s.saveFundRule({ ...r, conf: true });
+  await s.removeFundRule('F13');
+  const it = await s.saveItem({ ...snap.items[0], id: '', name: '테스트 품목', hist: [] });
+  await s.saveItem({ ...snap.items[1], price: 1 });
+  await s.removeItem('P89');
+  snap = await s.snapshot();
+  assert.deepEqual([snap.moneyCfg.cloudMonthly, snap.moneyCfg.laborOn], [350000, true]);
+  assert.equal(snap.fundRules.length, 13);
+  assert.equal(snap.fundRules.find((x) => x.id === r.id)?.conf, true);
+  assert.ok(!snap.fundRules.some((x) => x.id === 'F13'));
+  assert.equal(snap.items.length, 89);
+  assert.ok(snap.items.some((x) => x.id === it.id && x.name === '테스트 품목'));
+  assert.equal(snap.items[1].price, 1);
+  assert.ok(!snap.items.some((x) => x.id === 'P89'));
+});

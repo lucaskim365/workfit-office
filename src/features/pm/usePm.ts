@@ -117,6 +117,12 @@ export function usePmMutations(me: string, nameOf?: (id: string) => string) {
     removeStd: m((id: string) => s.removeStd(id)),
     saveOrg: m((o: Parameters<typeof s.saveOrg>[0]) => s.saveOrg(o)),
     removeOrg: m((id: string) => s.removeOrg(id)),
+    // 6-4 지원 기준 · 단가 · 품목 · 단가
+    saveMoneyCfg: m((c: Parameters<typeof s.saveMoneyCfg>[0]) => s.saveMoneyCfg(c)),
+    saveFundRule: m((r: Parameters<typeof s.saveFundRule>[0]) => s.saveFundRule(r)),
+    removeFundRule: m((id: string) => s.removeFundRule(id)),
+    saveItem: m((it: Parameters<typeof s.saveItem>[0]) => s.saveItem(it)),
+    removeItem: m((id: string) => s.removeItem(id)),
     completeTasks: m(({ ids, note }: { ids: string[]; note: string }) => s.completeTasks(ids, note, me)),
     setTaskDates: m(({ items, note }: { items: Array<{ id: string; start: string; end: string }>; note: string }) => s.setTaskDates(items, note, me)),
     // 5단계: 이슈 (여러 화면에서 등록 창을 열어서 여기 둠)

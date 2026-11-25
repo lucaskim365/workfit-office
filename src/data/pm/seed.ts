@@ -3,6 +3,8 @@ import { planSum, type PmPlan } from '@/domain/pm/site';
 import wbsData from './seed/wbs-data.json';
 import planData from './seed/plan-data.json';
 import fnData from './seed/fn-data.json';
+import itemData from './seed/money-items.json';
+import { pmItemSchema, type PmItem } from '@/domain/pm/money';
 
 /**
  * 데모 내장 데이터(`wbs-data`, 11/17 업무 목록 v1.1) → PM 데이터 모양.
@@ -114,6 +116,11 @@ export function seedTasks(): PmTask[] {
         fpExcluded: null,
       } satisfies PmTask;
     });
+}
+
+/** 품목 · 단가 처음 목록 89개 (데모 QT_CAT_SEED 5089 — 견적서 6건에서 뽑음, 매입 모름 '' → null) */
+export function seedItems(): PmItem[] {
+  return (itemData as unknown[]).map((x) => pmItemSchema.parse(x));
 }
 
 const KIND = (v: string): PmFunctionKind => (v === '신규' || v === '변경' ? v : '재사용');

@@ -32,6 +32,8 @@ import { WeekCheckView } from './views/weekly/WeekCheckView';
 import { ReportView } from './views/weekly/ReportView';
 import { ActLogView } from './views/master/ActLogView';
 import { BaseView } from './views/master/BaseView';
+import { RulesView } from './views/money/RulesView';
+import { ItemsView } from './views/money/ItemsView';
 
 /** 옮긴 보기 → 화면. 없는 보기는 '옮기는 중' 자리 */
 const VIEWS: Record<string, ComponentType> = {
@@ -57,6 +59,8 @@ const VIEWS: Record<string, ComponentType> = {
   'doc/report': ReportView,
   'master/base': BaseView,
   'master/log': ActLogView,
+  'money/rules': RulesView,
+  'money/items': ItemsView,
 };
 
 const NO_TITLE = new Set(['sched/gantt', 'risk/delay']);

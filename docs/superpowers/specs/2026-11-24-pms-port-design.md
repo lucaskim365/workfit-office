@@ -418,7 +418,7 @@ src/modules/gw/pm/  화면 (React + Tailwind, shared/ui 공용 부품)
 | 4 ✅ | (5.4: 4-1 · 4-2 · 4-3 ✅) 점검·요구사항·산출물 | 알림 · 검색에서 그 건 창이 바로 열림 (점검 doc/insp · CR crReview · crEdit · 산출물 doc/audit) |
 | 5 ✅ | (5.5: 5-1 · 5-2 · 5-3 ✅) 이슈·회의·보고 | 알림 · 검색에서 그 건 창이 바로 열림 (이슈 issueEdit · 액션 actEdit · 회의록 mtOpen · 주간 진행률 wcGo · wcAllGo) |
 | 6 | (5.6: 6-1 · 6-2 · 6-3 ✅) 사업·손익 · 기준정보 (금액 화면은 `pm.manage` 만) | 알림 · 검색에서 그 화면 · 창이 바로 열림 (사업 등록 siteNew · 손익 money/*) |
-| 7 | (허락) 개발 DB에 컬렉션 만들기·넣기 → 화면 확인. 옮길 때 FP 세부 기능에서 미리 넣은 세부 작업(fromFp)의 넣은 날(createdDate)을 옮긴 날 하나로 고정 — 메모리 저장소처럼 띄울 때마다 오늘이 되지 않게 (5.6.3, 11/25 팀장) · state.json 세부 작업의 완료 체크한 사람 `ddBy` → `doneBy`(사용자 ID, importPlan 에 넣어 둠 — 6-3 검수) | 미리보기 보고서 건수 = 화면 건수 |
+| 7 | (허락) 개발 DB에 컬렉션 만들기·넣기 → 화면 확인. 옮길 때 FP 세부 기능에서 미리 넣은 세부 작업(fromFp)의 넣은 날(createdDate)을 옮긴 날 하나로 고정 — 메모리 저장소처럼 띄울 때마다 오늘이 되지 않게 (5.6.3, 11/25 팀장) · state.json 세부 작업의 완료 체크한 사람 `ddBy` → `doneBy`(사용자 ID, importPlan 에 넣어 둠 — 6-3 검수) · state.json `money.cfg · rules · items` → moneyCfg · fundRules · items (상한 만원 → 원, 5.6.4) | 미리보기 보고서 건수 = 화면 건수 |
 | 8 | **넘어가는 날**(4.2) → (허락) 운영 DB → 타일 켜기 (`gw-screens.ts` 의 `'task'`, 공용 파일) · `main` 합치기(사용자 지시) | |
 
 - 각 단계를 마칠 때 **부록 A 기능 체크리스트**에서 그 단계 항목을 지운다. 체크리스트가 다 지워져야 "전부 옮김".
@@ -835,7 +835,7 @@ src/modules/gw/pm/  화면 (React + Tailwind, shared/ui 공용 부품)
 | 6-1 | 권한 키 2개(공용 permissions.ts 1줄) · 금액 메뉴 · 칸 숨기기 · 기준정보 자동 생성(ensureMaster) · 사업 등록 · 정보 수정 · 삭제(siteForm, 표준 업무 목록 자동 생성) · 기준정보 › 사업 탭 | ✅ (5.6.1) |
 | 6-2 | 기준정보 나머지 탭: 사업 › 단계 › 업무(link*) · 업무 목록 생성(gen) · 기업 · 기관 · 인력 · 코드(std* · stageSel · stageMove) · ~~템플릿~~(데모에서 없앤 화면) | ✅ (5.6.2) |
 | 6-3 | 활동 기록 (master/log — pActLog, CR 줄 포함) | ✅ (5.6.3) |
-| 6-4 | 지원 기준 · 단가 (money/rules) · 품목 · 단가 (money/items) | |
+| 6-4 | 지원 기준 · 단가 (money/rules) · 품목 · 단가 (money/items) | ✅ (5.6.4) |
 | 6-5 | 견적 작성 · 엑셀 내보내기 (pQuote) | |
 | 6-6 | 사업별 수익 (money/site) · 월별 · 연간 손익 (money/pl) · 입금 · 비용 · 설정 + 관제 줄 견적 이익률 · [수익 보기] | |
 | 6-7 | 사업비 집행 · 비목 예산 (siteCost · budget · spend) | |
@@ -889,6 +889,24 @@ src/modules/gw/pm/  화면 (React + Tailwind, shared/ui 공용 부품)
 - 세부 작업을 티켓 재오픈 · 체크 풀기로 되돌리면 완료 체크한 사람도 비움(데모 재오픈은 남겨 둠 — 완료가 아닌데 완료한 사람이 남지 않게).
 - 전체 보기 권한: 데모 역할(관리자 · 팀장 · PM) → pm.manage · 직책/직급 '팀장' · 사업 PM (업무계획 팀 보고 모아 받기와 같은 판정).
 - 확인 필요: FP 세부 기능에서 미리 넣은 세부 작업 432건이 '누가 -' · '추가' 줄로 넣은 날에 보임(데모도 같음 — 데모는 11/16 넣은 날). 메모리 저장소는 띄울 때마다 오늘 날짜라 지금은 최근 30일 첫 화면이 이 줄로 참. [팀장 확정 11/25] 데모 그대로 둠 · 뺄지는 6.1 2차 후보 · 넣은 날 고정은 5장 7단계 줄.
+
+### 5.6.4 6-4 결과 — 지원 기준 · 단가 · 품목 · 단가 (11/25)
+**만든 것**
+- 계산 `domain/pm/money.ts` (데모 4386~ 그대로): 견적서 표지 분류(PL_CATS) · 재원(FUND_SRC) · 매출 잡는 날짜(REV_BASIS) · 단가 · 계산 기준(cfg — 클라우드 월 15만 × 36개월 · KOSA 7,754,124원/월 ÷ 209h · 인건비 반영 꺼짐 · 매출 = 세금계산서 발행일) · 지원 기준표 처음 값 13줄(FUND_SEED) · 표 순서(최근 연도 → 전국 → 지역 이름) · 금액 글자(won) · 기준 이름(ruleTxt) · 품목 종류(CI_KINDS 이름으로 자동 · 고르면 그 값) · 쓰인 견적 수 · 순서(ciKindSort) · 이익률 · 지난 단가 범위 · 목록 거르기(ciList). 입력 창 값 ↔ 저장 값 변환 · 확인(ruleDraft · ruleFromDraft · itemDraft · itemFromDraft).
+- 내장 데이터 `data/pm/seed/money-items.json` = 데모 QT_CAT_SEED 89개 그대로(견적서 6건에서 뽑음, 지난 견적 122줄). 새 기록 칸: 스냅숏 `moneyCfg` · `fundRules` · `items` (메모리, DB 7단계).
+- 저장(메모리): 단가 · 계산 기준 저장 · 지원 기준 추가 · 수정 · 삭제 · 품목 추가 · 수정 · 삭제.
+- 화면 `views/money/RulesView`(`?v=money/rules`): 단가 · 계산 기준 카드 4칸 + [수정] 창 · 정부 · 지자체 지원 기준 표(비율 · 최대 금액 · '비율?' · 지자체 합계 최대 · 출처 링크 · 확인/확인 필요) · 줄 누르면 수정 창 · [+ 지원 기준 추가]. `views/money/ItemsView`(`?v=money/items`): 구분 · 종류 · 표지 분류 · 검색 · 'n개 / 전체 89개' · 표(품목 · 세부 사양 첫 줄 · 단위 · 공급 · 매입단가(그대로 / 확인 필요) · 이익률 · 지난 견적 '명성ENG 11/6 외 n건' + 단가 범위) · 줄 누르면 수정 창(지난 견적 표) · [+ 품목 추가]. 둘 다 금액 화면 = pm.manage 만(메뉴 · 주소는 6-1 의 같은 막기).
+- 테스트: `money.test.ts` 6(데모 함수를 데모 내장 데이터에 돌려 뽑은 값 — 품목 구분 sw 2 · hw 84 · 기타 3, 종류 10묶음 개수, 매입 확인 필요 66 · 그대로 3 · 현장마다 다름 21, 목록 순서 89개 전부, 앞 6줄 종류 · 쓰인 수 · 이익률 · 범위, 검색 '키오스크' 15 · '명성 ENG' 13 · 'PC' 20, 표지 분류 네트워크 20 / 지원 기준 13줄 순서 · 원 단위 · '2억원' · '1.2억원' · '3,600만원' · 확인 8줄 / 창 값 변환) · `pm.store.test.ts` +1 · `menu.test.ts` +1(권한 없으면 두 화면 빠짐 · 주소로 와도 막는 표시) → **PM 테스트 147개**.
+
+**확인**: tsc · PM 테스트 147 · build 통과. 화면(권한 있는 계정 이재원, 메모리에만 고침, `C:/Users/jw/ego/pm-step6-20261125/` r13): 25 지원 기준 · 단가(13줄, 데모 값 그대로) · 26 단가 수정 창(클라우드 35만 · 인건비 반영) · 27 경기 기준 수정 창(도비 비율 50) · 28 저장 뒤 '월 350,000원 × 36개월' · '7,754,124원/월' · 경기 '50% 최대 5,000만원' · 29 품목 · 단가(89개 / 전체 89개, 앞줄 = 테스트 순서) · 30 검색 '키오스크' 15개 · 31 키오스크 Panel PC 수정 창(지난 견적 2줄) · 32 매입단가 비우고 저장 → '확인 필요' · 이익률 '-'. 권한 없는 계정 화면은 이재원이 권한을 받아 지금은 찍을 계정이 없음 — 같은 막기 코드를 6-1 캡처 01 · 02 에서 봤고 menu.test 로 확인.
+
+**데모와 다르게 한 것**
+- 금액 저장 = 원 정수: 지원 기준표 상한 · 지자체 합계 상한도 원(데모는 만원). 입력 칸 · 글자는 데모처럼 만원 · '2억원'.
+- 볼 수 있는 사람: 데모 = 우리 직원 모두(moneyCan) → pm.manage 만(3.4, 6-1 과 같음).
+- 지원 기준 지울 때 '이 기준을 쓰는 사업이 있습니다' 확인은 사업 재원(6-6 mnFund)이 생기면 더함 — 지금은 쓰는 사업이 없어 '지울까요?'만.
+- 빈 비율은 '비율?' 표, 지원 기준 표의 줄 누르기 = 데모처럼 수정 창. 단가 카드의 '확인 필요'는 데모처럼 늘 표시(회사 확인 전).
+- 견적 작성의 [품목에서 고르기] · 직접 쓴 줄 목록에 등록 · 견적 저장 때 지난 견적 쌓기(qPick · qReg · qHist)는 6-5.
+- 7단계: state.json `money.cfg · rules · items` 가 있으면 그 값(상한 만원 → 원, 매입 '' → null, [비율, 상한] → {rate, cap}) — 1.5단계 미리보기 '뒤 단계' 목록의 money 줄.
 
 ## 6. 1차 범위 밖 (나중에)
 - 산출물 자동 생성(`/api/job`·`/api/td3`, 별도 리눅스 서버) · MES 화면 캡처 · 데이터 백업/초기화 화면 (11/24 사용자 확정: 1차 제외)
@@ -993,10 +1011,10 @@ src/modules/gw/pm/  화면 (React + Tailwind, shared/ui 공용 부품)
 - [x] 진행률 갱신 요청 (rptNote·rptReq · updReq · wcK · wcWho · wcSame · wcAllSame · wcNote · wcReq · wcRpt) · 주간 보고서 (rptWeek·rptTeamOpen · print) · wcGo · wcAllGo — 5-3 (5.5.3)
 
 **6단계 — 사업·손익·기준정보** (금액은 `pm.manage` 만)
-- [ ] 사업별 수익·월별·연간 손익·입금·비용·설정 (mnTab·mnOh·mnSite·mnYear·mnFund·mnPayNew·mnCostNew·mnCfg)
+- [~] 사업별 수익·월별·연간 손익·입금·비용·설정 (mnTab·mnOh·mnSite·mnYear·mnFund·mnPayNew·mnCostNew·mnCfg) — 단가 · 계산 기준(mnCfg) ✅ 6-4 (5.6.4), 나머지 6-6
 - [ ] 사업비 집행·비목 예산 (costRow·costSite·budgetEdit·spendNew·spendEdit)
-- [ ] 견적 작성·엑셀 내보내기 (qNew·qAdd·qDel·qDelC) · 품목·단가 89건 (ciNew)
-- [ ] 지원 기준·단가 (mnRuleNew)
+- [~] 견적 작성·엑셀 내보내기 (qNew·qAdd·qDel·qDelC) · 품목·단가 89건 (ciNew · ciEdit) — 품목 · 단가 ✅ 6-4 (5.6.4), 견적 6-5
+- [x] 지원 기준·단가 (mnRuleNew · mnRuleEdit) — 6-4 (5.6.4)
 - [x] 기준정보: 사업·기업/기관·인력·코드·미입력 표시 (siteNew·siteEdit·orgNew·orgEdit·orgType·codeNew·codeEdit·baseTab·baseMiss) — 이름 바꾸면 쓰는 곳도 같이 — 6-1 · 6-2. userNew·userEdit 은 안 옮김(인력 = 그룹웨어 사용자, 읽기만 — 5.6.2)
 - [x] 기준정보 '사업 › 단계 › TASK' · '코드' 탭의 표준 단계 · 표준 세부 TASK · 연결 (link*·std*·stageSel·stageMove · sug* · gen*) — 6-2 (5.6.2)
 - [—] 업무 템플릿 (tpl·tplNew·tplEdit·applyTplOpen) — 데모에서 없앤 화면(11/9, 부르는 곳 없음) → 안 옮김 (5.6.2)
