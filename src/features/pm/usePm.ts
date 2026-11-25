@@ -2,7 +2,8 @@ import { useMemo } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { pmStore, type PmSnapshot } from '@/data/pm/pm.store';
 import { doneInfoOf, liveOf, todayStr, type FilterCtx, type Live } from '@/domain/pm/rules';
-import type { PmSubtask, PmTask, PmTaskDone, PmTaskFunctions } from '@/domain/pm/schema';
+import type { PmProject, PmSubtask, PmTask, PmTaskDone, PmTaskFunctions } from '@/domain/pm/schema';
+import { isDrop, lastUpdate, siteBrief, siteCtxOf, siteStage, type SiteBrief, type SiteCtx, type SiteInputs, type SiteStage } from '@/domain/pm/site';
 import { taskTicketIndex, ticketDoneInfo, type PmTicket } from '@/domain/pm/ticket';
 
 /**
@@ -93,5 +94,47 @@ export function usePmMutations(me: string, nameOf?: (id: string) => string) {
     commentTicket: m(({ no, text }: { no: string; text: string }) => s.commentTicket(no, text, me)),
     addTicketFile: m(({ no, name }: { no: string; name: string }) => s.addTicketFile(no, name, me)),
     removeTicketFile: m(({ no, index }: { no: string; index: number }) => s.removeTicketFile(no, index, me)),
+  };
+}
+
+// ── 사업 현황 (3단계) ─────────────────────────────────
+
+export interface PmSiteRow {
+  p: PmProject;
+  c: SiteCtx;
+  b: SiteBrief;
+  stage: SiteStage;
+}
+
+/** 사업마다 기한·단계·신호 계산 (통합 사업 현황·사업별 화면). 업무가 없고 협약 시작일도 없는 사업은 뺌 (데모 sitesAll) */
+export function usePmSites(d: PmDerived | null): { rows: PmSiteRow[]; all: PmSiteRow[] } | null {
+  return useMemo(() => {
+    if (!d) return null;
+    const { snap, today, liveMap } = d;
+    const X: SiteInputs = {
+      tasks: snap.tasks, liveMap, plans: snap.plans, gov: snap.gov, planChecks: snap.planChecks, govLinks: snap.govLinks,
+      agreements: snap.agreements, baselines: snap.baselines, issues: snap.issues,
+    };
+    const all = snap.projects
+      .map((p) => {
+        const c = siteCtxOf(p, X, today);
+        const tkDates = snap.tickets.filter((x) => x.projectId === p.id).flatMap((x) => x.hist.map((h) => h.date));
+        const upd = lastUpdate(snap.baseDate, snap.logs.filter((l) => l.projectId === p.id), tkDates, today);
+        return { p, c, b: siteBrief(c, upd), stage: siteStage(c) };
+      })
+      .filter((r) => r.c.ts.length || r.p.start)
+      // 사업 번호 순 (데모 S.sites 순서: P2 신광 · P3 효광 · P4 한일 …)
+      .sort((a, b) => Number(a.p.id.replace(/\D/g, '')) - Number(b.p.id.replace(/\D/g, '')));
+    return { all, rows: all.filter((r) => !isDrop(r.p)) };
+  }, [d]);
+}
+
+export function usePmSiteMutations(me: string) {
+  const done = useInvalidate();
+  const s = pmStore();
+  const m = <A, R = unknown>(fn: (a: A) => Promise<R>) => useMutation({ mutationFn: fn, onSuccess: done });
+  return {
+    checkDeadlines: m(({ items, date, bulk }: { items: Array<{ projectId: string; kind: 'gov' | 'plan'; id: string }>; date: string; bulk: boolean }) => s.checkDeadlines(items, date, me, bulk)),
+    uncheckDeadline: m(({ projectId, kind, id }: { projectId: string; kind: 'gov' | 'plan'; id: string }) => s.uncheckDeadline(projectId, kind, id)),
   };
 }

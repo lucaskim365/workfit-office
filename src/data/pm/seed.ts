@@ -1,5 +1,8 @@
 import type { PmFunctionKind, PmProject, PmSubtask, PmTask, PmTaskFunctions } from '@/domain/pm/schema';
+import type { PmPlan } from '@/domain/pm/site';
 import wbsData from './seed/wbs-data.json';
+import planData from './seed/plan-data.json';
+import fnData from './seed/fn-data.json';
 
 /**
  * 데모 내장 데이터(`wbs-data`, 11/17 업무 목록 v1.1) → PM 데이터 모양.
@@ -54,7 +57,19 @@ export function seedProjects(): PmProject[] {
       summary: s(p.summary),
       closed: false,
       order: i,
-    }));
+      annDue: '', evalDate: '', bidRes: '', bidAt: null, warrantyM: null,
+      ceo: '', industry: '', region: '', bizRegNo: '', contactName: '', contactPhone: '', contactEmail: '',
+    }) satisfies PmProject);
+}
+
+/** 사업계획서 내장 데이터 (`plan-data`, 계획서 7건 · 금액 천원) — 계획서 약속 기한·사업 개요·성과지표 (§3단계) */
+export function seedPlans(): Record<string, PmPlan> {
+  return structuredClone((planData as unknown as { plans: Record<string, PmPlan> }).plans);
+}
+
+/** 계획서 기능 목록 (`fn-data`: [메뉴, 기능, 구분(추가·변경·기존)]) — 계획서 약속 기능 진척 */
+export function seedPlanFunctions(): Record<string, Array<[string, string, string]>> {
+  return structuredClone((fnData as unknown as { fns: Record<string, Array<[string, string, string]>> }).fns);
 }
 
 export function seedTasks(): PmTask[] {

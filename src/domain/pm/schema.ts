@@ -41,8 +41,125 @@ export const pmProjectSchema = z.object({
   closed: z.boolean().default(false),
   /** 화면 순서 */
   order: z.number().default(0),
+  // ── 3단계(대시보드)가 쓰는 칸 — 데모 사업 정보(S.sites). 내장 데이터엔 없어 비어 있음 (state.json 값은 7단계 옮기기 때) ──
+  /** 공고 마감일 (수주 단계) */
+  annDue: day.default(''),
+  /** 선정평가일 */
+  evalDate: day.default(''),
+  /** 선정 결과: '' | 선정 | 탈락 (탈락 = 현황·알림에서 빠짐) */
+  bidRes: z.enum(['', '선정', '탈락']).default(''),
+  bidAt: z.object({ date: z.string(), by: z.string() }).nullable().default(null),
+  /** 하자보증 기간(개월) — 협약 종료일부터 */
+  warrantyM: z.number().nullable().default(null),
+  /** 도입기업 대표 · 업종 · 소재지 · 사업자번호 · 현장 담당자 (이름 글자 — 그룹웨어 사용자 아님, §0) */
+  ceo: z.string().default(''),
+  industry: z.string().default(''),
+  region: z.string().default(''),
+  bizRegNo: z.string().default(''),
+  contactName: z.string().default(''),
+  contactPhone: z.string().default(''),
+  contactEmail: z.string().default(''),
 });
 export type PmProject = z.infer<typeof pmProjectSchema>;
+
+// ── 3단계: 사업 현황이 쓰는 기록 (데모 S.gov · S.planChk · S.govLink · S.agrChg · S.msOk). 지금 데이터는 모두 0건 ──
+
+/** 점검 지적 사항 (보완 항목) */
+export const PM_FIX_STATES = ['미조치', '조치 완료', '확인'] as const;
+
+/** 관리기준 기한 기록 (`pmGovRecords`) — 완료 체크 또는 점검 판정. id = `${projectId}|${itemId}` */
+export const pmGovRecordSchema = z.object({
+  id: z.string().min(1),
+  projectId: z.string().min(1),
+  /** 관리기준 항목 id (g_start·g_mid…) */
+  itemId: z.string().min(1),
+  /** 판정 (계속·보완·중단·적정·부적정·성공·실패). 서류 제출 항목은 비어 있음 = 완료 체크 */
+  v: z.string().default(''),
+  /** 완료한 날 / 판정 통보일 */
+  date: day,
+  by: z.string().default(''),
+  memo: z.string().default(''),
+  /** 보완일 때 직접 정한 후속 기한 */
+  fix: day.default(''),
+  /** 지적 사항 */
+  items: z.array(z.object({ text: z.string(), st: z.enum(PM_FIX_STATES) })).default([]),
+  /** 지난 기한 정리로 한꺼번에 처리한 날 */
+  bulk: day.default(''),
+});
+export type PmGovRecord = z.infer<typeof pmGovRecordSchema>;
+
+/** 계획서 약속 완료 체크 (`pmPlanChecks`). id = `${projectId}|${dutyId}` */
+export const pmPlanCheckSchema = z.object({
+  id: z.string().min(1),
+  projectId: z.string().min(1),
+  dutyId: z.string().min(1),
+  date: day,
+  by: z.string().default(''),
+  bulk: day.default(''),
+});
+export type PmPlanCheck = z.infer<typeof pmPlanCheckSchema>;
+
+/** 관리기준 필수 TASK 직접 연결 (`pmGovLinks`). 빈 배열 = '연결 없음'으로 확정. id = `${projectId}|${itemId}` */
+export const pmGovLinkSchema = z.object({
+  id: z.string().min(1),
+  projectId: z.string().min(1),
+  itemId: z.string().min(1),
+  taskIds: z.array(z.string()).default([]),
+});
+export type PmGovLink = z.infer<typeof pmGovLinkSchema>;
+
+export const PM_AGR_STATES = ['준비 중', '신청함', '승인', '반려', '등록 완료'] as const;
+/** 협약변경 기록 (`pmAgreementChanges`) — 세부관리기준 24조 */
+export const pmAgreementChangeSchema = z.object({
+  id: z.string().min(1),
+  projectId: z.string().min(1),
+  date: day,
+  /** ext·staff·eqS·addr·scope·eqL·sup·budget·move */
+  kind: z.string().min(1),
+  from: day.default(''),
+  to: day.default(''),
+  text: z.string().default(''),
+  why: z.string().default(''),
+  st: z.enum(PM_AGR_STATES).default('준비 중'),
+  by: z.string().default(''),
+});
+export type PmAgreementChange = z.infer<typeof pmAgreementChangeSchema>;
+
+/** 마일스톤 확인(승인) (`pmMilestoneOks`). id = taskId */
+export const pmMilestoneOkSchema = z.object({ id: z.string().min(1), date: day, by: z.string().default('') });
+export type PmMilestoneOk = z.infer<typeof pmMilestoneOkSchema>;
+
+/** 이슈 (`pmIssues`) — 대시보드가 세는 칸만. 등록·수정 화면과 나머지 칸은 5단계 */
+export const PM_ISSUE_SEVS = ['긴급', '높음', '보통', '낮음'] as const;
+export const pmIssueSchema = z.object({
+  id: z.string().min(1),
+  projectId: z.string().min(1),
+  title: z.string().min(1),
+  cat: z.string().default(''),
+  sev: z.enum(PM_ISSUE_SEVS).default('보통'),
+  /** 열림 · … · 해결 */
+  status: z.string().default('열림'),
+  ownerId: z.string().default(''),
+  watchIds: z.array(z.string()).default([]),
+  by: z.string().default(''),
+  /** 발생일 */
+  date: day.default(''),
+  /** 등록일 */
+  at: day.default(''),
+});
+export type PmIssue = z.infer<typeof pmIssueSchema>;
+
+/** 액션 아이템 (`pmActions`) — 대시보드가 세는 칸만. 나머지는 5단계 */
+export const pmActionSchema = z.object({
+  id: z.string().min(1),
+  projectId: z.string().default(''),
+  meetingId: z.string().default(''),
+  text: z.string().min(1),
+  whoId: z.string().default(''),
+  due: day.default(''),
+  done: z.boolean().default(false),
+});
+export type PmAction = z.infer<typeof pmActionSchema>;
 
 /** 업무 (`pmTasks`) — 데모 `WF` 19칸. 업무 목록 양식은 미확정이라 필수 칸을 최소로 (§3.2) */
 export const pmTaskSchema = z.object({

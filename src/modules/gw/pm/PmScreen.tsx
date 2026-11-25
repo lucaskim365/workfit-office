@@ -8,6 +8,7 @@ import { WbsListView } from './views/wbs/WbsListView';
 import { GanttView } from './views/wbs/GanttView';
 import { VarianceView } from './views/wbs/VarianceView';
 import { TicketListView } from './views/ticket/TicketListView';
+import { OverviewView } from './views/dash/OverviewView';
 
 /** 옮긴 보기 → 화면. 없는 보기는 '옮기는 중' 자리 */
 const VIEWS: Record<string, ComponentType> = {
@@ -15,6 +16,7 @@ const VIEWS: Record<string, ComponentType> = {
   'sched/gantt': GanttView,
   'risk/delay': VarianceView,
   'task/ticket': TicketListView,
+  'dash/overview': OverviewView,
 };
 
 /**

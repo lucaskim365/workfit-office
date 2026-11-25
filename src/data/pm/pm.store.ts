@@ -1,6 +1,10 @@
 import { applyProgress, makeBaseline, todayStr } from '@/domain/pm/rules';
-import type { PmBaseline, PmChangeLog, PmProject, PmSubtask, PmTask, PmTaskDone, PmTaskFunctions } from '@/domain/pm/schema';
-import { SEED_VERSION, seedFunctions, seedProjects, seedSubtasks, seedTasks } from './seed';
+import type {
+  PmAction, PmAgreementChange, PmBaseline, PmChangeLog, PmGovLink, PmGovRecord, PmIssue, PmMilestoneOk, PmPlanCheck,
+  PmProject, PmSubtask, PmTask, PmTaskDone, PmTaskFunctions,
+} from '@/domain/pm/schema';
+import type { PmPlan } from '@/domain/pm/site';
+import { SEED_BASE_DATE, SEED_VERSION, seedFunctions, seedPlanFunctions, seedPlans, seedProjects, seedSubtasks, seedTasks } from './seed';
 import { moveTicket, nextTicketNo, syncTicketWithTask, tkOpen, type PmTicket } from '@/domain/pm/ticket';
 
 /**
@@ -22,6 +26,21 @@ export interface PmSnapshot {
   tickets: PmTicket[];
   /** 데이터 출처 표시 (데모 ver) */
   sourceVersion: string;
+  /** 업무 목록 엑셀 갱신일 (데모 base) — 사업 '갱신 n일 전'의 바탕 */
+  baseDate: string;
+  // ── 3단계 (사업 현황) ──
+  /** 사업계획서 내장 데이터 (사업 ID → 계획서) */
+  plans: Record<string, PmPlan>;
+  /** 계획서 기능 목록 (사업 ID → [메뉴, 기능, 구분]) */
+  planFunctions: Record<string, Array<[string, string, string]>>;
+  gov: PmGovRecord[];
+  planChecks: PmPlanCheck[];
+  govLinks: PmGovLink[];
+  agreements: PmAgreementChange[];
+  msOk: PmMilestoneOk[];
+  /** 이슈·액션 — 화면은 5단계, 지금은 대시보드가 세기만 (0건) */
+  issues: PmIssue[];
+  actions: PmAction[];
 }
 
 const clone = <T>(v: T): T => structuredClone(v);
@@ -62,7 +81,10 @@ export function createPmStore(today = todayStr()) {
     .map((p) => ({ p, ts: tasks.filter((t) => t.projectId === p.id) }))
     .filter((x) => x.ts.length)
     .map(({ p, ts }) => makeBaseline(p.id, ts, label, today, ''));
-  const state: PmSnapshot = { projects, tasks, functions, subtasks, baselines, logs: [], done: [], tickets: [], sourceVersion: SEED_VERSION };
+  const state: PmSnapshot = { projects, tasks, functions, subtasks, baselines, logs: [], done: [], tickets: [], sourceVersion: SEED_VERSION,
+    baseDate: SEED_BASE_DATE, plans: seedPlans(), planFunctions: seedPlanFunctions(),
+    gov: [], planChecks: [], govLinks: [], agreements: [], msOk: [], issues: [], actions: [],
+  };
 
   const log = (projectId: string, code: string, kind: PmChangeLog['kind'], text: string, by: string, day: string) => {
     state.logs.push({ id: nid('lg'), projectId, code, kind, text, date: day, by });
@@ -221,6 +243,30 @@ export function createPmStore(today = todayStr()) {
       const x = state.tickets[findTicket(no)];
       const f = x.files.splice(index, 1)[0];
       if (f) x.hist.push({ date: day, by: me, text: `산출물 삭제 — ${f.name}` });
+    },
+
+    // ── 사업 현황 (3단계) ─────────────────────────────
+    /**
+     * 기한 완료 체크 (govChk · planChk · 지난 기한 정리 pastDone). 관리기준 = 완료 기록, 계획서 약속 = 체크.
+     * bulk = 지난 기한 정리로 한꺼번에 (처리한 날 남김)
+     */
+    async checkDeadlines(items: ReadonlyArray<{ projectId: string; kind: 'gov' | 'plan'; id: string }>, date: string, by: string, bulk: boolean, day = todayStr()) {
+      for (const x of items) {
+        const id = `${x.projectId}|${x.id}`;
+        if (x.kind === 'gov') {
+          state.gov = state.gov.filter((r) => r.id !== id);
+          state.gov.push({ id, projectId: x.projectId, itemId: x.id, v: '', date, by, memo: '', fix: '', items: [], bulk: bulk ? day : '' });
+        } else {
+          state.planChecks = state.planChecks.filter((r) => r.id !== id);
+          state.planChecks.push({ id, projectId: x.projectId, dutyId: x.id, date, by, bulk: bulk ? day : '' });
+        }
+      }
+    },
+    /** 완료 체크 풀기 */
+    async uncheckDeadline(projectId: string, kind: 'gov' | 'plan', itemId: string) {
+      const id = `${projectId}|${itemId}`;
+      if (kind === 'gov') state.gov = state.gov.filter((r) => r.id !== id);
+      else state.planChecks = state.planChecks.filter((r) => r.id !== id);
     },
 
     /** 기준선 재설정 (baseSet) */

@@ -377,8 +377,13 @@ export function siteStatus(p: PmProject, ts: readonly PmTask[], liveMap: Readonl
   const pool = ts.filter((t) => !t.excludeFromProgress);
   if (!pool.length) return '준비';
   const act = mdAvgRaw(pool, liveMap);
-  const w = pool.reduce((a, t) => a + mdW(t), 0);
-  const plan = pool.reduce((a, t) => a + mdW(t) * planPct(t, today), 0) / w;
+  // 계획은 단순 평균 (stats 2349: plan = avg(base.map(planP))) — 실적만 MD 가중
+  const plan = pool.reduce((a, t) => a + planPct(t, today), 0) / pool.length;
+  return siteStatusOf(act, plan);
+}
+
+/** 실적·계획 % → 사업 상태 (종료·준비는 부르는 쪽에서) */
+export function siteStatusOf(act: number, plan: number): PmSiteStatus {
   if (act >= 100) return '완료';
   if (plan <= 0) return '착수 전';
   const gap = act - plan;
