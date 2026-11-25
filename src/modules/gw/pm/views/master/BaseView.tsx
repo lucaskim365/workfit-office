@@ -2,7 +2,9 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Button } from '@/shared/ui/Button';
 import { shortName } from '@/domain/pm/rules';
-import type { PmProject } from '@/domain/pm/schema';
+import type { PmOrg, PmProject } from '@/domain/pm/schema';
+import { CodeTab, GenTab, LinkTab, OrgTab, UserTab } from './BaseTabs';
+import { TaskFormModal } from '../wbs/TaskFormModal';
 import { usePmDerived, usePmMutations } from '@/features/pm/usePm';
 import { usePmAccess } from '@/features/pm/usePmAccess';
 import { usePmPeople } from '../../usePmPeople';
@@ -14,7 +16,7 @@ import { ScreenHead } from '../dash/parts';
  * 기준정보 › 사업 · 인력 · 코드 (데모 pBase 3708) — 탭: 사업 · 사업 › 단계 › 업무 · 업무 목록 생성 · 기업 · 기관 · 인력 · 코드.
  * 처음엔 사업 · 업무 목록에서 자동으로 만들고(ensureMaster), 이름을 바꾸면 쓰는 곳도 같이, 쓰는 곳이 있으면 못 지움.
  * 주소 `?site=new` = 사업 등록 창, `?site=P2` = 그 사업 수정 창 (검색 '사업 등록' · 다른 화면 버튼).
- * 고치기는 프로젝트 관리(PMS) 관리 권한(pm.manage)이 있어야 함 (설계 3.4). 6-1 = 사업 탭, 나머지 탭은 6-2.
+ * 고치기는 프로젝트 관리(PMS) 관리 권한(pm.manage)이 있어야 함 (설계 3.4). 인력 = 그룹웨어 사용자(읽기만).
  */
 export type BaseTab = 'site' | 'link' | 'gen' | 'org' | 'user' | 'code';
 const th = 'px-3 py-2 text-left text-[11.5px] font-bold text-ink3 whitespace-nowrap';
@@ -52,6 +54,9 @@ export function BaseView() {
   const [tab, setTab] = useState<BaseTab>('site');
   const [q, setQ] = useState('');
   const [miss, setMiss] = useState('');
+  const [msg, setMsg] = useState<{ t: string; bad?: boolean } | null>(null);
+  const [orgEdit, setOrgEdit] = useState<PmOrg | 'new' | null>(null);
+  const [newTask, setNewTask] = useState<{ projectId: string; stage: string } | null>(null);
   const shortOf = (id: string) => { const p = d?.snap.projects.find((x) => x.id === id); return p ? shortName(p, d!.snap.projects) : id; };
   const modals = usePmModals({ d, people, mut, shortOf });
 
@@ -75,8 +80,11 @@ export function BaseView() {
   const noManage = '사업 · 기준정보를 고치려면 프로젝트 관리(PMS) 관리 권한이 필요합니다';
   const add: Partial<Record<BaseTab, ReactNode>> = {
     site: <Button onClick={() => modals.openSite(null)} disabled={!access.manage} title={access.manage ? undefined : noManage}>+ 사업 등록</Button>,
+    org: <Button onClick={() => setOrgEdit('new')} disabled={!access.manage} title={access.manage ? undefined : noManage}>+ 기업 · 기관 등록</Button>,
   };
   const bq = (...xs: string[]) => { const s = q.trim().toLowerCase(); return !s || xs.join(' ').toLowerCase().includes(s); };
+  const say = (t: string, bad?: boolean) => setMsg({ t, bad });
+  const tp = { d, mut, people, manage: access.manage, shortOf, say, openTask: modals.openTask };
 
   return (
     <div className="space-y-4">
@@ -85,7 +93,7 @@ export function BaseView() {
       </ScreenHead>
       <div className="flex flex-wrap items-center gap-1.5">
         {tabs.map(([k, l, n]) => (
-          <Button key={k} size="sm" variant={tab === k ? 'primary' : 'secondary'} onClick={() => { setTab(k); setQ(''); setMiss(''); }}>{l} {n !== '' && <span className="ml-0.5 opacity-75">{n}</span>}</Button>
+          <Button key={k} size="sm" variant={tab === k ? 'primary' : 'secondary'} onClick={() => { setTab(k); setQ(''); setMiss(''); setMsg(null); }}>{l} {n !== '' && <span className="ml-0.5 opacity-75">{n}</span>}</Button>
         ))}
         <span className="flex-1" />
         {!['code', 'link', 'gen'].includes(tab) && <input className="w-[200px] rounded border border-border bg-panel px-2 py-1 text-[12px]" placeholder="검색" value={q} onChange={(e) => setQ(e.target.value)} aria-label="검색" />}
@@ -93,7 +101,13 @@ export function BaseView() {
       {!access.manage && !access.loading && <p className="text-[11.5px] text-ink3">※ {noManage} — 지금은 보기만 됩니다.</p>}
 
       {tab === 'site' && <SiteTab projects={snap.projects} taskN={(id) => snap.tasks.filter((t) => t.projectId === id).length} money={access.money} manage={access.manage} bq={bq} miss={miss} setMiss={setMiss} shortOf={shortOf} onEdit={(id) => modals.openSite(id)} />}
-      {tab !== 'site' && <section className="rounded-xl border border-border bg-panel shadow-sm"><EmptyHint title="이 탭은 6-2 에서 옮깁니다" hint="기업 · 기관 · 인력 · 코드 · 표준 단계 · 업무 연결 · 업무 목록 생성" /></section>}
+      {msg && <div className={`rounded-lg border px-3 py-2 text-[12px] font-bold ${msg.bad ? 'border-danger/30 bg-danger/10 text-danger' : 'border-ok/30 bg-ok/10 text-ok'}`}>{msg.t}</div>}
+      {tab === 'link' && <LinkTab {...tp} onNewTask={(projectId, stage) => setNewTask({ projectId, stage })} />}
+      {tab === 'gen' && <GenTab {...tp} onGoLink={() => setTab('link')} />}
+      {tab === 'org' && <OrgTab {...tp} q={bq} editing={orgEdit} setEditing={setOrgEdit} />}
+      {tab === 'user' && <UserTab {...tp} q={bq} />}
+      {tab === 'code' && <CodeTab {...tp} />}
+      {newTask && <TaskFormModal mode={{ kind: 'new', projectId: newTask.projectId, stage: newTask.stage }} d={d} people={people} mut={mut} shortOf={shortOf} onClose={() => setNewTask(null)} onSaved={(id) => { setNewTask(null); if (id) setMsg({ t: `업무 ${id.split('|')[1]} 추가` }); }} />}
       <p className="text-[11px] text-ink3">출처: {snap.sourceVersion} · 사업을 등록하거나 업무 목록에 새 이름이 생기면 여기에 자동으로 추가됩니다.</p>
       {modals.node}
     </div>

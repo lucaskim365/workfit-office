@@ -1,9 +1,10 @@
-import { addDays, applyProgress, makeBaseline, todayStr } from '@/domain/pm/rules';
+import { addDays, applyProgress, diffDays as diffDaysLocal, makeBaseline, todayStr } from '@/domain/pm/rules';
 import type {
   PmAction, PmAgreementChange, PmBaseline, PmChangeLog, PmChangeRequest, PmDoc, PmMeeting, PmReport, PmGovLink, PmCode, PmOrg, PmStdTask, PmTemplate, PmGovRecord, PmIssue, PmLater, PmMilestoneOk, PmPlanCheck,
   PmPdfDraft, PmPlanDay, PmPlanItem, PmPlanRep, PmProject, PmSubtask, PmTask, PmTaskDone, PmTaskFunctions, PmUpdRequest, PmWeekCheck,
 } from '@/domain/pm/schema';
 import { wdOf } from '@/domain/pm/plan';
+import { pmTaskSchema } from '@/domain/pm/schema';
 import type { PmPlan } from '@/domain/pm/site';
 import { LOAD_MAX_DEFAULT } from '@/domain/pm/team';
 import { SEED_BASE_DATE, SEED_VERSION, seedFunctions, seedPlanFunctions, seedPlans, seedProjects, seedSubtasks, seedTasks } from './seed';
@@ -12,7 +13,9 @@ import { weekStart } from '@/domain/pm/site';
 import type { PmAiMeas, PmKpiDef, PmKpiMeas } from '@/domain/pm/kpi';
 import { nextCrId } from '@/domain/pm/cr';
 import { nextIssueId } from '@/domain/pm/issue';
-import { baseTplTasks, deriveMaster, makeTasks, stdTplTasks, type Master } from '@/domain/pm/master';
+import { ORG_FIELD, baseTplTasks, deriveMaster, makeTasks, stdTplTasks, type Master } from '@/domain/pm/master';
+import { bizUse, nextCodeIn as nextCode, orgUse, stageUse, statusUse, stdOf } from '@/domain/pm/masterLink';
+
 
 /**
  * PM 저장소 — 1단계는 **메모리 전용** (§5.1: `pm*` 컬렉션이 아직 없어 `VITE_DB_DRIVER=appwrite` 여도 메모리).
@@ -89,6 +92,8 @@ export interface PmSnapshot {
   codes: PmCode[];
   stdTasks: PmStdTask[];
   templates: PmTemplate[];
+  /** 사업 업무 ↔ 표준 세부 업무 직접 연결 (데모 S.tlink, id = 업무 ID) */
+  tlinks: Array<{ id: string; stdId: string }>;
 }
 
 const clone = <T>(v: T): T => structuredClone(v);
@@ -140,7 +145,7 @@ export function createPmStore(today = todayStr()) {
     crs: [],
     meetings: [],
     reports: [],
-    orgs: [], codes: [], stdTasks: [], templates: [],
+    orgs: [], codes: [], stdTasks: [], templates: [], tlinks: [],
   };
 
   /** 기준정보를 사업 · 업무 목록에 맞춤 (ensureMaster) — 새 이름만 더함. 표준 세부 업무는 처음 한 번만 */
@@ -177,6 +182,7 @@ export function createPmStore(today = todayStr()) {
     for (const d of state.docs) if (d.id === oldId) d.id = newId;
     for (const m of state.msOk) if (m.id === oldId) m.id = newId;
     for (const i of state.issues) if (i.taskId === oldId) i.taskId = newId;
+    for (const l of state.tlinks) if (l.id === oldId) l.id = newId;
     // CR 에 연결한 업무도 (데모 wbsKey 는 rekey 대상이 아니지만, 여기선 업무 ID 로 이어 두므로 따라가게)
     for (const c of state.crs) if (c.taskId === oldId) c.taskId = newId;
   };
@@ -668,6 +674,141 @@ export function createPmStore(today = todayStr()) {
       state.baselines = state.baselines.filter((x) => x.id !== id);
       for (const k of ['gov', 'planChecks', 'govLinks', 'agreements', 'docs', 'reports', 'weekChecks'] as const) (state[k] as Array<{ projectId: string }>) = (state[k] as Array<{ projectId: string }>).filter((x) => x.projectId !== id);
       log(id, '-', '삭제', `사업 삭제 — TASK ${n}건`, by, day);
+    },
+
+    // ── 6-2: 기준정보 › 사업 › 단계 › 업무 연결 (link*) · 업무 목록 생성 (gen*) ──
+    /** 표준 업무 직접 연결 · 풀기 (linkSet · linkPick · linkUnset · sugApply) */
+    async setTlinks(pairs: ReadonlyArray<readonly [string, string | null]>) {
+      for (const [id, stdId] of pairs) {
+        state.tlinks = state.tlinks.filter((l) => l.id !== id);
+        if (stdId) state.tlinks.push({ id, stdId });
+      }
+    },
+    /**
+     * 표준 업무 → 이 사업 업무로 넣기 (linkAdd · linkAddAll · genApply) — 날짜 = 협약 시작 + 착수 후 일수(rows 가 주면 그 날짜),
+     * 번호가 겹치면 '#2'. 표준과 바로 연결. 넣은 수
+     */
+    async addStdToProject(projectId: string, rows: ReadonlyArray<{ stdId: string; code?: string; start?: string; end?: string }>, note: string, by: string, day = todayStr()): Promise<number> {
+      const p = state.projects.find((x) => x.id === projectId);
+      if (!p) throw new Error('사업을 찾을 수 없습니다');
+      const had = state.tasks.some((t) => t.projectId === projectId);
+      let n = 0;
+      for (const r of rows) {
+        const x = state.stdTasks.find((s) => s.id === r.stdId);
+        if (!x) continue;
+        const start = r.start ?? addDays(p.start || day, +x.off || 0);
+        const end = r.end ?? addDays(start, (+x.dur || 1) - 1);
+        let code = r.code || x.code || nextCode(state.tasks, projectId, x.stage) || String(state.tasks.filter((t) => t.projectId === projectId).length + 1);
+        const has = (w: string) => state.tasks.some((t) => t.projectId === projectId && t.code === w);
+        if (has(code)) { let i = 2; while (has(`${code}#${i}`)) i++; code = `${code}#${i}`; }
+        const t = pmTaskSchema.parse({ id: `${projectId}|${code}`, projectId, stage: x.stage, code, name: x.name, output: x.output, pmName: p.pmName, start, end, milestone: x.milestone, status: '계획', order: state.tasks.length });
+        state.tasks.push(t);
+        state.tlinks.push({ id: t.id, stdId: x.id });
+        if (rows.length === 1) log(projectId, code, '추가', `표준 세부 TASK 추가 — ${x.name}`, by, day);
+        n++;
+      }
+      if (rows.length > 1 && n) log(projectId, '-', '추가', `${note} — TASK ${n}건`, by, day);
+      if (!had && n && /생성/.test(note)) state.baselines = [...state.baselines.filter((b) => b.id !== projectId), makeBaseline(projectId, state.tasks.filter((t) => t.projectId === projectId), '최초 계획 (기준정보로 생성)', day, by)];
+      return n;
+    },
+    /** 사업 업무를 표준에 추가 (linkToStd) */
+    async stdFromTask(taskId: string) {
+      const t = state.tasks[findTask(taskId)];
+      const p = state.projects.find((x) => x.id === t.projectId);
+      if (!p?.biz) throw new Error('사업구분이 없는 사업입니다');
+      const s0 = p.start || t.start;
+      state.stdTasks.push({ id: nid('t'), biz: p.biz, stage: t.stage, ord: stdOf(state.stdTasks, p.biz, t.stage).length + 1, code: t.code, name: t.name, output: t.output,
+        off: t.start && s0 ? diffDaysLocal(s0, t.start) : 0, dur: t.start && t.end ? diffDaysLocal(t.start, t.end) + 1 : 1, milestone: t.milestone, from: t.projectId });
+    },
+
+    // ── 6-2: 코드 · 표준 세부 업무 · 기업 · 기관 (codeForm · stdForm · orgForm) ──
+    /** 코드 저장 — 이름을 바꾸면 쓰는 곳도 (사업구분 → 사업 · 단계 · 표준, 단계 → 표준 · 그 사업구분 업무 + 변경 이력) → 바뀐 곳 수 */
+    async saveCode(c: PmCode, by: string, day = todayStr()): Promise<number> {
+      const old = state.codes.find((x) => x.id === c.id);
+      if (!old) { const ord = c.group === 'stage' ? state.codes.filter((x) => x.group === 'stage' && x.biz === c.biz).length + 1 : 0; state.codes.push({ ...clone(c), ord, auto: false }); return 0; }
+      const prev = old.name;
+      Object.assign(old, clone(c), { auto: false, ord: old.ord, biz: old.biz || c.biz });
+      if (prev === c.name) return 0;
+      if (c.group === 'biz') {
+        let n = 0;
+        for (const p of state.projects) if (p.biz === prev) { p.biz = c.name; n++; }
+        for (const s of state.codes) if (s.group === 'stage' && s.biz === prev) s.biz = c.name;
+        for (const t of state.stdTasks) if (t.biz === prev) t.biz = c.name;
+        return n;
+      }
+      if (c.group === 'stage') {
+        for (const t of state.stdTasks) if (t.biz === old.biz && t.stage === prev) t.stage = c.name;
+        const ks = new Set(state.projects.filter((p) => p.biz === old.biz).map((p) => p.id));
+        let n = 0;
+        for (const t of state.tasks) if (ks.has(t.projectId) && t.stage === prev) { t.stage = c.name; n++; }
+        for (const k of ks) if (state.tasks.some((t) => t.projectId === k && t.stage === c.name)) log(k, '-', '수정', `단계명 변경 '${prev}' → '${c.name}'`, by, day);
+        return n;
+      }
+      return 0;
+    },
+    /** 코드 지우기 — 쓰는 곳 · 아래 단계 · 표준 업무가 있으면 막음 */
+    async removeCode(id: string) {
+      const c = state.codes.find((x) => x.id === id);
+      if (!c) return;
+      if (c.group === 'status' && (['계획', '진행중', '완료'] as string[]).includes(c.name)) throw new Error('기본 상태는 지울 수 없습니다');
+      const used = c.group === 'biz' ? bizUse(c, state.projects).length : c.group === 'stage' ? stageUse(c, state.tasks, state.projects).length : statusUse(c, state.tasks).length;
+      if (used) throw new Error(`${c.group === 'biz' ? `사업 ${used}개` : `업무 ${used}건`}에서 쓰는 중이라 지울 수 없습니다`);
+      if (c.group === 'biz' && state.codes.some((s) => s.group === 'stage' && s.biz === c.name)) throw new Error('이 사업구분의 단계를 먼저 지우세요');
+      if (c.group === 'stage' && stdOf(state.stdTasks, c.biz, c.name).length) throw new Error(`이 단계의 표준 세부 업무 ${stdOf(state.stdTasks, c.biz, c.name).length}개를 먼저 지우세요`);
+      state.codes = state.codes.filter((x) => x.id !== id);
+      if (c.group === 'stage') state.codes.filter((s) => s.group === 'stage' && s.biz === c.biz).sort((a, b) => a.ord - b.ord).forEach((s, i) => { s.ord = i + 1; });
+    },
+    /** 단계 순서 · 표준 업무 순서 바꾸기 (stageMove · stdMove) — dir = -1 위 · 1 아래 */
+    async moveStage(id: string, dir: -1 | 1) {
+      const c = state.codes.find((x) => x.id === id);
+      if (!c) return;
+      const a = state.codes.filter((s) => s.group === 'stage' && s.biz === c.biz).sort((x, y) => x.ord - y.ord);
+      const i = a.indexOf(c); const j = i + dir;
+      if (j < 0 || j >= a.length) return;
+      [a[i], a[j]] = [a[j], a[i]];
+      a.forEach((s, n) => { s.ord = n + 1; });
+    },
+    async moveStd(id: string, dir: -1 | 1) {
+      const t = state.stdTasks.find((x) => x.id === id);
+      if (!t) return;
+      const a = stdOf(state.stdTasks, t.biz, t.stage);
+      const i = a.indexOf(t); const j = i + dir;
+      if (j < 0 || j >= a.length) return;
+      [a[i], a[j]] = [a[j], a[i]];
+      a.forEach((s, n) => { s.ord = n + 1; });
+    },
+    /** 표준 세부 업무 저장 — 단계를 옮기면 그 단계 맨 뒤, 원래 단계는 순서 다시 매김 */
+    async saveStd(x: PmStdTask) {
+      const old = state.stdTasks.find((s) => s.id === x.id);
+      if (!old) { state.stdTasks.push({ ...clone(x), id: x.id || nid('t'), ord: stdOf(state.stdTasks, x.biz, x.stage).length + 1 }); return; }
+      const prev = old.stage;
+      Object.assign(old, clone(x), { ord: prev === x.stage ? old.ord : stdOf(state.stdTasks, x.biz, x.stage).length + 1 });
+      if (prev !== x.stage) stdOf(state.stdTasks, x.biz, prev).forEach((s, i) => { s.ord = i + 1; });
+    },
+    async removeStd(id: string) {
+      const t = state.stdTasks.find((x) => x.id === id);
+      if (!t) return;
+      state.stdTasks = state.stdTasks.filter((x) => x.id !== id);
+      state.tlinks = state.tlinks.filter((l) => l.stdId !== id);
+      stdOf(state.stdTasks, t.biz, t.stage).forEach((s, i) => { s.ord = i + 1; });
+    },
+    /** 기업 · 기관 저장 — 이름을 바꾸면 쓰는 사업의 그 칸도 (사업에서 쓰면 구분은 못 바꿈) → 바뀐 사업 수 */
+    async saveOrg(o: PmOrg): Promise<number> {
+      const old = state.orgs.find((x) => x.id === o.id);
+      if (!old) { state.orgs.push({ ...clone(o), id: o.id || nid('o'), auto: false }); return 0; }
+      const used = orgUse(old, state.projects);
+      if (used.length && o.type !== old.type) throw new Error('사업에서 쓰는 중이라 구분을 바꿀 수 없습니다');
+      const prev = old.name;
+      Object.assign(old, clone(o), { auto: false });
+      if (prev !== o.name) for (const p of used) p[ORG_FIELD[old.type]] = o.name;
+      return prev !== o.name ? used.length : 0;
+    },
+    async removeOrg(id: string) {
+      const o = state.orgs.find((x) => x.id === id);
+      if (!o) return;
+      const used = orgUse(o, state.projects);
+      if (used.length) throw new Error(`사업 ${used.length}개(${used.map((p) => p.id).join(', ')})에서 쓰는 중이라 지울 수 없습니다`);
+      state.orgs = state.orgs.filter((x) => x.id !== id);
     },
 
     // ── 5단계: 주간 진행률 · 보고서 ──────────────────────

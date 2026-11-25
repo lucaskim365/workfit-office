@@ -105,6 +105,18 @@ export function usePmMutations(me: string, nameOf?: (id: string) => string) {
     addProject: m(({ p, tpl, keepPeople }: { p: PmProject; tpl: string; keepPeople: boolean }) => s.addProject(p, tpl, keepPeople, me)),
     updateProject: m((p: PmProject) => s.updateProject(p, me)),
     removeProject: m((id: string) => s.removeProject(id, me)),
+    // 6-2: 기준정보
+    setTlinks: m((pairs: Array<[string, string | null]>) => s.setTlinks(pairs)),
+    addStdToProject: m(({ projectId, rows, note }: { projectId: string; rows: Array<{ stdId: string; code?: string; start?: string; end?: string }>; note: string }) => s.addStdToProject(projectId, rows, note, me)),
+    stdFromTask: m((taskId: string) => s.stdFromTask(taskId)),
+    saveCode: m((c: Parameters<typeof s.saveCode>[0]) => s.saveCode(c, me)),
+    removeCode: m((id: string) => s.removeCode(id)),
+    moveStage: m(({ id, dir }: { id: string; dir: -1 | 1 }) => s.moveStage(id, dir)),
+    moveStd: m(({ id, dir }: { id: string; dir: -1 | 1 }) => s.moveStd(id, dir)),
+    saveStd: m((x: Parameters<typeof s.saveStd>[0]) => s.saveStd(x)),
+    removeStd: m((id: string) => s.removeStd(id)),
+    saveOrg: m((o: Parameters<typeof s.saveOrg>[0]) => s.saveOrg(o)),
+    removeOrg: m((id: string) => s.removeOrg(id)),
     completeTasks: m(({ ids, note }: { ids: string[]; note: string }) => s.completeTasks(ids, note, me)),
     setTaskDates: m(({ items, note }: { items: Array<{ id: string; start: string; end: string }>; note: string }) => s.setTaskDates(items, note, me)),
     // 5단계: 이슈 (여러 화면에서 등록 창을 열어서 여기 둠)

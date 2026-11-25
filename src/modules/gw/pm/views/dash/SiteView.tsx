@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Button } from '@/shared/ui/Button';
 import { diffDays, monthDay, shortName } from '@/domain/pm/rules';
@@ -49,6 +49,10 @@ export function SiteView() {
   const access = usePmAccess();
 
   // 사업 고르기: URL k → 없거나 틀리면 계획서 있는 첫 사업 → 탈락 아닌 첫 사업 (pSiteSum)
+  // 주소의 사업이 지워졌으면(이 화면에서 삭제) 통합 사업 현황으로
+  const kP = params.get('k');
+  const gone = !!d && !!kP && !d.snap.projects.some((x) => x.id === kP);
+  useEffect(() => { if (gone) setParams(new URLSearchParams({ v: 'dash/overview' }), { replace: true }); }, [gone, setParams]);
   const cur = useMemo<PmSiteRow | null>(() => {
     if (!S) return null;
     const k = params.get('k');

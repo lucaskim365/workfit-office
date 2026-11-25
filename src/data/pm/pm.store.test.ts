@@ -254,3 +254,32 @@ test('6단계 사업 등록 · 수정 · 삭제: 표준 업무 자동 생성(부
   snap = await s.snapshot();
   assert.deepEqual([snap.projects.some((x) => x.id === 'P14'), snap.tasks.some((t) => t.projectId === 'P14')], [false, false]);
 });
+
+test('6-2 기준정보 고치기: 단계명 바꾸면 업무도 · 사업구분 바꾸면 사업 · 단계 · 표준도 · 기업 이름 바꾸면 사업도 · 쓰는 중이면 못 지움 · 표준 업무 → 사업 업무(연결)', async () => {
+  const s = createPmStore('2026-11-25');
+  let snap = await s.snapshot();
+  const st = snap.codes.find((c) => c.group === 'stage' && c.biz === '부처협업형(산업보안)' && c.name === '01 자재관리')!;
+  const n1 = await s.saveCode({ ...st, name: '01 자재' }, 'pm');
+  snap = await s.snapshot();
+  assert.ok(n1 > 0 && snap.tasks.filter((t) => t.stage === '01 자재').length === n1 && !snap.tasks.some((t) => t.projectId === 'P2' && t.stage === '01 자재관리'));
+  assert.ok(snap.stdTasks.some((t) => t.stage === '01 자재'), '표준 업무 단계도 바뀜');
+  const biz = snap.codes.find((c) => c.group === 'biz' && c.name === '정부일반형')!;
+  assert.equal(await s.saveCode({ ...biz, name: '정부일반형(신)' }, 'pm'), 1);
+  assert.equal((await s.snapshot()).projects.find((p) => p.id === 'P9')!.biz, '정부일반형(신)');
+  await assert.rejects(s.removeCode(biz.id), /사업 1개/);
+  await assert.rejects(s.removeCode(snap.codes.find((c) => c.group === 'status' && c.name === '완료')!.id), /기본 상태/);
+  const org = snap.orgs.find((o) => o.name === '경남TP')!;
+  assert.equal(await s.saveOrg({ ...org, name: '경남테크노파크' }), 1);
+  assert.equal((await s.snapshot()).projects.find((p) => p.id === 'P9')!.org, '경남테크노파크');
+  await assert.rejects(s.removeOrg(org.id), /쓰는 중/);
+  // 표준 업무 → 효광(P3) 업무로 + 연결, 번호가 겹치면 #2
+  const std = (await s.snapshot()).stdTasks.find((t) => t.biz === '부처협업형(산업보안)' && t.code === '7.7')!;
+  assert.equal(await s.addStdToProject('P3', [{ stdId: std.id }, { stdId: std.id }], '표준 세부 TASK 추가', 'pm'), 2);
+  snap = await s.snapshot();
+  const added = snap.tasks.filter((t) => t.projectId === 'P3' && t.name === std.name);
+  assert.deepEqual(added.map((t) => [t.code, t.start, t.end]), [['7.7', '2027-03-29', '2027-03-31'], ['7.7#2', '2027-03-29', '2027-03-31']]);
+  assert.ok(snap.tlinks.some((l) => l.id === added[0].id && l.stdId === std.id));
+  await s.moveStd(std.id, -1);
+  await s.removeStd(std.id);
+  assert.ok(!(await s.snapshot()).tlinks.some((l) => l.stdId === std.id), '표준을 지우면 연결도');
+});

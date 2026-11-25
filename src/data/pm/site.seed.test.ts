@@ -157,3 +157,25 @@ test('6단계 기준정보 자동 생성 (데모 ensureMaster · seedTemplates �
   // 사업비 = 계획서 총괄 (데모 applyPlanInfo — 신광 39,822만 · 정부 19,440만 → 원)
   assert.deepEqual(['P2', 'P3', 'P4', 'P9'].map((k) => { const p = projects.find((x) => x.id === k)!; return [p.budget, p.subsidy]; }), [[398220000, 194400000], [398134000, 194400000], [null, null], [392040000, 196020000]]);
 });
+
+test('6-2 사업 › 단계 › 업무 연결 · 추천 · 업무 목록 생성 (데모 linkData · sugList · genPlan 값, 연결 기록 0건)', async () => {
+  const { deriveMaster } = await import('@/domain/pm/master');
+  const { genPlan, linkData, sugList } = await import('@/domain/pm/masterLink');
+  const { m } = deriveMaster({ orgs: [], codes: [], stdTasks: [], templates: [] }, projects, tasks, false);
+  const tl = new Map<string, string>();
+  const P = (k: string) => projects.find((p) => p.id === k)!;
+  // [단계 수, 표준 업무, 사업 업무, 연결, 추천 있는 사업 업무, 고유 단계]
+  const tot = (k: string) => { const L = linkData(P(k), tasks, m.codes, m.stdTasks, tl); return [L.length, ...(['nStd', 'nPrj', 'nLink'] as const).map((f) => L.reduce((a, x) => a + x[f], 0)), L.reduce((a, x) => a + x.rows.filter((r) => !r.std && r.sug).length, 0), L.filter((x) => !x.isStd).length]; };
+  assert.deepEqual(Object.fromEntries(['P2', 'P3', 'P5', 'P6', 'P7', 'P8', 'P4'].map((k) => [k, tot(k)])), {
+    P2: [38, 72, 72, 72, 0, 0], P3: [38, 72, 60, 0, 0, 0], P5: [38, 72, 60, 6, 2, 0], P6: [38, 72, 43, 0, 0, 0], P7: [16, 63, 63, 63, 0, 0], P8: [9, 40, 40, 40, 0, 0], P4: [0, 0, 0, 0, 0, 0],
+  });
+  const data = (p: (typeof projects)[number]) => linkData(p, tasks, m.codes, m.stdTasks, tl);
+  assert.equal(sugList([P('P3')], data).length, 0);
+  const all = sugList(projects, data);
+  assert.deepEqual([all.length, all.filter((x) => x.on).length], [2, 2]);
+  // 업무 목록 생성: [만들 업무, 이미 있음, 사업 업무, 표준 길이, 협약 일수, 배율, 첫 시작, 마지막 끝]
+  const g = (k: string) => { const r = genPlan(P(k), tasks, m.codes, m.stdTasks, tl, { start: '', end: '', fit: true, pre: true, renum: false }, TODAY); return [r.rows.length, r.nHave, r.nPrj, r.span, r.days, Math.round(r.f * 1000) / 1000, r.rows[0]?.start ?? null, r.rows.reduce((a, x) => (x.end > a ? x.end : a), '')]; };
+  assert.deepEqual([g('P3'), g('P5'), g('P9'), g('P2')], [
+    [73, 0, 60, 274, 274, 1, '2026-07-01', '2027-03-31'], [73, 6, 60, 274, 274, 1, '2026-07-01', '2027-03-31'], [0, 0, 0, 1, 273, 273, null, ''], [73, 72, 72, 274, 274, 1, '2026-07-01', '2027-03-31'],
+  ]);
+});
