@@ -228,7 +228,7 @@ export function AfterCard({ c, nameOf, onAsAdd }: { c: SiteCtx; nameOf: (id: str
 }
 
 /** 사업 개요 (pSiteSum info) — 사업 정보 + 계획서 내장 데이터 */
-export function InfoCard({ c, short, onKpi, money, manage, onEdit }: { c: SiteCtx; short: string; onKpi: () => void; money: boolean; manage: boolean; onEdit: () => void }) {
+export function InfoCard({ c, short, onKpi, money, manage, onEdit, onMoney }: { c: SiteCtx; short: string; onKpi: () => void; money: boolean; manage: boolean; onEdit: () => void; onMoney: () => void }) {
   const s = c.p;
   const p = c.plan;
   const kv = (k: ReactNode, v: ReactNode, title?: string) => (
@@ -253,7 +253,7 @@ export function InfoCard({ c, short, onKpi, money, manage, onEdit }: { c: SiteCt
         {p ? (
           <>
             {kv('목표 수준', p.level?.[1] ? <>{p.level[0] || '-'} → <b>{p.level[1]}</b></> : '-')}
-            {money && kv('사업비', planSum(p) ? <>{won(chon(planSum(p)))} <span className="text-[11px] text-ink3">(정부 {won(chon(planSum(p, 2)))})</span></> : s.budget ? <>{won(Math.round(s.budget / 10000))}{s.subsidy ? <span className="text-[11px] text-ink3"> (정부 {won(Math.round(s.subsidy / 10000))})</span> : null}</> : '-')}
+            {money && kv('사업비', <span className="inline-flex flex-wrap items-center gap-1.5"><span>{planSum(p) ? <>{won(chon(planSum(p)))} <span className="text-[11px] text-ink3">(정부 {won(chon(planSum(p, 2)))})</span></> : s.budget ? <>{won(Math.round(s.budget / 10000))}{s.subsidy ? <span className="text-[11px] text-ink3"> (정부 {won(Math.round(s.subsidy / 10000))})</span> : null}</> : '-'}</span><Button size="sm" variant="secondary" onClick={onMoney} title="사업 · 손익에서 이 사업의 매출 · 이익 보기">수익 보기 ›</Button></span>)}
             {kv('구축 목표', (p.goal ?? []).length ? <div>{p.goal!.map((g) => <div key={g}>· {g}</div>)}</div> : '-')}
             {kv('성과지표', (p.kpis ?? []).length ? (
               <div>{p.kpis!.map((x) => <div key={x.name}>· {x.name} <span>{fmtN(x.base)} → <b>{fmtN(x.target)}</b> {x.unit ?? ''}</span></div>)}

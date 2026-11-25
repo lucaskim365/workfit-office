@@ -14,9 +14,9 @@ import { ScreenHead } from '../dash/parts';
 const card = 'rounded-xl border border-border bg-panel shadow-sm';
 const th = 'px-3 py-2 text-left text-[11.5px] font-bold text-ink3 whitespace-nowrap';
 const td = 'px-3 py-2 align-top text-[12px]';
-const inp = 'w-full rounded border border-border bg-panel px-2 py-1.5 text-[12.5px] text-ink';
+export const inp = 'w-full rounded border border-border bg-panel px-2 py-1.5 text-[12.5px] text-ink';
 
-function F({ label, req, full, bad, children }: { label: string; req?: boolean; full?: boolean; bad?: boolean; children: ReactNode }) {
+export function F({ label, req, full, bad, children }: { label: string; req?: boolean; full?: boolean; bad?: boolean; children: ReactNode }) {
   return (
     <label className={`grid gap-1 text-[11.5px] font-bold text-ink2 ${full ? 'sm:col-span-2' : ''}`}>
       <span>{label}{req && <span className="text-danger"> *</span>}</span>
@@ -24,7 +24,7 @@ function F({ label, req, full, bad, children }: { label: string; req?: boolean; 
     </label>
   );
 }
-const Foot = ({ err, onDel, onClose, onSave }: { err: string; onDel?: () => void; onClose: () => void; onSave: () => void }) => (
+export const Foot = ({ err, onDel, onClose, onSave }: { err: string; onDel?: () => void; onClose: () => void; onSave: () => void }) => (
   <div className="flex w-full items-center gap-2">
     {onDel && <Button variant="secondary" onClick={onDel}>삭제</Button>}
     <span className="flex-1 text-right text-[12px] font-bold text-danger" role="alert">{err}</span>
@@ -98,7 +98,7 @@ export function RulesView() {
 }
 
 /** 단가 · 계산 기준 창 (mnCfgForm) */
-function CfgModal({ c, onSave, onClose }: { c: PmMoneyCfg; onSave: (c: PmMoneyCfg) => Promise<void>; onClose: () => void }) {
+export function CfgModal({ c, onSave, onClose }: { c: PmMoneyCfg; onSave: (c: PmMoneyCfg) => Promise<void>; onClose: () => void }) {
   const [v, setV] = useState({ cloudMonthly: String(c.cloudMonthly), cloudMonths: String(c.cloudMonths), kosaName: c.kosaName, kosaMonthly: String(c.kosaMonthly), workH: String(c.workH), revBasis: c.revBasis, laborOn: c.laborOn });
   const [err, setErr] = useState<[string, string] | null>(null);
   const set = <K extends keyof typeof v>(k: K, x: (typeof v)[K]) => setV((p) => ({ ...p, [k]: x }));

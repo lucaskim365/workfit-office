@@ -9,6 +9,8 @@ import { usePmPeople } from '../../usePmPeople';
 import { usePmModals } from '../ticket/usePmModals';
 import { usePmAccess } from '@/features/pm/usePmAccess';
 import { EmptyHint, ProjectTag, Tag } from '../wbs/parts';
+import { man, ovPct } from '@/domain/pm/pl';
+import { pctText } from '@/domain/pm/money';
 import { CardHead, SIGNAL_BG, ScreenHead, SiteStatusTag, StagePill, signalOf } from './parts';
 import { DeadlineListModal, PastModal, TaskListModal } from './DashModals';
 
@@ -126,7 +128,7 @@ export function OverviewView() {
         </CardHead>
         <div>
           {order.map((r) => (
-            <Lane key={r.p.id} r={r} today={today} short={shortOf(r.p.id)}
+            <Lane key={r.p.id} r={r} today={today} short={shortOf(r.p.id)} ov={access.money ? ovPct(d.snap, r.p.id) : null}
               onOpen={() => openSite(r.p.id)}
               onLate={() => setPop({ kind: 'late', k: r.p.id })}
               onBuyer={() => openSite(r.p.id, { side: 'buyer' })}
@@ -220,8 +222,10 @@ export function SiteChips({ rows, all, cur, shortOf, onAll, onPick }: {
 }
 
 /** 관제 보드 한 줄 (lane) */
-function Lane({ r, today, short, onOpen, onLate, onBuyer, onIssue }: {
+function Lane({ r, today, short, ov, onOpen, onLate, onBuyer, onIssue }: {
   r: PmSiteRow;
+  /** 견적 이익률 (ovPct) — 금액을 볼 수 있는 사람(pm.manage)만, 계약 · 견적이 없으면 null */
+  ov: ReturnType<typeof ovPct>;
   today: string;
   short: string;
   onOpen: () => void;
@@ -300,6 +304,7 @@ function Lane({ r, today, short, onOpen, onLate, onBuyer, onIssue }: {
         <div className="flex flex-wrap gap-1">{chips.length ? chips : <span className="inline-flex items-center rounded-full border border-ok/30 bg-ok/10 px-2 py-0.5 text-[11px] font-bold text-ok">✓ 챙길 것 없음</span>}</div>
         <div className="mt-1 text-[11px] text-ink3" title={`최종 갱신 ${b.upd}${b.stale ? ' · 2주 넘게 갱신 없음 — 진척률을 그대로 믿기 어렵습니다' : ''}`}>
           갱신 <span className={b.stale ? 'font-bold text-amber' : ''}>{agoText(b.upd, today)}</span>
+          {ov && ov.pct != null && <span className="ml-2" title={`견적 매출 ${man(ov.rev)}만 · 견적 이익 ${man(ov.prof)}만 (직원 인건비 빠짐)`}>견적 이익률 <b className="text-ink">{pctText(ov.pct)}</b></span>}
         </div>
       </div>
     </div>

@@ -9,7 +9,8 @@ import type { PmPlan } from '@/domain/pm/site';
 import { LOAD_MAX_DEFAULT } from '@/domain/pm/team';
 import { SEED_BASE_DATE, SEED_VERSION, seedFunctions, seedItems, seedPlanFunctions, seedPlans, seedProjects, seedSubtasks, seedTasks } from './seed';
 import { defaultMoneyCfg, pmFundRuleSchema, pmItemSchema, pmMoneyCfgSchema, seedFundRules, type PmFundRule, type PmItem, type PmMoneyCfg } from '@/domain/pm/money';
-import { fundOf, lineToItem, paysFromTerms, pmContractSchema, pmPaySchema, qHist, qLines, qOv, quoteCheck, seedMoney, type FundCtx, type PmContract, type PmFund, type PmPay, type PmQuoteItem, type QuoteDraft } from '@/domain/pm/quote';
+import { fundOf, lineToItem, paysFromTerms, pmContractSchema, pmFundSchema, pmPaySchema, qHist, qLines, qOv, quoteCheck, seedMoney, type FundCtx, type PmContract, type PmFund, type PmPay, type PmQuoteItem, type QuoteDraft } from '@/domain/pm/quote';
+import { pmCostSchema, pmOhSchema, type PmCost, type PmOh } from '@/domain/pm/pl';
 import { moveTicket, nextTicketNo, setTicketProg, syncTicketWithTask, tkOpen, type PmTicket } from '@/domain/pm/ticket';
 import { weekStart } from '@/domain/pm/site';
 import type { PmAiMeas, PmKpiDef, PmKpiMeas } from '@/domain/pm/kpi';
@@ -104,6 +105,9 @@ export interface PmSnapshot {
   contracts: PmContract[];
   funds: PmFund[];
   pays: PmPay[];
+  // ── 6-6: 원가 변경 · 간접비 (데모 S.money.costs · oh) ──
+  costs: PmCost[];
+  oh: PmOh[];
 }
 
 const clone = <T>(v: T): T => structuredClone(v);
@@ -159,6 +163,7 @@ export function createPmStore(today = todayStr()) {
     moneyCfg: defaultMoneyCfg(), fundRules: seedFundRules(), items: seedItems(),
     // 처음 값: 신광 계약 2건 · 효광(제조AI) 최종 견적 (데모 moneySeed · moneySeed2)
     ...seedMoney(projects),
+    costs: [], oh: [],
   };
   /** 사업비 계산에 쓰는 값 (fundOf) */
   const fundCtx = (day: string): FundCtx => ({ projects: state.projects, plans: state.plans, rules: state.fundRules, cfg: state.moneyCfg, contracts: state.contracts, funds: state.funds, today: day });
@@ -688,7 +693,7 @@ export function createPmStore(today = todayStr()) {
       state.templates = state.templates.filter((x) => x.baseId !== id);
       state.baselines = state.baselines.filter((x) => x.id !== id);
       state.funds = state.funds.filter((x) => x.id !== id);
-      for (const k of ['gov', 'planChecks', 'govLinks', 'agreements', 'docs', 'reports', 'weekChecks', 'contracts', 'pays'] as const) (state[k] as Array<{ projectId: string }>) = (state[k] as Array<{ projectId: string }>).filter((x) => x.projectId !== id);
+      for (const k of ['gov', 'planChecks', 'govLinks', 'agreements', 'docs', 'reports', 'weekChecks', 'contracts', 'pays', 'costs'] as const) (state[k] as Array<{ projectId: string }>) = (state[k] as Array<{ projectId: string }>).filter((x) => x.projectId !== id);
       log(id, '-', '삭제', `사업 삭제 — TASK ${n}건`, by, day);
     },
 
@@ -879,6 +884,42 @@ export function createPmStore(today = todayStr()) {
     /** 직접 쓴 줄 → 품목 · 단가 목록에 추가 (qReg1 · qRegister) — 새 품목 ID 들 (줄 순서) */
     async registerItems(lines: readonly PmQuoteItem[], src: string, date: string): Promise<string[]> {
       return lines.map((it) => { const x = lineToItem(it, nid('P'), src, date); state.items.push(x); return x.id; });
+    },
+    // ── 6-6: 사업별 수익 · 손익 ─────────────────────────
+    /** 재원 수정 (mnFundForm) — 사람이 기준을 고른 것으로 (ruleSet) */
+    async saveFund(f: PmFund) {
+      if (!state.projects.some((p) => p.id === f.id)) throw new Error('사업을 찾을 수 없습니다');
+      const x = pmFundSchema.parse({ ...clone(f), ruleSet: true });
+      state.funds = [...state.funds.filter((v) => v.id !== x.id), x];
+    },
+    /** 대금 단계 추가 · 수정 (mnPayForm) — id 가 없으면 새로 */
+    async savePay(p: PmPay): Promise<PmPay> {
+      if (!state.contracts.some((c) => c.id === p.cid && c.projectId === p.projectId)) throw new Error('계약을 찾을 수 없습니다');
+      const x = pmPaySchema.parse({ ...clone(p), id: p.id || nid('D') });
+      const i = state.pays.findIndex((v) => v.id === x.id);
+      if (i < 0) state.pays.push(x); else state.pays[i] = x;
+      return clone(x);
+    },
+    async removePay(id: string) {
+      state.pays = state.pays.filter((x) => x.id !== id);
+    },
+    /** 원가 변경 등록 · 수정 (mnCostForm) */
+    async saveCost(c: PmCost): Promise<PmCost> {
+      if (!state.projects.some((p) => p.id === c.projectId)) throw new Error('사업을 찾을 수 없습니다');
+      const x = pmCostSchema.parse({ ...clone(c), id: c.id || nid('E') });
+      const i = state.costs.findIndex((v) => v.id === x.id);
+      if (i < 0) state.costs.push(x); else state.costs[i] = x;
+      return clone(x);
+    },
+    async removeCost(id: string) {
+      state.costs = state.costs.filter((x) => x.id !== id);
+    },
+    /** 간접비 입력 (mnOhForm) — 금액 · 내용 둘 다 비우면 그 달 기록 지움 · 기본 월 간접비 같이 저장 */
+    async saveOh(m: string, amt: number | null, memo: string, def: number | null, by: string, day = todayStr()) {
+      if (!/^\d{4}-\d{2}$/.test(m)) throw new Error('달은 2026-11처럼 넣어 주세요');
+      state.oh = state.oh.filter((x) => x.id !== m);
+      if (amt != null || memo.trim()) state.oh.push(pmOhSchema.parse({ id: m, amt, memo: memo.trim(), by, at: day }));
+      state.moneyCfg = pmMoneyCfgSchema.parse({ ...state.moneyCfg, ohDefault: def });
     },
     /** 사업비 구성 (fundOf) — 테스트 · 화면 확인용 */
     fundOf(k: string, day = todayStr()) { return fundOf(fundCtx(day), k); },

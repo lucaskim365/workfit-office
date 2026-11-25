@@ -127,6 +127,13 @@ export function usePmMutations(me: string, nameOf?: (id: string) => string) {
     saveQuote: m(({ E, src }: { E: Parameters<typeof s.saveQuote>[0]; src: string }) => s.saveQuote(E, src)),
     removeContract: m((id: string) => s.removeContract(id)),
     registerItems: m(({ lines, src, date }: { lines: Parameters<typeof s.registerItems>[0]; src: string; date: string }) => s.registerItems(lines, src, date)),
+    // 6-6 사업별 수익 · 손익
+    saveFund: m((f: Parameters<typeof s.saveFund>[0]) => s.saveFund(f)),
+    savePay: m((p: Parameters<typeof s.savePay>[0]) => s.savePay(p)),
+    removePay: m((id: string) => s.removePay(id)),
+    saveCost: m((c: Parameters<typeof s.saveCost>[0]) => s.saveCost(c)),
+    removeCost: m((id: string) => s.removeCost(id)),
+    saveOh: m(({ m: mo, amt, memo, def }: { m: string; amt: number | null; memo: string; def: number | null }) => s.saveOh(mo, amt, memo, def, me)),
     completeTasks: m(({ ids, note }: { ids: string[]; note: string }) => s.completeTasks(ids, note, me)),
     setTaskDates: m(({ items, note }: { items: Array<{ id: string; start: string; end: string }>; note: string }) => s.setTaskDates(items, note, me)),
     // 5단계: 이슈 (여러 화면에서 등록 창을 열어서 여기 둠)

@@ -35,6 +35,7 @@ import { BaseView } from './views/master/BaseView';
 import { RulesView } from './views/money/RulesView';
 import { ItemsView } from './views/money/ItemsView';
 import { SiteMoneyView } from './views/money/SiteMoneyView';
+import { PlView } from './views/money/PlView';
 
 /** 옮긴 보기 → 화면. 없는 보기는 '옮기는 중' 자리 */
 const VIEWS: Record<string, ComponentType> = {
@@ -61,6 +62,7 @@ const VIEWS: Record<string, ComponentType> = {
   'master/base': BaseView,
   'master/log': ActLogView,
   'money/site': SiteMoneyView,
+  'money/pl': PlView,
   'money/rules': RulesView,
   'money/items': ItemsView,
 };
