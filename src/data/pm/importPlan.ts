@@ -184,7 +184,6 @@ const LATER: Record<string, { reason: string; when: string }> = {
   templates: { reason: '업무 템플릿 — 예전 통합 WBS 사업을 기준으로 함', when: '6단계 기준정보' },
   gates: { reason: '마일스톤 승인 관문 기준', when: '2단계 티켓(검토 흐름) 또는 4단계' },
   protocols: { reason: '설비 통신 프로토콜 기준표', when: '6단계 기준정보' },
-  budgets: { reason: '사업비 예산 A~G (단위 천원으로 보임)', when: '6단계 사업·손익' },
   money: { reason: '손익: 설정·지원 기준·계약·비용·입금·재원', when: '6단계 사업·손익' },
   planApplied: { reason: '계획서 적용 기록 (날짜만)', when: '3단계 사업별 화면' },
 };
@@ -199,6 +198,9 @@ const DROP: Record<string, string> = {
   tkSeq: '티켓 번호 순번 — 티켓 번호에서 다시 계산', seq: '순번', schema: '형식 번호', stageType: '빈 값', msOk: '빈 값',
   integ: '외부 연동 켜짐 표시(모두 꺼짐)', integCfg: '빈 값', loadMax: '부하 상한 설정값', alloc: '빈 값',
   gateTypes: '관문 종류 이름', wbsImport: '예전 WBS 수정본 — 버림 (4.1)',
+  // 6-7: 데모 사업비 집행 화면(siteCost)은 11/9 메뉴 정리로 없앰(정산은 RCMS) — 쓰는 화면이 없음 (설계 5.6.7)
+  budgets: '사업비 비목 예산 — 계획서 4.1 총괄로 자동 채운 값(11/24 받은 state.json 7개 사업 49칸 모두 같음), 쓰는 화면 없음 (5.6.7)',
+  spends: '사업비 집행 — 쓰는 화면 없음(데모 11/9 없앰, 5.6.7)',
 };
 
 export function buildImportPreview(state: DemoState, users: readonly GwUserLite[], pdf: PdfInput, today: string): ImportPreview {

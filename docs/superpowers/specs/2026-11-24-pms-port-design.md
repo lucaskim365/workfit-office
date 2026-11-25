@@ -133,7 +133,7 @@ src/modules/gw/pm/  화면 (React + Tailwind, shared/ui 공용 부품)
 | `pmIssues` / `pmChangeRequests` | 이슈 · CR | projectId · 내용 · 상태 · 담당 |
 | `pmMeetings` / `pmActions` | 회의록 · 액션 아이템 | |
 | `pmDeliverables` / `pmChecks` | 산출물 · 점검·관리기준 체크 | |
-| `pmSpends` · `pmKpiMeasures` | 사업비 집행 · KPI 측정 | |
+| ~~`pmSpends`~~ · `pmKpiMeasures` | ~~사업비 집행~~(안 만듦 — 데모에서 없앤 화면, 5.6.7) · KPI 측정 | |
 | `pmBaselines` | 일정 기준선 | |
 | `pmActivityLogs` | 활동 기록 | |
 | 파일 | 계획서 PDF·첨부 | 그룹웨어 Storage(이미 있는 어댑터) |
@@ -417,7 +417,7 @@ src/modules/gw/pm/  화면 (React + Tailwind, shared/ui 공용 부품)
 | 3 ✅ | (5.3: 3-1~3-7 ✅, 3-7 = 8a0a2c3f) 대시보드: 통합 사업 현황(전체·사업별) · 팀 현황(오늘·4주·투입 시간) · 내 업무 · **업무계획(데모 그대로, PM 안에서 따로 — 11/25)** · 🔔 PM 안 알림 목록 | 사업별 카드 진척 = 1단계 숫자 |
 | 4 ✅ | (5.4: 4-1 · 4-2 · 4-3 ✅) 점검·요구사항·산출물 | 알림 · 검색에서 그 건 창이 바로 열림 (점검 doc/insp · CR crReview · crEdit · 산출물 doc/audit) |
 | 5 ✅ | (5.5: 5-1 · 5-2 · 5-3 ✅) 이슈·회의·보고 | 알림 · 검색에서 그 건 창이 바로 열림 (이슈 issueEdit · 액션 actEdit · 회의록 mtOpen · 주간 진행률 wcGo · wcAllGo) |
-| 6 | (5.6: 6-1 · 6-2 · 6-3 ✅) 사업·손익 · 기준정보 (금액 화면은 `pm.manage` 만) | 알림 · 검색에서 그 화면 · 창이 바로 열림 (사업 등록 siteNew · 손익 money/*) |
+| 6 ✅ | (5.6: 6-1 ~ 6-6 ✅, 6-7 = 데모에서 없앤 화면이라 안 옮김) 사업·손익 · 기준정보 (금액 화면은 `pm.manage` 만) | 알림 · 검색에서 그 화면 · 창이 바로 열림 (사업 등록 siteNew · 손익 money/*) |
 | 7 | (허락) 개발 DB에 컬렉션 만들기·넣기 → 화면 확인. 옮길 때 FP 세부 기능에서 미리 넣은 세부 작업(fromFp)의 넣은 날(createdDate)을 옮긴 날 하나로 고정 — 메모리 저장소처럼 띄울 때마다 오늘이 되지 않게 (5.6.3, 11/25 팀장) · state.json 세부 작업의 완료 체크한 사람 `ddBy` → `doneBy`(사용자 ID, importPlan 에 넣어 둠 — 6-3 검수) · state.json `money.cfg · rules · items` → moneyCfg · fundRules · items (상한 만원 → 원, 5.6.4) | 미리보기 보고서 건수 = 화면 건수 |
 | 8 | **넘어가는 날**(4.2) → (허락) 운영 DB → 타일 켜기 (`gw-screens.ts` 의 `'task'`, 공용 파일) · `main` 합치기(사용자 지시) | |
 
@@ -838,7 +838,7 @@ src/modules/gw/pm/  화면 (React + Tailwind, shared/ui 공용 부품)
 | 6-4 | 지원 기준 · 단가 (money/rules) · 품목 · 단가 (money/items) | ✅ (5.6.4) |
 | 6-5 | 견적 작성 · 엑셀 내보내기 (pQuote) · 계약 · 재원 · 대금 데이터 · 사업별 수익 입구 | ✅ (5.6.5) |
 | 6-6 | 사업별 수익 (money/site) · 월별 · 연간 손익 (money/pl) · 입금 · 비용 · 설정 + 관제 줄 견적 이익률 · [수익 보기] | ✅ (5.6.6) |
-| 6-7 | 사업비 집행 · 비목 예산 (siteCost · budget · spend) | |
+| 6-7 | 사업비 집행 · 비목 예산 (siteCost · budget · spend) | — 안 옮김: 데모에서 없앤 화면 (5.6.7) |
 
 ### 5.6.1 6-1 결과 — 권한 · 기준정보 자동 생성 · 사업 등록 / 수정 (11/25)
 **만든 것**
@@ -946,6 +946,14 @@ src/modules/gw/pm/  화면 (React + Tailwind, shared/ui 공용 부품)
 - 월별 막대 · 식 막대는 그룹웨어 색(teal · navy)으로, 같은 값 · 같은 높이 비율.
 - 그대로 둔 것(데모와 같음): 대금 · 원가 변경 삭제에 확인 창 없음(데모 formDel) · 간접비 창은 연 달(이번 달) 값만 불러오고 달 칸을 바꿔도 다시 안 불러옴 · 재원 수정에서 지원 기준을 '선택 안 함'으로 저장하면 자동 기준도 안 씀(계획서 정부지원금만 남음) · 기본 월 간접비는 이번 달까지만.
 
+### 5.6.7 6-7 — 사업비 집행 · 비목 예산: 안 옮김 (11/25)
+**데모에서 없앤 화면이라 옮기지 않는다** (3-7 사업 종료 · 회고, 6-2 템플릿, 6-6 mnContractForm 과 같은 기준 — 데모에서 누를 곳이 없는 코드).
+- 근거 (데모 코드 직접 확인): 화면 함수 `siteCost`(5571)를 부르는 곳이 없음 — 메뉴 `MENU_P1`(2623)에도, 메뉴 밖 화면 `HIDDEN_PARENT`(2642)에도, 다른 버튼에도 없음. 데모 주석 4678 "**사업비 집행 화면은 11/9 메뉴 정리로 없앰 — 정부 정산은 RCMS에서**". 비목 예산 창 `budgetForm`(3265) · 집행 등록 창 `spendForm`(3282) · 처리기 `costRow · budgetEdit · spendNew · spendEdit`(5766~5769) · 계획서 4.1 총괄 원문 카드 `planBudgetCard`(7985) · 계산 `costOf`(2197)는 모두 그 화면 안에서만 불림.
+- 데모에 남아 있는 것: ① 계획서로 비목 예산 자동 채우기(`applyPlanInfo` 6909 → `S.budgets`) — 읽는 화면이 없음 ② 데이터 관리 화면(pData 4374)의 '사업비 집행' 건수 — 1차 제외 화면(6장) ③ 사업 삭제 때 budgets · spends 같이 지움 — 기록이 없으니 할 일 없음.
+- 데이터: 11/24 받은 `state.json` 의 `budgets` 7개 사업 49칸이 계획서 4.1 총괄(천원 → 만원, `chon`)로 자동 채운 값과 **모두 같음** (사람이 입력한 값 0, `planApplied` 7개 모두 10/23) · `spends` 0건 → 옮길 사람 기록 없음. 계획서 총괄 금액은 내장 `plan-data` 에 그대로 있고 사업 개요 '사업비' · 재원 탭(6-6)이 이미 씀.
+- 바꾼 것: `data/pm/importPlan.ts` 미리보기 분류 — `budgets` 를 '뒤 단계'에서 '옮기지 않음'(이유 위)으로, `spends` 도 '옮기지 않음'. 3.2 표 `pmSpends` 안 만듦.
+- 2차 후보: 정부 사업비 집행을 PM 안에서 관리할지 (데모는 RCMS 로 넘김, 6.1).
+
 ## 6. 1차 범위 밖 (나중에)
 - 산출물 자동 생성(`/api/job`·`/api/td3`, 별도 리눅스 서버) · MES 화면 캡처 · 데이터 백업/초기화 화면 (11/24 사용자 확정: 1차 제외)
 - **그룹웨어 다른 기능과의 연결 전부 (11/25 결정, 3.5 = 2차 설계)**: 업무계획·캘린더 반영·불러오기, 메신저·푸시 알림, 휴가·외근·공휴일 불러오기, 회의 흐름 순서 변경 등. 1차 🔔 는 PM 화면 안 목록만 (3단계)
@@ -960,6 +968,8 @@ src/modules/gw/pm/  화면 (React + Tailwind, shared/ui 공용 부품)
 - 활동 기록에서 사람이 넣지 않은 줄(FP 세부 기능에서 미리 넣은 세부 작업 fromFp 432건)을 뺄지 — 1차는 데모 그대로 보임 (11/25 팀장, 5.6.3).
 - 견적 작성에서 [+ 기준정보 추가]로 등록한 품목을 그 견적 저장 때 지난 견적에 한 번 더 쌓음(같은 견적 2줄) · 같은 날 지난 견적이 있으면 기본 단가가 안 바뀜 — 1차는 데모 그대로 (6-5, 5.6.5 확인 필요).
 - 매입단가 '확인 필요'인 품목을 견적에 넣으면 줄 매입이 0 으로 들어가고, 그대로 저장하면 그 견적이 가장 최근일 때 품목 목록 매입단가가 0 으로 바뀌어 '확인 필요'가 사라지고 이익률 100% 로 보임 (화면 확인: 키오스크 PC '3,000,000 · 확인 필요 · -' → 견적 저장 뒤 '3,000,000 · 0 · 100%'). 데모 qHist `if (!it.pass) ci.cost = qNum(it.cost)` 와 같음. 품목 89개 중 66개가 확인 필요라 자주 생길 일 — 1차는 데모 그대로 (11/25 팀장 6-5 검수).
+- 대금 단계 · 원가 변경 [삭제]에 확인 창이 없음 (데모 formDel 그대로, 5.6.6) — 누르면 바로 지워짐 (11/25 팀장 6-6 검수).
+- 사업비 집행 · 비목 예산 화면 — 데모가 11/9 에 없앰(정산은 RCMS), 1차 안 옮김 (5.6.7). PM 안에서 집행을 관리할지.
 
 ---
 
@@ -1052,11 +1062,11 @@ src/modules/gw/pm/  화면 (React + Tailwind, shared/ui 공용 부품)
 - [x] 진행률 갱신 요청 (rptNote·rptReq · updReq · wcK · wcWho · wcSame · wcAllSame · wcNote · wcReq · wcRpt) · 주간 보고서 (rptWeek·rptTeamOpen · print) · wcGo · wcAllGo — 5-3 (5.5.3)
 
 **6단계 — 사업·손익·기준정보** (금액은 `pm.manage` 만)
-- [~] 사업별 수익·월별·연간 손익·입금·비용·설정 (mnTab·mnOh·mnSite·mnYear·mnFund·mnPayNew·mnCostNew·mnCfg) — 단가 · 계산 기준(mnCfg) ✅ 6-4 (5.6.4), 나머지 6-6
-- [ ] 사업비 집행·비목 예산 (costRow·costSite·budgetEdit·spendNew·spendEdit)
+- [x] 사업별 수익·월별·연간 손익·입금·비용·설정 (mnTab·mnOh·mnSite·mnYear·mnFund·mnPayNew·mnCostNew·mnCfg) — 단가 · 계산 기준(mnCfg) ✅ 6-4 (5.6.4), 나머지 ✅ 6-6 (5.6.6). mnContractForm 은 데모에서 누를 곳 없는 코드 → 안 옮김
+- [—] 사업비 집행·비목 예산 (costRow·costSite·budgetEdit·spendNew·spendEdit) — **데모에서 없앤 화면(11/9, 정산은 RCMS)**, 진입 경로 없음 → 안 옮김 (5.6.7)
 - [x] 견적 작성·엑셀 내보내기 (qNew·qAdd·qDel·qDelC · qPick · qReg1 · qRegister · qHist · qExport) · 품목·단가 89건 (ciNew · ciEdit) — 품목 · 단가 ✅ 6-4 (5.6.4), 견적 ✅ 6-5 (5.6.5)
 - [x] 지원 기준·단가 (mnRuleNew · mnRuleEdit) — 6-4 (5.6.4)
 - [x] 기준정보: 사업·기업/기관·인력·코드·미입력 표시 (siteNew·siteEdit·orgNew·orgEdit·orgType·codeNew·codeEdit·baseTab·baseMiss) — 이름 바꾸면 쓰는 곳도 같이 — 6-1 · 6-2. userNew·userEdit 은 안 옮김(인력 = 그룹웨어 사용자, 읽기만 — 5.6.2)
 - [x] 기준정보 '사업 › 단계 › TASK' · '코드' 탭의 표준 단계 · 표준 세부 TASK · 연결 (link*·std*·stageSel·stageMove · sug* · gen*) — 6-2 (5.6.2)
 - [—] 업무 템플릿 (tpl·tplNew·tplEdit·applyTplOpen) — 데모에서 없앤 화면(11/9, 부르는 곳 없음) → 안 옮김 (5.6.2)
-- [ ] 활동 기록 (master/log)
+- [x] 활동 기록 (master/log) — 6-3 (5.6.3)
