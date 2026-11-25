@@ -72,6 +72,9 @@ test('처리할 일: 내 티켓 · 승인 대기(티켓 검토 · 마일스톤) 
   // 승인하면 빠짐
   const ok = myInbox('pm', { ...X(ts), tickets: [], msOk: new Map([['P9|m', { id: 'P9|m', date: TODAY, by: 'pm' }]]), pmOf: (p) => [p.pmUserId], issues: [], actions: [] });
   assert.equal(ok.appr.length, 0);
+  // 탈락 사업의 마일스톤은 승인 대기에 안 뜸 (데모 liveSites)
+  const drop = myInbox('pm', { ...X(ts.map((t) => ({ ...t, projectId: 'P5', id: `P5|${t.code}` }))), projects: [pmProjectSchema.parse({ id: 'P5', company: '탈락', bidRes: '탈락', pmUserId: 'pm' })], tickets: [], msOk: new Map(), pmOf: (p) => [p.pmUserId], issues: [], actions: [] });
+  assert.equal(drop.appr.length, 0);
 });
 
 test('내가 참여하는 사업 · 다음 마일스톤', () => {
@@ -117,4 +120,26 @@ test('진행률 갱신 묶음: 5건씩, 다음 묶음은 처음 보는 것 먼�
   const b = updBatch(L, { list: a.P.list, i: 1 });
   assert.deepEqual(b.B.map((id) => id.split('|')[1]), ['t5', 't6', 't0', 't1', 't2']);
   assert.equal(b.prevLeft, 2, '앞 묶음에서 못한 t3 · t4');
+});
+
+test('진행률 갱신 화면 흐름: 그릴 때마다 묶음을 기억 → 갱신한 줄이 남고 1/2 → 2/2, 다음 · 이전 5건', () => {
+  const ts = Array.from({ length: 7 }, (_, i) => T({ code: `t${i}`, end: `2026-11-1${i}` }));
+  let L: UpdItem[] = ts.map((t) => ({ t, why: 'late', done: false, last: '', who: 'me' }));
+  // 화면(UpdCard)은 그릴 때 돌려받은 P 를 상태에 넣는다
+  let P = { list: [] as string[][], i: 0 };
+  const draw = () => { const r = updBatch(L, P); P = r.P; return { ...r, bDone: r.B.filter((id) => L.find((x) => x.t.id === id)!.done).length }; };
+  const first = draw().B;
+  const mark = (id: string) => { L = L.map((x) => (x.t.id === id ? { ...x, done: true } : x)); };
+  mark(first[0]);
+  let r = draw();
+  assert.deepEqual(r.B, first, '갱신한 줄도 그 묶음에 그대로');
+  assert.equal(r.bDone, 1);
+  first.slice(1).forEach(mark);
+  r = draw();
+  assert.deepEqual([r.B.length, r.bDone, r.rest], [5, 5, 2], '다 해도 줄은 그대로, 남은 2건은 [다음 5건]으로');
+  P = { list: P.list, i: 1 };
+  r = draw();
+  assert.deepEqual(r.B.map((id) => id.split('|')[1]), ['t5', 't6']);
+  P = { list: P.list, i: 0 };
+  assert.deepEqual(draw().B, first, '[← 이전 5건]으로 돌아가도 같은 묶음');
 });

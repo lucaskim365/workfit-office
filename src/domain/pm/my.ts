@@ -1,6 +1,6 @@
 import { addDays, diffDays, isDone, liveOf, prioOf, taskPeople, type Live } from './rules';
 import type { PmAction, PmChangeLog, PmIssue, PmMilestoneOk, PmProject, PmTask, PmWeekCheck } from './schema';
-import { isPre, weekStart } from './site';
+import { isDrop, isPre, weekStart } from './site';
 import { workItemOf } from './team';
 import { tkOpen, tkReviewPending, type PmTicket } from './ticket';
 
@@ -123,7 +123,8 @@ export function myInbox(me: string, X: InboxInputs): Inbox {
   const tickets = X.tickets.filter((x) => tkOpen(x) && x.assigneeId === me);
   const rev = X.tickets.filter((x) => x.status === '검토요청' && tkRevWho(x) === me);
   // 마일스톤: 내가 PM인 사업 · 협약 이전 아님 · 완료 · 아직 승인 안 됨 · 같은 단계 앞선 업무가 다 끝남
-  const mine = new Set(X.projects.filter((p) => X.pmOf(p).includes(me)).map((p) => p.id));
+  // 탈락 사업은 빼고 (데모 liveSites)
+  const mine = new Set(X.projects.filter((p) => !isDrop(p) && X.pmOf(p).includes(me)).map((p) => p.id));
   const ms = X.tasks
     .filter((t) => mine.has(t.projectId) && t.milestone && !isPre(t) && isDone(L(t)) && !X.msOk.has(t.id) && msReqOf(X.tasks, t).every((x) => isDone(L(x))))
     .sort((a, b) => (a.end < b.end ? -1 : 1));

@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Button } from '@/shared/ui/Button';
 import { Modal } from '@/shared/ui/Modal';
@@ -107,7 +107,7 @@ export function MyView() {
     say(`'${t.name}' 완료 — 실적 100%. 잘못 눌렀으면 업무 창의 [완료 취소]로 되돌릴 수 있습니다`);
   };
   const toggleLater = (t: PmTask, on: boolean) => smut.setLater.mutate({ taskId: t.id, on });
-  const openBoard = (k: string) => { setBoard(k); setPg(1); setPgL(1); window.scrollTo(0, 0); };
+  const openBoard = (k: string) => { setMsg(null); setBoard(k); setPg(1); setPgL(1); window.scrollTo(0, 0); };
   const goView = (v: string) => { const n = new URLSearchParams(); n.set('v', v); setParams(n); };
 
   const msgBar = msg && (
@@ -187,7 +187,7 @@ export function MyView() {
       <div className="space-y-3">
         {head}
         <div className={`${sec} flex flex-wrap items-center gap-2.5 px-4 py-2.5`}>
-          <Button size="sm" onClick={() => setBoard(null)}>← 내 업무 홈</Button>
+          <Button size="sm" onClick={() => { setMsg(null); setBoard(null); }}>← 내 업무 홈</Button>
           <b className="text-[13px] text-ink">{board === 'all' ? '전체 사업' : shortOf(board)} 업무</b>
           <span className="text-[11.5px] text-ink3">지금 할 일 {P.total} · 나중에 할 일 {PL.total}</span>
         </div>
@@ -488,6 +488,11 @@ function UpdCard({ list, d, P, setP, U, shortOf, nameOf, req, onOpenTask, onPct,
   onOpenTask: (id: string) => void; onPct: (t: PmTask, n: number) => void; onSame: (t: PmTask) => void; onBad: () => void;
 }) {
   const today = d.today;
+  // 이번 묶음을 기억해 둔다 (데모 P.list[P.i] = B) — 안 그러면 갱신한 줄이 '✓ 갱신함'으로 남지 않고 남은 것에서 다시 뽑힘
+  const r = updBatch(list, P);
+  const curKey = (r.P.list[r.P.i] ?? []).join(',');
+  const savedKey = (P.list[P.i] ?? []).join(',');
+  useEffect(() => { if (list.length && curKey !== savedKey) setP(r.P); });
   const head = (
     <span className="text-[11px] text-ink3">마감이 지났거나 · 이번 주 마감이거나 · 2주 넘게 갱신 안 한 내 업무를 일주일에 한 번 5건씩 묻습니다</span>
   );
@@ -499,7 +504,6 @@ function UpdCard({ list, d, P, setP, U, shortOf, nameOf, req, onOpenTask, onPct,
       </section>
     );
   }
-  const r = updBatch(list, P);
   const byId = new Map(list.map((x) => [x.t.id, x]));
   const left = list.filter((x) => !x.done).sort(updSort);
   const doneN = list.length - left.length;
