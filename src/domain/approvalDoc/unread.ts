@@ -12,8 +12,8 @@ import type { ApprovalPostReadShare } from '@/domain/approvalPostRead/schema';
 export const UNREAD_TRACKED_BOXES = ['대기', '참조', '수신', '반려', '후열'] as const satisfies readonly ApprovalBox[];
 export type UnreadTrackedBox = (typeof UNREAD_TRACKED_BOXES)[number];
 
-/** 처음 적용할 때 기존 문서를 읽음으로 간주하는 결재함(반려는 브라우저에 남은 열람 기록만 옮긴다) */
-const BASELINE_BOXES = ['대기', '참조', '수신'] as const satisfies readonly ApprovalBox[];
+/** 처음 적용할 때 기존 문서를 읽음으로 간주하는 결재함 — 반려함도 기존 문서는 빨간 동그라미 없이 시작한다(2026-11-25) */
+const BASELINE_BOXES = ['대기', '참조', '수신', '반려'] as const satisfies readonly ApprovalBox[];
 
 export function isDocRead(
   doc: ApprovalDoc,
@@ -43,15 +43,19 @@ export function unreadByBox(
 }
 
 /**
- * 처음 적용할 때 읽음으로 남길 문서 — 대기·참조·수신함의 기존 문서(이미 알고 있다고 본다)와
- * 브라우저에 남아 있던 반려 문서 열람 기록. 이게 없으면 배포 직후 모든 기존 문서가 안읽음으로 뜬다.
+ * 처음 적용할 때 읽음으로 남길 문서 — 대기·참조·수신·반려함의 기존 문서(이미 알고 있다고 본다).
+ * 이게 없으면 배포 직후 모든 기존 문서가 안읽음으로 뜬다.
  */
-export function baselineReadDocIds(
-  byBox: Record<ApprovalBox, ApprovalDoc[]>,
-  legacyReadRejectedIds: ReadonlySet<string>,
-): string[] {
+export function baselineReadDocIds(byBox: Record<ApprovalBox, ApprovalDoc[]>): string[] {
   const ids = new Set<string>();
   for (const box of BASELINE_BOXES) for (const d of byBox[box] ?? []) ids.add(d.id);
-  for (const d of byBox['반려'] ?? []) if (legacyReadRejectedIds.has(d.id)) ids.add(d.id);
   return [...ids];
+}
+
+/**
+ * 반려함 기준선으로 읽음 처리할 문서 — 기준선을 이미 남긴 사람이 반려함을 처음 조회할 때의 반려함 기존 문서.
+ * 예전에는 반려함은 브라우저 열람 기록만 옮겨서, 열어본 적 없는 예전 반려 문서가 전부 빨간 동그라미로 떴다.
+ */
+export function rejectBaselineDocIds(byBox: Record<ApprovalBox, ApprovalDoc[]>): string[] {
+  return [...new Set((byBox['반려'] ?? []).map((d) => d.id))];
 }
