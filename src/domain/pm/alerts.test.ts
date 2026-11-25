@@ -24,6 +24,7 @@ const txt = (me: string, x: AlertInputs) => myAlerts(me, x).map((a) => `${a.lv}|
 test('지연 업무 · 남이 배정한 세부 작업 · 맡긴 일 완료', () => {
   const ts = [T({ code: 'a', assigneeIds: ['me'], start: '2026-11-01', end: '2026-11-20' })];
   const subs = [
+    pmSubtaskSchema.parse({ id: 's0', taskId: 'P9|a', text: '예정일 없음', assigneeId: 'me', createdBy: 'u' }),
     pmSubtaskSchema.parse({ id: 's1', taskId: 'P9|a', text: '화면 시안', assigneeId: 'me', createdBy: 'u', due: '2026-11-24' }),
     pmSubtaskSchema.parse({ id: 's2', taskId: 'P9|a', text: '내가 쓴 것', assigneeId: 'me', createdBy: 'me' }),
     pmSubtaskSchema.parse({ id: 's3', taskId: 'P9|a', text: '맡긴 일', assigneeId: 'u', createdBy: 'me', done: true, doneDate: '2026-11-24' }),
@@ -31,6 +32,7 @@ test('지연 업무 · 남이 배정한 세부 작업 · 맡긴 일 완료', () 
   assert.deepEqual(txt('me', X({ tasks: ts, subtasks: subs })), [
     "bad|내가 담당한 지연 TASK 1건 — 내 업무 › [전체 업무] '지금 할 일' (지연 우선)|dash/my",
     'bad|새로 배정된 일 · 테스트 화면 시안 (김철수 배정 · 11/24)|dash/plan',
+    'warn|새로 배정된 일 · 테스트 예정일 없음 (김철수 배정 · 예정일 없음)|dash/plan',
     'ok|맡긴 일 완료 · 테스트 맡긴 일 (김철수 · 11/24)|dash/plan',
   ]);
 });

@@ -36,7 +36,8 @@ export function SiteView() {
   const mut = usePmMutations(people.me, people.nameOf);
   const smut = usePmSiteMutations(people.me);
   const [params, setParams] = useSearchParams();
-  const [pop, setPop] = useState<Pop | null>(null);
+  // 🔔 '보완 조치' 알림에서 오면 ?fix=점검 항목 → 지적 사항 창 (한 번만 읽음, 데모 govItemsGo)
+  const [pop, setPop] = useState<Pop | null>(() => (params.get('fix') ? { kind: 'fix', id: params.get('fix')! } : null));
   const [dlAll, setDlAll] = useState(false);
   const shortOf = (id: string) => { const p = d?.snap.projects.find((x) => x.id === id); return p ? shortName(p, d!.snap.projects) : id; };
   const modals = usePmModals({ d, people, mut, shortOf });

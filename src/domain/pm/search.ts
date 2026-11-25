@@ -65,7 +65,7 @@ export function gsFind(q0: string, X: SearchInputs): SearchHit[] {
 
   for (const [l, kw, go] of GS_DO) if (hit(l) || hit(kw) || q.split(/\s+/).every((w) => `${l} ${kw}`.toLowerCase().includes(w))) push('하는 일', l, '바로 가기', go, 6);
   for (const [id, nm, menu] of X.screens) if (hit(nm) || hit(menu)) push('화면', nm, menu, v(id), 6);
-  for (const p of X.projects) if (hit(p.company) || hit(X.shortOf(p.id)) || hit(p.biz)) push('사업', `${X.shortOf(p.id)} · ${p.company}`, `${p.biz || ''} · PM ${p.pmName.split(/[\s/,]+/)[0] || X.nameOf(p.pmUserId) || '-'}`, v('dash/site', { k: p.id }), 6);
+  for (const p of X.projects) if (hit(p.company) || hit(X.shortOf(p.id)) || hit(p.bizNo) || hit(p.biz)) push('사업', `${X.shortOf(p.id)} · ${p.company}`, `${p.biz || ''} · PM ${p.pmName.split(/[\s/,]+/)[0] || X.nameOf(p.pmUserId) || '-'}`, v('dash/site', { k: p.id }), 6);
   // 업무: 이름 · 산출물 · 번호 · 묶음에 맞는 것을 안 끝난 것 · 마감 가까운 순으로. 8건 넘으면 '모두 보기' 한 줄
   const tHit = X.tasks.filter((t) => !/^\[FP\]/.test(t.name) && (hit(t.name) || hit(t.output) || hit(t.code) || hit(t.group)))
     .sort((a, b) => (Number(fin(a)) - Number(fin(b))) || ((a.end || '9') < (b.end || '9') ? -1 : (a.end || '9') > (b.end || '9') ? 1 : 0));

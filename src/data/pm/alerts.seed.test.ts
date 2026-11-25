@@ -47,6 +47,7 @@ const find = (q: string) => gsFind(q, { today: TODAY, screens, projects, tasks, 
 test('검색: 데모 gsFind 와 같은 결과', () => {
   assert.deepEqual(find('신광'), ['사업|신광 · 신광테크|부처협업형(산업보안) · PM 박명규', '업무 목록|신광 업무 목록 보기|안 끝난 업무 57건']);
   assert.deepEqual(find('일정'), ['하는 일|TASK 추가 · 일정 수정|바로 가기', '하는 일|원가 변경 · 대금 일정|바로 가기', '화면|일정 변동|업무 목록 · 티켓']);
+  assert.deepEqual(find('SF26178367'), ['사업|신광 · 신광테크|부처협업형(산업보안) · PM 박명규'], '과제번호로 사업 찾기 (데모 hit(s.no))');
   assert.deepEqual(find('  '), []);
 });
 

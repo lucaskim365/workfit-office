@@ -72,7 +72,9 @@ export function myAlerts(me: string, X: AlertInputs): PmAlert[] {
 
   // 남이 나에게 배정한 세부 작업 (안 끝난 것)
   const taskOf = new Map(X.tasks.map((t) => [t.id, t]));
-  for (const s of X.subtasks) {
+  // 예정일 가까운 순, 없으면 뒤 (데모 mySubs)
+  const subOrd = [...X.subtasks].sort((a, b) => ((a.due || '9') < (b.due || '9') ? -1 : (a.due || '9') > (b.due || '9') ? 1 : 0));
+  for (const s of subOrd) {
     if (s.legacyKey || s.done || s.assigneeId !== me || !s.createdBy || s.createdBy === me) continue;
     const t = taskOf.get(s.taskId);
     if (!t) continue;
@@ -137,9 +139,9 @@ export function myAlerts(me: string, X: AlertInputs): PmAlert[] {
     for (const [pid, r] of c.gov) {
       if (!r.items.length) continue;
       const fol = gi.find((x) => x.follow === pid);
-      for (const it of r.items) if (it.st === '조치 전' && it.whoId === me) out.push({ lv: fol && fol.due && fol.due < T ? 'bad' : 'warn', txt: `보완 조치 · ${X.shortOf(c.p.id)} ${trunc(it.text, 26)}${fol && fol.due ? ` (기한 ${monthDay(fol.due)})` : ''}`, go: site(c) });
+      for (const it of r.items) if (it.st === '조치 전' && it.whoId === me) out.push({ lv: fol && fol.due && fol.due < T ? 'bad' : 'warn', txt: `보완 조치 · ${X.shortOf(c.p.id)} ${trunc(it.text, 26)}${fol && fol.due ? ` (기한 ${monthDay(fol.due)})` : ''}`, go: site(c, { fix: pid }) });
       const n = r.items.filter((it) => it.st === '조치 완료').length;
-      if (pm && n) out.push({ lv: 'warn', txt: `${X.shortOf(c.p.id)} · 보완 조치 확인 대기 ${n}건`, go: site(c) });
+      if (pm && n) out.push({ lv: 'warn', txt: `${X.shortOf(c.p.id)} · 보완 조치 확인 대기 ${n}건`, go: site(c, { fix: pid }) });
     }
   }
   // 도입기업 챙길 일 (dlStat)
