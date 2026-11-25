@@ -46,6 +46,7 @@ import {
   sheetLogoMarkId,
   placeholderOf,
   titleHintOf,
+  titleDefaultOf,
   type CellInput,
 } from '@/domain/approvalForm/sheet/approvalSheet';
 import { SHEET_NAMED_KEY, collectNamed, sheetWith, type NamedValues } from '@/domain/approvalForm/sheet/relatedImport';
@@ -652,6 +653,17 @@ export function SheetDraftForm({
     if (sheet && !needsInit && systemKey !== undefined) emit(sheet, extras, refs);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [systemKey]);
+
+  // 서식이 제목 칸에 미리 적어 둔 글 — 새 문서를 열면 제목에 넣는다(서식마다 한 번, 기안자가 지운 제목을 되살리지 않는다)
+  const titleDefault = useMemo(() => (tplSheet ? titleDefaultOf(tplSheet) : ''), [tplSheet]);
+  const titleSeeded = useRef('');
+  const docTitle = docFields?.title;
+  useEffect(() => {
+    if (!titleDefault || docTitle === undefined || titleSeeded.current === key) return;
+    titleSeeded.current = key;
+    if (docTitle === '') onDocField?.({ title: titleDefault });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [titleDefault, key, docTitle === undefined]);
 
   useEffect(() => {
     if (sheet) onRequired?.(requiredMissing(sheet));

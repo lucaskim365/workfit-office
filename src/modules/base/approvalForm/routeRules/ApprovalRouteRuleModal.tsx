@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import type { ApprovalForm } from '@/domain/approvalForm/schema';
 import { ApprovalRouteRuleSettings } from './ApprovalRouteRuleSettings';
 import { X, GitMerge } from 'lucide-react';
@@ -33,7 +34,9 @@ export function ApprovalRouteRuleModal({
 
   if (!isOpen) return null;
 
-  return (
+  // 화면 맨 위 층(body)에 그린다 — 시트 서식 편집 화면의 옆 패널(sticky) 안에서 열리면 그 패널 층에 갇혀
+  // 편집기 도구 막대·칸 입력 상자가 이 창 위로 올라왔다
+  return createPortal(
     <div
       className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-200"
       onClick={onClose}
@@ -99,6 +102,7 @@ export function ApprovalRouteRuleModal({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

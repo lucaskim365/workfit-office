@@ -67,6 +67,17 @@ export interface CellInput {
   placeholder?: string;
 }
 
+/**
+ * 문서 제목 칸에 서식이 미리 적어 둔 글 — 새 문서를 열면 제목에 이 글이 들어가 있고 기안자가 고쳐 쓴다(제목을 같은 꼴로 맞추려는 서식).
+ * 편집 화면에서 제목 칸에 직접 쓴 글자다. 없으면 ''
+ */
+export function titleDefaultOf(s: Sheet): string {
+  const key = Object.entries(s.cellMeta[APPROVAL_NS.bind] ?? {}).find(([, b]) => b === 'doc.title')?.[0];
+  if (!key) return '';
+  const i = key.indexOf(':');
+  return String(s.rows[Number(key.slice(0, i))]?.[key.slice(i + 1)] ?? '').trim();
+}
+
 /** 입력 예시를 쓸 수 있는 입력 칸 — 글·숫자를 직접 쓰는 칸(날짜·선택·사람 칸은 고르는 화면이 따로 있다) */
 export const PLACEHOLDER_INPUTS: ReadonlySet<CellInputType> = new Set<CellInputType>(['text', 'multiline', 'number', 'currency']);
 /** 입력 예시 최대 길이 */

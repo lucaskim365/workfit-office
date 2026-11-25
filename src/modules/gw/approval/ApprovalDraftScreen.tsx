@@ -37,6 +37,8 @@ import { DraftSubmitConfirmDialog } from './components/DraftSubmitConfirmDialog'
 import { ApprovalDraftDocumentSheet } from './components/ApprovalDraftDocumentSheet';
 import { REQUIRED_EMPTY_CLASS, SheetDraftForm, type RelatedSource } from './sheetForm/SheetDraftForm';
 import { sheetDraftTouched } from '@/domain/approvalForm/sheet/draftTouched';
+import { titleDefaultOf } from '@/domain/approvalForm/sheet/approvalSheet';
+import { referenceUserIdsOf } from '@/domain/approvalForm/schema';
 import { listXlsxAliasesOf } from '@/domain/approvalForm/sheet/listExcel';
 import { isSheetDoc } from './sheetForm/SheetDocView';
 import { SHEET_NAMED_KEY, namedFromLegacy, readNamed, secretNames, withoutNames, type NamedValues } from '@/domain/approvalForm/sheet/relatedImport';
@@ -428,7 +430,9 @@ function ApprovalDraftInner({
     const isSheetDraft = sheetVersion !== null;
     const sheetTouched = isSheetDraft && !!sheetTpl?.sheet && sheetDraftTouched(sheetTpl.sheet, values);
 
-    if (title.trim().length > 0) return true;
+    // 서식이 제목 칸에 미리 적어 둔 글 그대로면 쓴 것이 아니다
+    const titleDefault = isSheetDraft && sheetTpl?.sheet ? titleDefaultOf(sheetTpl.sheet) : '';
+    if (title.trim().length > 0 && title.trim() !== titleDefault) return true;
     if (!isSheetDraft && amount.trim().length > 0) return true;
     if (attachments.length > 0) return true;
     if (relatedDocs.length > 0) return true;
@@ -1174,25 +1178,23 @@ function ApprovalDraftInner({
     if (route.isLoading || !code || editDoc) return;
     let line = route.build({ drafterId: me.id, docType: code, linkType: linkCode !== code ? linkCode : null, amount: amountNum, docData: values });
 
-    // 서식 기본 참조자(사용자)가 지정되어 있다면 결재선에 병합 (중복/본인 제외)
-    if (form?.referenceUserId && form.referenceUserId !== me.id) {
-      const alreadyHasRef = line.some((s) => s.approverId === form.referenceUserId);
-      if (!alreadyHasRef) {
-        line = [
-          ...line,
-          {
-            seq: line.length + 1,
-            parallelGroup: null,
-            executionType: 'sequential' as const,
-            kind: '참조' as const,
-            approverId: form.referenceUserId,
-            delegatedFromId: null,
-            decision: '대기' as const,
-            decidedAt: null,
-            comment: '',
-          },
-        ];
-      }
+    // 서식 기본 참조자(사용자, 여러 명)가 지정되어 있다면 결재선에 병합 (중복/본인 제외)
+    for (const refId of referenceUserIdsOf(form)) {
+      if (refId === me.id || line.some((s) => s.approverId === refId)) continue;
+      line = [
+        ...line,
+        {
+          seq: line.length + 1,
+          parallelGroup: null,
+          executionType: 'sequential' as const,
+          kind: '참조' as const,
+          approverId: refId,
+          delegatedFromId: null,
+          decision: '대기' as const,
+          decidedAt: null,
+          comment: '',
+        },
+      ];
     }
 
     const lineStr = JSON.stringify(line);
@@ -1204,7 +1206,7 @@ function ApprovalDraftInner({
         lastAutoSteps.current = lineStr;
       }
     }
-  }, [code, amountNum, values, route, me.id, steps, editDoc, form?.referenceUserId]);
+  }, [code, amountNum, values, route, me.id, steps, editDoc, form?.referenceUserId, form?.referenceUserIds]);
 
   // 서식 기본 수신처/참조부서 초기값 연동 — 서식마다 한 번만(조직 정보가 다시 와도 사용자가 지운 수신처를 되살리지 않는다)
   const recipientsSeededFor = useRef<string | null>(null);

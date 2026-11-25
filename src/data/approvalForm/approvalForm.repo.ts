@@ -157,6 +157,10 @@ export const approvalFormRepo = {
       // 설정을 건드린 서식만 보냄(건드리지 않은 서식 저장은 예전과 같음)
       ...(typeof form.hideDocInfoOnComplete === 'boolean' ? { hideDocInfoOnComplete: form.hideDocInfoOnComplete } : {}),
       ...(Array.isArray(form.hiddenHeaderItems) ? { hiddenHeaderItems: form.hiddenHeaderItems } : {}),
+      // 기본 참조 사용자(여러 명) — 예전 한 명 칸에는 첫 사람을 같이 적는다
+      ...(Array.isArray(form.referenceUserIds)
+        ? { referenceUserIds: [...new Set(form.referenceUserIds.filter(Boolean))], referenceUserId: form.referenceUserIds.filter(Boolean)[0] ?? null }
+        : {}),
     };
 
     const parsed = approvalFormSchema.parse(sanitized);

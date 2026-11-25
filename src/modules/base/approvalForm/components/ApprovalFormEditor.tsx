@@ -33,6 +33,8 @@ import { blankField } from '../utils';
 import { OptionsInput } from './OptionsInput';
 import { FormPermissionSettings } from './FormPermissionSettings';
 import { FormTargetSelector } from './FormTargetSelector';
+import { FormReferenceSelector } from './FormReferenceSelector';
+import { referenceUserIdsOf } from '@/domain/approvalForm/schema';
 import { ApprovalRouteRuleModal } from '../routeRules/ApprovalRouteRuleModal';
 import { resolveRoute } from '@/domain/approvalRoute/engine';
 import { ApprovalDraftDocumentSheet } from '@/modules/gw/approval/components/ApprovalDraftDocumentSheet';
@@ -1266,20 +1268,13 @@ export function ApprovalFormEditor({
                 }
               />
 
-              <FormTargetSelector
-                title="기본 참조 대상"
-                desc="기안 상신 즉시 실시간으로 참조 열람할 부서/사용자"
+              <FormReferenceSelector
                 deptId={form.referenceDeptId}
-                userId={form.referenceUserId}
+                userIds={referenceUserIdsOf(form)}
                 depts={depts}
                 users={users}
                 org={org}
-                onChange={(patch) =>
-                  set({
-                    referenceDeptId: patch.deptId ?? null,
-                    referenceUserId: patch.userId ?? null,
-                  })
-                }
+                onChange={(patch) => set({ referenceDeptId: patch.deptId, referenceUserIds: patch.userIds, referenceUserId: patch.userIds[0] ?? null })}
               />
 
               {/* 결재선 규칙 모달 바로가기 카드 (스크롤 제로 달성) */}
