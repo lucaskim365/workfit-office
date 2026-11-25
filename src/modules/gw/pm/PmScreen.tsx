@@ -22,6 +22,7 @@ import { KpiView } from './views/dash/KpiView';
 import { LogView } from './views/dash/LogView';
 import { PlanView } from './views/plan/PlanView';
 import { DocView } from './views/doc/DocView';
+import { InspView } from './views/doc/InspView';
 
 /** 옮긴 보기 → 화면. 없는 보기는 '옮기는 중' 자리 */
 const VIEWS: Record<string, ComponentType> = {
@@ -39,6 +40,7 @@ const VIEWS: Record<string, ComponentType> = {
   'doc/log': LogView,
   'site/kpi': KpiView,
   'doc/audit': DocView,
+  'doc/insp': InspView,
 };
 
 const NO_TITLE = new Set(['sched/gantt', 'risk/delay']);

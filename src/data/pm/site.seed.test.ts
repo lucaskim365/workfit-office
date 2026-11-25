@@ -106,3 +106,23 @@ test('4단계 산출물: 내장 업무 목록엔 산출물 칸이 있는 업무�
   const { docTasks } = await import('@/domain/pm/doc');
   for (const k of KS) assert.equal(docTasks(tasks.filter((t) => t.projectId === k)).length, 0, k);
 });
+
+test('4단계 점검 · 감리 대비 (데모 inspInfo · pInsp 값, 11/25 · 기록 0건)', async () => {
+  const { inspInfo, inspBoard } = await import('@/domain/pm/insp');
+  const fns = seedPlanFunctions();
+  const all = KS.map((k) => inspInfo(ctx(k), fns[k], () => '미작성')).filter((x) => x !== null);
+  // [사업, 다음 점검, 점검일, D-day, 신호, 약속 기능 완료/전체 · 연결 없음, 실적 반올림, 문제]
+  assert.deepEqual(all.map((x) => [x.c.p.id, x.g?.id, x.g?.due, x.days, x.lv, `${x.fnDone}/${x.dev?.length} ${x.fnNone.length}`, Math.round(x.ps.act), x.probs.join('|')]), [
+    ['P2', 'g_mid', '2026-10-01', -55, 'bad', '0/36 36', 7, '점검일 지남 — 결과 기록 필요'],
+    ['P3', 'g_mid', '2026-10-01', -55, 'bad', '0/38 38', 4, '점검일 지남 — 결과 기록 필요'],
+    ['P5', 'g_mid', '2026-10-01', -55, 'bad', '0/40 40', 6, '점검일 지남 — 결과 기록 필요'],
+    ['P6', 'g_mid', '2026-10-01', -55, 'bad', '0/26 26', 0, '점검일 지남 — 결과 기록 필요'],
+    ['P7', 'g_mid', '2026-11-25', 0, 'ok', '0/56 56', 1, ''],
+    ['P8', 'g_mid', '2026-11-01', -24, 'bad', '0/17 17', 0, '점검일 지남 — 결과 기록 필요'],
+    ['P9', 'g_mid', '2026-11-14', -11, 'bad', '0/29 29', 0, '점검일 지남 — 결과 기록 필요'],
+  ]);
+  const b = inspBoard(all);
+  // 데모 화면: 위험 6 · 주의 0 · 30일 안 7건(지난 것 포함) · 보완 미조치 0건, 점검일 순 = 신광 · 효광 · 꽃샘 · 저스템 · 만도 · 삼광 · 효광AI
+  assert.deepEqual([b.nBad, b.nWarn, b.soon, b.nGi, b.fin.length], [6, 0, 7, 0, 0]);
+  assert.deepEqual(b.up.map((x) => x.c.p.id), ['P2', 'P3', 'P5', 'P6', 'P8', 'P9', 'P7']);
+});

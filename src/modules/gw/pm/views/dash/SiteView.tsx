@@ -142,6 +142,11 @@ export function SiteView() {
   };
 
   const gOf = (id: string) => G?.find((x) => x.id === id);
+  /** 지적 사항 창 닫기 — 알림으로 열었으면 주소의 fix 도 지움 (다시 눌러도 열리게 · 새로 고침에 다시 안 뜨게) */
+  const closeFix = () => {
+    setPop(null);
+    if (params.get('fix')) { const n = new URLSearchParams(params); n.delete('fix'); setParams(n, { replace: true }); }
+  };
   const sideBtn = (v: '' | 'buyer' | 'us', l: string, title: string) => <Button size="sm" variant={side === v ? 'primary' : 'secondary'} onClick={() => setSide(v)} title={title}>{l}</Button>;
 
   return (
@@ -226,7 +231,7 @@ export function SiteView() {
       {pop?.kind === 'fix' && gOf(pop.id) && c.gov.get(pop.id) && (
         <FixItemsModal c={c} g={gOf(pop.id)!} fol={G?.find((x) => GOV_FOLLOW_OF[x.id] === pop.id)} r={c.gov.get(pop.id)!} short={short} nameOf={people.nameOf}
           onAct={(fixId, action, note) => smut.setFixItemState.mutateAsync({ projectId: k, itemId: pop.id, fixId, action, note })}
-          onEdit={() => setPop({ kind: 'res', id: pop.id })} onClose={() => setPop(null)} />
+          onEdit={() => { const id = pop.id; closeFix(); setPop({ kind: 'res', id }); }} onClose={closeFix} />
       )}
       {pop?.kind === 'link' && (
         <GovLinkModal c={c} itemId={pop.id} short={short} onSave={(taskIds) => smut.setGovLink.mutateAsync({ projectId: k, itemId: pop.id, taskIds })} onClose={() => setPop(null)} />
