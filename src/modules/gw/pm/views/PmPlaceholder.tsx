@@ -6,7 +6,7 @@ const STAGE_OF: Record<string, number> = {
   'dash/overview': 3, 'dash/site': 3, 'dash/team': 3, 'sched/load': 3, 'dash/hours': 3, 'dash/my': 3, 'dash/plan': 3,
   'doc/insp': 4, 'site/cr': 4, 'doc/audit': 4,
   'risk/issue': 5, 'doc/meet': 5, 'doc/check': 5, 'doc/report': 5,
-  'money/site': 6, 'money/pl': 6, 'master/base': 6, 'money/rules': 6, 'money/items': 6, 'master/log': 6,
+  'money/site': 6, 'money/pl': 6, 'master/base': 6, 'money/rules': 6, 'money/items': 6,
 };
 
 export function PmPlaceholder({ viewId }: { viewId: string }) {

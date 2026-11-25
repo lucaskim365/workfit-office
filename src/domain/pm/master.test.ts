@@ -41,3 +41,23 @@ test('사업 입력 확인 · 다음 사업키', () => {
   assert.equal(projectCheck({ ...v, subsidy: 500000000 }, true, () => false)?.[1], 'subsidy');
   assert.equal(nextProjectKey([pmProjectSchema.parse({ id: 'P13', company: 'a' })], [pmTaskSchema.parse({ id: 'P15|1', projectId: 'P15', code: '1', name: 'x' })]), 'P16');
 });
+
+test('코드 지우기 막는 까닭 (codeDelBlock): 기본 상태 → 쓰는 중 → 단계 남음 → 표준 업무 남음, 통과해야 묻기', async () => {
+  const { codeDelBlock } = await import('./masterLink');
+  const code = (o: Record<string, unknown>) => ({ id: 'x', group: 'stage', name: '', track: '', biz: '', ord: 1, note: '', auto: false, ...o }) as Parameters<typeof codeDelBlock>[0];
+  const biz = code({ id: 'b1', group: 'biz', name: 'A형' });
+  const stg = code({ id: 's1', group: 'stage', name: '설계', biz: 'A형' });
+  const st = code({ id: 't1', group: 'status', name: '완료' });
+  const st2 = code({ id: 't2', group: 'status', name: '보류' });
+  const prj = { id: 'P1', biz: 'A형' } as never;
+  const task = { projectId: 'P1', stage: '설계', status: '보류', name: 'x' } as never;
+  const std = { id: 'd1', biz: 'A형', stage: '설계', ord: 1, name: 'y' } as never;
+  const S = { codes: [biz, stg, st, st2], tasks: [task], projects: [prj], stdTasks: [std] };
+  assert.equal(codeDelBlock(st, S), '기본 상태는 지울 수 없습니다');
+  assert.equal(codeDelBlock(st2, S), '업무 1건에서 쓰는 중이라 지울 수 없습니다');
+  assert.equal(codeDelBlock(biz, S), '사업 1개에서 쓰는 중이라 지울 수 없습니다');
+  assert.equal(codeDelBlock(biz, { ...S, projects: [] }), '이 사업구분의 단계를 먼저 지우세요');
+  assert.equal(codeDelBlock(stg, { ...S, tasks: [] }), '이 단계의 표준 세부 업무 1개를 먼저 지우세요');
+  assert.equal(codeDelBlock(stg, { ...S, tasks: [], stdTasks: [] }), '');
+  assert.equal(codeDelBlock(st2, { ...S, tasks: [] }), '');
+});

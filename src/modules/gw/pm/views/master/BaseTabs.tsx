@@ -3,7 +3,7 @@ import { Modal } from '@/shared/ui/Modal';
 import { Button } from '@/shared/ui/Button';
 import { monthDay, todayStr } from '@/domain/pm/rules';
 import { ST_SYS } from '@/domain/pm/master';
-import { bizUse, genPlan, linkData, orgUse, stageUse, stagesOfBiz, statusUse, stdOf, stdUse, sugList, sugPick, type GenOpt, type LinkStage, type Sug } from '@/domain/pm/masterLink';
+import { bizUse, codeDelBlock, genPlan, linkData, orgUse, stageUse, stagesOfBiz, statusUse, stdOf, stdUse, sugList, sugPick, type GenOpt, type LinkStage, type Sug } from '@/domain/pm/masterLink';
 import { PM_ORG_TYPES, type PmCode, type PmOrg, type PmProject, type PmStdTask } from '@/domain/pm/schema';
 import type { PmDerived, usePmMutations } from '@/features/pm/usePm';
 import type { usePmPeople } from '../../usePmPeople';
@@ -507,7 +507,10 @@ function CodeFormModal({ g, c, defBiz, d, onSave, onRemove, onClose }: { g: PmCo
     await onSave({ ...v, name: v.name.trim() });
   };
   const del = async () => {
-    if (!c || !confirm(`${T} '${c.name}'을(를) 지울까요?`)) return;
+    if (!c) return;
+    const why = codeDelBlock(c, snap);
+    if (why) { setErr([why, '']); return; }
+    if (!confirm(`${T} '${c.name}'을(를) 지울까요?`)) return;
     try { await onRemove(c); } catch (e) { setErr([(e as Error).message, '']); }
   };
   return (

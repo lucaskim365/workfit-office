@@ -14,7 +14,7 @@ import type { PmAiMeas, PmKpiDef, PmKpiMeas } from '@/domain/pm/kpi';
 import { nextCrId } from '@/domain/pm/cr';
 import { nextIssueId } from '@/domain/pm/issue';
 import { ORG_FIELD, baseTplTasks, deriveMaster, makeTasks, stdTplTasks, type Master } from '@/domain/pm/master';
-import { bizUse, nextCodeIn as nextCode, orgUse, stageUse, statusUse, stdOf } from '@/domain/pm/masterLink';
+import { codeDelBlock, nextCodeIn as nextCode, orgUse, stdOf } from '@/domain/pm/masterLink';
 
 
 /**
@@ -750,11 +750,8 @@ export function createPmStore(today = todayStr()) {
     async removeCode(id: string) {
       const c = state.codes.find((x) => x.id === id);
       if (!c) return;
-      if (c.group === 'status' && (['계획', '진행중', '완료'] as string[]).includes(c.name)) throw new Error('기본 상태는 지울 수 없습니다');
-      const used = c.group === 'biz' ? bizUse(c, state.projects).length : c.group === 'stage' ? stageUse(c, state.tasks, state.projects).length : statusUse(c, state.tasks).length;
-      if (used) throw new Error(`${c.group === 'biz' ? `사업 ${used}개` : `업무 ${used}건`}에서 쓰는 중이라 지울 수 없습니다`);
-      if (c.group === 'biz' && state.codes.some((s) => s.group === 'stage' && s.biz === c.name)) throw new Error('이 사업구분의 단계를 먼저 지우세요');
-      if (c.group === 'stage' && stdOf(state.stdTasks, c.biz, c.name).length) throw new Error(`이 단계의 표준 세부 업무 ${stdOf(state.stdTasks, c.biz, c.name).length}개를 먼저 지우세요`);
+      const why = codeDelBlock(c, state);
+      if (why) throw new Error(why);
       state.codes = state.codes.filter((x) => x.id !== id);
       if (c.group === 'stage') state.codes.filter((s) => s.group === 'stage' && s.biz === c.biz).sort((a, b) => a.ord - b.ord).forEach((s, i) => { s.ord = i + 1; });
     },

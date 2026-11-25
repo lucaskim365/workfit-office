@@ -1,7 +1,7 @@
 import { addDays, diffDays } from './rules';
 import { isFP } from './site';
 import type { PmCode, PmOrg, PmProject, PmStdTask, PmTask } from './schema';
-import { ORG_FIELD } from './master';
+import { ORG_FIELD, ST_SYS } from './master';
 
 /**
  * 기준정보 › 사업 › 단계 › 업무 연결 (데모 linkData 3792 · sugList 3911) · 업무 목록 생성 (genPlan 3863) · 쓰는 곳 (orgUse · bizUse · stageUse · statusUse · stdUse).
@@ -106,6 +106,17 @@ export const bizUse = (c: PmCode, projects: readonly PmProject[]) => projects.fi
 export const stageUse = (c: PmCode, tasks: readonly PmTask[], projects: readonly PmProject[]) => { const ks = new Set(projects.filter((p) => p.biz === c.biz).map((p) => p.id)); return tasks.filter((t) => t.stage === c.name && ks.has(t.projectId)); };
 export const statusUse = (c: PmCode, tasks: readonly PmTask[]) => tasks.filter((t) => t.status === c.name);
 export const stdUse = (x: PmStdTask, tasks: readonly PmTask[], projects: readonly PmProject[]) => { const ks = new Set(projects.filter((p) => p.biz === x.biz).map((p) => p.id)); return tasks.filter((t) => t.name === x.name && t.stage === x.stage && ks.has(t.projectId)); };
+
+/** 코드를 지울 수 없는 까닭 (데모 codeForm del 순서: 기본 상태 → 쓰는 중 → 단계 남음 → 표준 업무 남음), 지워도 되면 '' */
+export function codeDelBlock(c: PmCode, s: { codes: readonly PmCode[]; tasks: readonly PmTask[]; projects: readonly PmProject[]; stdTasks: readonly PmStdTask[] }): string {
+  if (c.group === 'status' && (ST_SYS as readonly string[]).includes(c.name)) return '기본 상태는 지울 수 없습니다';
+  const used = c.group === 'biz' ? bizUse(c, s.projects).length : c.group === 'stage' ? stageUse(c, s.tasks, s.projects).length : statusUse(c, s.tasks).length;
+  if (used) return `${c.group === 'biz' ? `사업 ${used}개` : `업무 ${used}건`}에서 쓰는 중이라 지울 수 없습니다`;
+  if (c.group === 'biz' && s.codes.some((x) => x.group === 'stage' && x.biz === c.name)) return '이 사업구분의 단계를 먼저 지우세요';
+  const n = c.group === 'stage' ? stdOf(s.stdTasks, c.biz, c.name).length : 0;
+  if (n) return `이 단계의 표준 세부 업무 ${n}개를 먼저 지우세요`;
+  return '';
+}
 
 /** 다음 번호 (wbsNextCode) — 그 단계 마지막 번호의 끝 숫자 + 1, 사업 안에서 겹치지 않게 (업무 추가 창과 같은 규칙) */
 export function nextCodeIn(tasks: readonly PmTask[], projectId: string, stage: string): string {
