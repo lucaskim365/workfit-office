@@ -38,6 +38,9 @@ test('엑셀을 올리면 — 엑셀 값이 든 칸만 잠그고, 엑셀에 없�
   const lock = xlsxLockAfterUpload({ shape, base: {}, values });
   assert.deepEqual(lock, { [id]: [`0:${shape.cols[0]}`, `0:${shape.cols[2]}`, `1:${shape.cols[2]}`, `2:${shape.cols[0]}`, `2:${shape.cols[2]}`] });
   assert.deepEqual([...xlsxLockedCells(shape, lock)], ['1:0', '1:2', '2:2', '3:0', '3:2']);
+  // 표를 통째로 바꾼 올리기(목록 엑셀) — 틀에 미리 쓴 글자와 같은 값도 잠근다(번호 열의 1, 2, 3…)
+  const whole = xlsxLockAfterUpload({ shape, base: {}, values, whole: true });
+  assert.deepEqual([...xlsxLockedCells(shape, whole)], ['1:0', '1:2', '2:0', '2:2', '3:0', '3:2']);
 });
 
 test('엑셀이 건드리지 않은 표는 잠그지 않고, 전에 잠근 것은 그대로 둔다', () => {

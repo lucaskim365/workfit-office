@@ -43,10 +43,15 @@ export interface XlsxLockInput {
   skipNames?: readonly string[];
   /** 올리기 전의 잠금 — 이번에 엑셀이 건드리지 않은 표는 그대로 둔다 */
   prev?: XlsxLock;
+  /**
+   * 표를 통째로 엑셀 내용으로 바꾼 올리기(목록 엑셀) — 표에 남은 값은 모두 엑셀이 정한 것이라, 틀에 미리 쓴 글자와 같은 값도 잠근다
+   * (번호 열: 서식에 그린 줄의 1, 2, 3…도 늘어난 줄의 번호와 똑같이 잠기게). 엑셀에 없는 열은 빈 칸으로 와서 잠기지 않는다
+   */
+  whole?: boolean;
 }
 
-/** 엑셀을 올린 뒤의 잠금 — 엑셀이 값을 바꾼 표마다, 값이 든 칸(틀에 미리 쓴 글자만 있는 칸은 빈 칸)을 잠근다 */
-export function xlsxLockAfterUpload({ shape, base, values, skipNames = [], prev = {} }: XlsxLockInput): XlsxLock {
+/** 엑셀을 올린 뒤의 잠금 — 엑셀이 값을 바꾼 표마다, 값이 든 칸(틀에 미리 쓴 글자만 있는 칸은 빈 칸 — whole 이면 그것도 값)을 잠근다 */
+export function xlsxLockAfterUpload({ shape, base, values, skipNames = [], prev = {}, whole = false }: XlsxLockInput): XlsxLock {
   const changes = xlsxChanges({ shape, base, values, skipNames });
   const now = applyValues(shape, values, { recalc: false });
   const next: XlsxLock = { ...prev };
@@ -57,7 +62,7 @@ export function xlsxLockAfterUpload({ shape, base, values, skipNames = [], prev 
       shape.cols.forEach((col, c) => {
         if (!fillable(shape, r, c, skipNames)) return;
         const text = String(now.rows[r]?.[col] ?? '').trim();
-        if (text && text !== String(shape.rows[r]?.[col] ?? '').trim()) cells.push(`${r - sec.first}:${col}`);
+        if (text && (whole || text !== String(shape.rows[r]?.[col] ?? '').trim())) cells.push(`${r - sec.first}:${col}`);
       });
     }
     if (cells.length) next[sec.id] = cells;

@@ -570,7 +570,7 @@ export function SheetDraftForm({
   const [editing, setEditing] = useState<{ start: Sheet; sheet: Sheet } | null>(null);
   const [editNotice, setEditNotice] = useState('');
   /** 엑셀 올리기 미리보기 — 올린 값을 얹은 결과와, [적용]하면 바뀔 줄 수 */
-  const [xlsxPreview, setXlsxPreview] = useState<(XlsxUploadResult & { tpl: Sheet; extras: RowExtras }) | null>(null);
+  const [xlsxPreview, setXlsxPreview] = useState<(XlsxUploadResult & { tpl: Sheet; extras: RowExtras; whole: boolean }) | null>(null);
   /** 엑셀을 올려 바로 채운 뒤 시트 위에 보이는 알림 — 무엇을 채웠는지와 받지 못한 것 */
   const [xlsxNotice, setXlsxNotice] = useState<{ fileName: string; done: string; notes: string[] } | null>(null);
   // 엑셀로 채워 화면에서 고칠 수 없는 칸(xlsxLock.ts)
@@ -837,7 +837,7 @@ export function SheetDraftForm({
       const cols = list.columns.map((x) => (x.header && x.header !== x.label ? `${x.label} ← ${x.header}` : x.label)).join(', ');
       const order = [list.sortedBy ? `줄은 '${list.sortedBy}' 빠른 순으로 놓습니다.` : '', list.numbered ? '번호는 1부터 다시 매깁니다.' : ''].filter(Boolean).join(' ');
       const delta = list.rowDelta ? ` 표의 줄은 ${Math.abs(list.rowDelta)}줄 ${list.rowDelta > 0 ? '늘어납니다' : '줄어듭니다'}.` : '';
-      return preview(list, `엑셀의 ${list.rows}줄을 '${list.table}' 표에 채웠습니다.`, [
+      return preview(list, true, `엑셀의 ${list.rows}줄을 '${list.table}' 표에 채웠습니다.`, [
         `엑셀의 ${list.rows}줄을 '${list.table}' 표에 채웁니다.${delta} 표에 이미 쓴 내용은 엑셀 내용으로 바뀝니다(엑셀에 없는 열은 빈 칸).`,
         `맞춘 열: ${cols}`,
         ...(order ? [order] : []),
@@ -847,20 +847,20 @@ export function SheetDraftForm({
     if (!res.ok) return alert(res.error);
     if (!res.changed && !res.rowDelta) return alert(`엑셀 파일에 화면과 다른 값이 없습니다.${res.notes.length ? `\n\n받지 않은 것\n- ${res.notes.join('\n- ')}` : ''}`);
     const rows = res.rowDelta ? ` 표의 줄은 ${Math.abs(res.rowDelta)}줄 ${res.rowDelta > 0 ? '늘어납니다' : '줄어듭니다'}.` : '';
-    preview(res, '엑셀 파일의 값을 채웠습니다.', [`[엑셀로 받기]로 받은 파일의 값을 칸 자리 그대로 채웁니다.${rows}`], res.notes);
+    preview(res, false, '엑셀 파일의 값을 채웠습니다.', [`[엑셀로 받기]로 받은 파일의 값을 칸 자리 그대로 채웁니다.${rows}`], res.notes);
 
     /** 올린 값을 문서에 넣는다 — 미리보기를 켰으면(XLSX_PREVIEW_ENABLED) 창을 띄워 [적용]을 눌러야 들어간다 */
-    function preview(got: { extras: RowExtras; values: Record<string, string>; refs: Record<string, string>; base: Record<string, string>; baseRefs: Record<string, string> }, done: string, summary: string[], notes: string[]) {
+    function preview(got: { extras: RowExtras; values: Record<string, string>; refs: Record<string, string>; base: Record<string, string>; baseRefs: Record<string, string> }, /** 표를 통째로 엑셀 내용으로 바꾸는 올리기(목록 엑셀)인가 */ whole: boolean, done: string, summary: string[], notes: string[]) {
       const shape = expandRepeats(tpl, got.extras);
-      if (XLSX_PREVIEW_ENABLED) return setXlsxPreview({ fileName: file.name, tpl, extras: got.extras, shape, base: got.base, baseRefs: got.baseRefs, values: got.values, refs: got.refs, summary, notes });
+      if (XLSX_PREVIEW_ENABLED) return setXlsxPreview({ fileName: file.name, tpl, extras: got.extras, shape, base: got.base, baseRefs: got.baseRefs, values: got.values, refs: got.refs, summary, notes, whole });
       setXlsxNotice({ fileName: file.name, done, notes });
-      fillXlsx({ shape, extras: got.extras, base: got.base }, got.values, got.refs);
+      fillXlsx({ shape, extras: got.extras, base: got.base, whole }, got.values, got.refs);
     }
   };
   /** 엑셀 값을 문서에 넣고, 엑셀이 채운 표의 칸을 잠근다 */
-  const fillXlsx = (at: { shape: Sheet; extras: RowExtras; base: Record<string, string> }, vals: Record<string, string>, refMap: Record<string, string>) => {
+  const fillXlsx = (at: { shape: Sheet; extras: RowExtras; base: Record<string, string>; whole: boolean }, vals: Record<string, string>, refMap: Record<string, string>) => {
     // 파일을 읽는 동안 잠금이 바뀌었을 수 있다([엑셀 내용 지우기]) — 값과 같이 읽고 난 뒤의 것(latest)에 얹는다
-    const lock = xlsxLockAfterUpload({ shape: at.shape, base: at.base, values: vals, skipNames: xlsxSkip, prev: latest.current?.lock ?? xlsxLock });
+    const lock = xlsxLockAfterUpload({ shape: at.shape, base: at.base, values: vals, skipNames: xlsxSkip, prev: latest.current?.lock ?? xlsxLock, whole: at.whole });
     emit(applyValues(at.shape, vals, { recalc: true }), at.extras, refMap, undefined, lock);
   };
   /** 미리보기에서 [적용] — 뺀 칸은 화면 값으로 되돌린 값이 온다 */
