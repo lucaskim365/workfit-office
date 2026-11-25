@@ -2,9 +2,10 @@ import { useMemo } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { pmStore, type PmSnapshot } from '@/data/pm/pm.store';
 import { doneInfoOf, liveOf, todayStr, type FilterCtx, type Live } from '@/domain/pm/rules';
-import type { PmAgreementChange, PmPlanItem, PmProject, PmSubtask, PmTask, PmTaskDone, PmTaskFunctions } from '@/domain/pm/schema';
+import type { PmAgreementChange, PmDoc, PmPlanItem, PmProject, PmSubtask, PmTask, PmTaskDone, PmTaskFunctions } from '@/domain/pm/schema';
 import { isDrop, lastUpdate, siteBrief, siteCtxOf, siteStage, type SiteBrief, type SiteCtx, type SiteInputs, type SiteStage } from '@/domain/pm/site';
 import { taskTicketIndex, ticketDoneInfo, type PmTicket } from '@/domain/pm/ticket';
+import { docOf, type DocState } from '@/domain/pm/doc';
 
 /**
  * PM 화면 훅. 저장소 전체를 한 번에 읽는다 (업무 338건 — 작음).
@@ -29,6 +30,8 @@ export interface PmDerived {
   taskTicket: Map<string, PmTicket>;
   ticketMap: Map<string, PmTicket>;
   ctx: FilterCtx;
+  /** 산출물 상태 (4단계, 데모 docOf) — 고른 기록 → 업무 티켓 파일 → 미작성 */
+  docOf: (t: PmTask) => DocState;
 }
 
 export function usePmDerived(nameOf?: (id: string) => string): PmDerived | null {
@@ -64,7 +67,9 @@ export function usePmDerived(nameOf?: (id: string) => string): PmDerived | null 
       nameOf,
     };
     function d0(t: PmTask, l: Live) { return doneInfoOf(t, l, doneMap, snap!.logs); }
-    return { snap, today, liveMap, doneMap, fnMap, subsByTask, taskMap, taskTicket, ticketMap, ctx };
+    const docMap = new Map(snap.docs.map((x) => [x.id, x]));
+    const docState = (t: PmTask) => docOf(t, docMap, taskTicket.get(t.id));
+    return { snap, today, liveMap, doneMap, fnMap, subsByTask, taskMap, taskTicket, ticketMap, ctx, docOf: docState };
   }, [snap, nameOf]);
 }
 
@@ -167,5 +172,8 @@ export function usePmSiteMutations(me: string) {
     addAiMeas: m((x: Parameters<typeof s.addAiMeas>[0]) => s.addAiMeas(x, me)),
     setSeen: m(({ txt, on }: { txt: string; on: boolean }) => s.setSeen(me, txt, on)),
     toggleFav: m((f: { v: string; k: string }) => s.toggleFav(me, f)),
+    // 4단계: 산출물
+    setDoc: m(({ taskId, st }: { taskId: string; st: PmDoc['st'] }) => s.setDoc(taskId, st, me)),
+    uploadDoc: m(({ taskId, name }: { taskId: string; name: string }) => s.uploadDoc(taskId, name, me)),
   };
 }

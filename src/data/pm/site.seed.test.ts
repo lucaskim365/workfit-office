@@ -101,3 +101,8 @@ test('계획서 약속 기능: 기능 수 · 추가/변경 중 연결 없음 (�
   }
   assert.equal(fnLinks(ctx('P4'), FN.P4), null);
 });
+
+test('4단계 산출물: 내장 업무 목록엔 산출물 칸이 있는 업무가 사업마다 0건 (데모 pDoc · inspInfo outs 와 같음)', async () => {
+  const { docTasks } = await import('@/domain/pm/doc');
+  for (const k of KS) assert.equal(docTasks(tasks.filter((t) => t.projectId === k)).length, 0, k);
+});

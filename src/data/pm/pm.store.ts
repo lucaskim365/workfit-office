@@ -1,6 +1,6 @@
 import { addDays, applyProgress, makeBaseline, todayStr } from '@/domain/pm/rules';
 import type {
-  PmAction, PmAgreementChange, PmBaseline, PmChangeLog, PmGovLink, PmGovRecord, PmIssue, PmLater, PmMilestoneOk, PmPlanCheck,
+  PmAction, PmAgreementChange, PmBaseline, PmChangeLog, PmDoc, PmGovLink, PmGovRecord, PmIssue, PmLater, PmMilestoneOk, PmPlanCheck,
   PmPdfDraft, PmPlanDay, PmPlanItem, PmPlanRep, PmProject, PmSubtask, PmTask, PmTaskDone, PmTaskFunctions, PmUpdRequest, PmWeekCheck,
 } from '@/domain/pm/schema';
 import { wdOf } from '@/domain/pm/plan';
@@ -71,6 +71,9 @@ export interface PmSnapshot {
   seen: Array<{ id: string; items: Record<string, string> }>;
   /** ☆ 즐겨찾기 (사람마다, 데모 S.fav) — v = 보기 id, k = 사업별 화면에서 고른 사업 */
   favs: Array<{ id: string; items: Array<{ v: string; k: string }> }>;
+  // ── 4단계 (점검 · 요구사항 · 산출물) ──
+  /** 산출물 제출 상태 (데모 S.docs) — 사람이 고르거나 파일을 올린 업무만 */
+  docs: PmDoc[];
 }
 
 const clone = <T>(v: T): T => structuredClone(v);
@@ -118,6 +121,7 @@ export function createPmStore(today = todayStr()) {
     weekChecks: [], later: [], updReq: [],
     planDays: [], planReps: [], pdfDrafts: [],
     kpiDefs: [], kpiMeas: [], aiMeas: [], seen: [], favs: [],
+    docs: [],
   };
 
   const log = (projectId: string, code: string, kind: PmChangeLog['kind'], text: string, by: string, day: string) => {
@@ -140,6 +144,9 @@ export function createPmStore(today = todayStr()) {
     for (const x of state.tickets) if (x.subtaskId && x.taskId === oldId) x.taskId = newId;
     // 업무계획 줄도 새 번호로 (rekey 2193)
     for (const p of state.planDays) for (const it of p.items) if (it.taskId === oldId) it.taskId = newId;
+    // 산출물 상태 · 마일스톤 승인도 새 번호로 (rekey 2190: S.docs · S.msOk)
+    for (const d of state.docs) if (d.id === oldId) d.id = newId;
+    for (const m of state.msOk) if (m.id === oldId) m.id = newId;
   };
   const planOf = (who: string, date: string) => state.planDays.find((p) => p.who === who && p.date === date);
   /** 업무를 고치면 업무 티켓도 따라감 (wbsSyncTicket) → 변경 이력 꼬리 " · 티켓 P2-0001 반영" */
@@ -500,6 +507,21 @@ export function createPmStore(today = todayStr()) {
       const items = has ? cur.filter((x) => !(x.v === f.v && x.k === f.k)) : [...cur, { ...f }];
       state.favs = [...state.favs.filter((r) => r.id !== who), { id: who, items }];
       return !has;
+    },
+
+    // ── 4단계: 산출물 ─────────────────────────────────
+    /** 산출물 상태 고르기 (docSet) — 올린 파일 이름은 그대로 둠 */
+    async setDoc(taskId: string, st: PmDoc['st'], by: string, day = todayStr()) {
+      const t = state.tasks.find((x) => x.id === taskId);
+      if (!t) throw new Error('업무를 찾을 수 없습니다');
+      const old = state.docs.find((d) => d.id === taskId);
+      state.docs = [...state.docs.filter((d) => d.id !== taskId), { id: taskId, projectId: t.projectId, st, file: old?.file ?? '', date: day, by }];
+    },
+    /** 산출물 파일 올리기 (docUp) — 올리면 '제출완료'. 파일 보관은 7단계(Storage), 지금은 이름만 (데모도 이름만) */
+    async uploadDoc(taskId: string, fileName: string, by: string, day = todayStr()) {
+      const t = state.tasks.find((x) => x.id === taskId);
+      if (!t) throw new Error('업무를 찾을 수 없습니다');
+      state.docs = [...state.docs.filter((d) => d.id !== taskId), { id: taskId, projectId: t.projectId, st: '제출완료', file: fileName, date: day, by }];
     },
 
     /** 몰림 기준 주당 마감 (loadMax 6008: 1 이상, 잘못 넣으면 8) */

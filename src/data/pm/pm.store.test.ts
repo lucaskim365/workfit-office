@@ -154,3 +154,16 @@ test('3-7 저장: 즐겨찾기 켜고 끄기 · 알림 확인 · 지표 지우�
   const snap = await s.snapshot();
   assert.deepEqual([snap.kpiDefs.length, snap.kpiMeas.map((x) => x.kid)], [0, ['P0']]);
 });
+
+test('4단계 산출물 저장: 상태 고르기 · 파일 올리면 제출완료 · 상태를 바꿔도 파일 이름은 그대로 · 업무 번호 바뀌면 따라감', async () => {
+  const s = createPmStore('2026-11-25');
+  const t = (await s.snapshot()).tasks.find((x) => x.projectId === 'P2')!;
+  await s.setDoc(t.id, '작성중', 'me');
+  assert.deepEqual((await s.snapshot()).docs, [{ id: t.id, projectId: 'P2', st: '작성중', file: '', date: '2026-11-25', by: 'me' }]);
+  await s.uploadDoc(t.id, '설계서.pdf', 'u2');
+  await s.setDoc(t.id, '미작성', 'me');
+  assert.deepEqual((await s.snapshot()).docs.map((d) => [d.st, d.file, d.by]), [['미작성', '설계서.pdf', 'me']]);
+  await s.updateTask(t.id, { ...t, id: `P2|99-99`, code: '99-99' }, 'me');
+  assert.deepEqual((await s.snapshot()).docs.map((d) => d.id), ['P2|99-99']);
+  await assert.rejects(s.setDoc('없음', '작성중', 'me'));
+});

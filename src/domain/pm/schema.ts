@@ -199,6 +199,19 @@ export type PmLater = z.infer<typeof pmLaterSchema>;
 export const pmUpdRequestSchema = z.object({ id: z.string().min(1), date: day, by: z.string().default(''), projectId: z.string().default('') });
 export type PmUpdRequest = z.infer<typeof pmUpdRequestSchema>;
 
+/** 산출물 제출 상태 (`pmDocs`, 데모 S.docs) — 사람이 고르거나 파일을 올린 것만. id = 업무 ID */
+export const PM_DOC_STATES = ['미작성', '작성중', '제출완료'] as const;
+export const pmDocSchema = z.object({
+  id: z.string().min(1),
+  projectId: z.string().min(1),
+  st: z.enum(PM_DOC_STATES),
+  /** 올린 파일 이름 (파일 보관은 Storage 7단계 — 데모도 이름만) */
+  file: z.string().default(''),
+  date: day,
+  by: z.string().default(''),
+});
+export type PmDoc = z.infer<typeof pmDocSchema>;
+
 /** 업무 (`pmTasks`) — 데모 `WF` 19칸. 업무 목록 양식은 미확정이라 필수 칸을 최소로 (§3.2) */
 export const pmTaskSchema = z.object({
   /** `${projectId}|${code}` — 데모 key 와 같다 */

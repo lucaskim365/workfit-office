@@ -149,7 +149,8 @@ export function SiteView() {
       <ScreenHead title={<><ProjectTag>{shortOf(k)}</ProjectTag> <span className="ml-1">{p.company}</span></>} desc="사업 하나의 기한 · 점검 · 약속 기능 진척을 한 화면에서 보고 처리합니다 · [전체]로 돌아가면 모든 사업을 비교" />
       <SiteChips rows={S.rows} all={S.all} cur={k} shortOf={shortOf} onAll={() => go('dash/overview')} onPick={(id) => pick(id)} />
 
-      <FlowCard c={c} st={stage} nameOf={people.nameOf} onOpenTask={modals.openTask} onGoWbs={() => go('task/wbs', { k })} />
+      <FlowCard c={c} st={stage} nameOf={people.nameOf} onOpenTask={modals.openTask} onGoWbs={() => go('task/wbs', { k })}
+        docOf={d.docOf} onSetDoc={(taskId, st) => void smut.setDoc.mutateAsync({ taskId, st })} onGoDoc={() => go('doc/audit', { k })} />
       {stage.i === 0 && <BidCard c={c} nameOf={people.nameOf} onBidRes={bidRes} />}
       {stage.i === 4 && <AfterCard c={c} nameOf={people.nameOf} />}
 

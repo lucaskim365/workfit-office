@@ -2,11 +2,13 @@ import { useState, type ReactNode } from 'react';
 import { Button } from '@/shared/ui/Button';
 import { diffDays, isDone, leftText, monthDay } from '@/domain/pm/rules';
 import {
-  AGR_KINDS, agrJudge, agrWarn, asIssues, dday, dlEff, dlLeftText, fnSt, govItems, govRec, govWbsCheck, planSum, preSteps,
+  AGR_KINDS, agrJudge, agrWarn, asIssues, dday, dlEff, dlLeftText, fnSt, govItems, govRec, govWbsCheck, isPre, planSum, preSteps,
   SITE_STAGES, stageBuckets, stageKeyTasks, warrantyEnd, type FnLink, type FnState, type GovWbsState, type SiteCtx, type SiteStage, type SiteUpdate,
 } from '@/domain/pm/site';
 import type { PmAgreementChange, PmTask } from '@/domain/pm/schema';
 import { EmptyHint, Tag } from '../wbs/parts';
+import { DocSeg } from '../doc/parts';
+import type { DocSt, DocState } from '@/domain/pm/doc';
 import { CardHead } from './parts';
 
 /**
@@ -26,14 +28,18 @@ const chon = (v: number) => Math.round(v) / 10;
 const fmtN = (v: number | string) => (v === '' || v == null ? '-' : (+v).toLocaleString(undefined, { maximumFractionDigits: 2 }));
 
 /** 사업 흐름 5단계 + 지금 단계 주요 업무 (flowCard) */
-export function FlowCard({ c, st, nameOf, onOpenTask, onGoWbs }: {
+export function FlowCard({ c, st, nameOf, onOpenTask, onGoWbs, docOf, onSetDoc, onGoDoc }: {
   c: SiteCtx;
   st: SiteStage;
   nameOf: (id: string) => string;
   onOpenTask: (id: string) => void;
   onGoWbs: () => void;
+  /** 산출물 상태 (4단계 docOf) · 상태 바꾸기 (docSet3) · 산출물 화면 (inspDoc) */
+  docOf: (t: PmTask) => DocState;
+  onSetDoc: (taskId: string, v: DocSt) => void;
+  onGoDoc: () => void;
 }) {
-  const SB = stageBuckets(c);
+  const SB = stageBuckets(c, (t) => docOf(t).st === '제출완료');
   const cb = SB[st.i];
   const [gate, setGate] = useState(false);
   const nx = st.next;
@@ -41,7 +47,7 @@ export function FlowCard({ c, st, nameOf, onOpenTask, onGoWbs }: {
   const shown = key.slice(0, 5);
   const gateMiss = SB.slice(0, st.i).reduce((a, b) => a + (b.on - b.od), 0);
   const gOpen = gateMiss > 0 && gate;
-  const missList = gOpen ? SB.slice(0, st.i).flatMap((b, j) => b.L.filter((t) => t.output).map((t) => [t, j] as const)) : [];
+  const missList = gOpen ? SB.slice(0, st.i).flatMap((b, j) => b.L.filter((t) => t.output && !isPre(t) && docOf(t).st !== '제출완료').map((t) => [t, j] as const)) : [];
   const who = (t: PmTask) => (t.assigneeIds[0] ? nameOf(t.assigneeIds[0]) : '');
   return (
     <Card>
@@ -94,13 +100,17 @@ export function FlowCard({ c, st, nameOf, onOpenTask, onGoWbs }: {
             </div>
             {gOpen ? (
               <>
-                <div className="pb-1 text-[11px] text-ink3">지난 단계에서 아직 제출 안 된 산출물입니다. 산출물 상태 바꾸기는 4단계(점검 · 산출물)를 옮길 때 켭니다.</div>
+                <div className="pb-1 text-[11px] text-ink3">지난 단계에서 아직 제출 안 된 산출물입니다. 오른쪽에서 바로 상태를 바꿀 수 있어요.</div>
                 {missList.map(([t, j]) => (
-                  <button key={t.id} type="button" onClick={() => onOpenTask(t.id)} className="flex w-full items-center gap-2 border-b border-border py-1.5 text-left text-[12px] last:border-b-0 hover:bg-panel-alt">
-                    <Tag>{SITE_STAGES[j].n}</Tag><span className="min-w-0 flex-1 truncate">📄 {t.output} <span className="text-ink3">{t.code} · {t.name}</span></span>
-                    <span className="text-ink3">{who(t) || '담당 없음'}</span><b className="w-[44px] text-right">{t.end ? monthDay(t.end) : '-'}</b>
-                  </button>
+                  <div key={t.id} className="flex w-full items-center gap-2 border-b border-border py-1.5 text-[12px] last:border-b-0">
+                    <Tag>{SITE_STAGES[j].n}</Tag>
+                    <button type="button" onClick={() => onOpenTask(t.id)} title="업무 보기" className="min-w-0 flex-1 truncate text-left hover:underline">📄 {t.output} <span className="text-ink3">{t.code} · {t.name}</span></button>
+                    {who(t) ? <span className="text-ink2">{who(t)}</span> : <Tag tone="warn">담당 없음</Tag>}
+                    <span className="w-[54px] text-right leading-tight"><b>{t.end ? monthDay(t.end) : '-'}</b> <small className="text-ink3">마감</small></span>
+                    <DocSeg st={docOf(t).st} onSet={(v) => onSetDoc(t.id, v)} />
+                  </div>
                 ))}
+                <div className="pt-1.5 text-right"><Button size="sm" variant="secondary" onClick={onGoDoc}>산출물 화면 전체 보기 →</Button></div>
               </>
             ) : shown.length ? shown.map((t) => {
               const lt = !!t.end && t.end < c.today;
