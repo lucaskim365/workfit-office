@@ -338,6 +338,8 @@ export const pmSubtaskSchema = z.object({
   estHours: z.number().default(0),
   done: z.boolean().default(false),
   doneDate: day.default(''),
+  /** 완료 체크한 사람 (데모 ddBy — 업무 창 · 업무계획 체크 · 티켓 승인 완료에서 넣음, 체크 풀면 비움) */
+  doneBy: z.string().default(''),
   memo: z.string().default(''),
   createdBy: z.string().default(''),
   createdDate: day.default(''),

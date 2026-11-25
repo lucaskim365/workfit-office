@@ -27,7 +27,9 @@ test('지연 업무 · 남이 배정한 세부 작업 · 맡긴 일 완료', () 
     pmSubtaskSchema.parse({ id: 's0', taskId: 'P9|a', text: '예정일 없음', assigneeId: 'me', createdBy: 'u' }),
     pmSubtaskSchema.parse({ id: 's1', taskId: 'P9|a', text: '화면 시안', assigneeId: 'me', createdBy: 'u', due: '2026-11-24' }),
     pmSubtaskSchema.parse({ id: 's2', taskId: 'P9|a', text: '내가 쓴 것', assigneeId: 'me', createdBy: 'me' }),
-    pmSubtaskSchema.parse({ id: 's3', taskId: 'P9|a', text: '맡긴 일', assigneeId: 'u', createdBy: 'me', done: true, doneDate: '2026-11-24' }),
+    pmSubtaskSchema.parse({ id: 's3', taskId: 'P9|a', text: '맡긴 일', assigneeId: 'u', createdBy: 'me', done: true, doneDate: '2026-11-24', doneBy: 'u' }),
+    // 맡긴 일을 내가 직접 완료 체크 → 알림 없음 (데모 s.ddBy!==me)
+    pmSubtaskSchema.parse({ id: 's4', taskId: 'P9|a', text: '내가 끝낸 맡긴 일', assigneeId: 'u', createdBy: 'me', done: true, doneDate: '2026-11-24', doneBy: 'me' }),
   ];
   assert.deepEqual(txt('me', X({ tasks: ts, subtasks: subs })), [
     "bad|내가 담당한 지연 TASK 1건 — 내 업무 › [전체 업무] '지금 할 일' (지연 우선)|dash/my",

@@ -47,9 +47,10 @@ export function activityAll(X: ActInputs): ActRow[] {
   }
   for (const t of X.tickets) for (const h of t.hist) add(h.date, h.by, '티켓', t.projectId, `${t.no} ${trunc(t.title, 30)} — ${h.text || '댓글'}`, { kind: 'ticket', no: t.no });
 
-  for (const p of X.projects) {
-    const c = siteCtxOf(p, X, X.today);
-    const go = site(p.id);
+  // 데모 순서: 점검 · 관리기준(모든 사업) → 계획서 약속(모든 사업) → 사업마다 협약변경 · 특이사항 · 수주.
+  // 데모의 점검 · 약속은 S.gov · S.planChk 에 처음 기록이 생긴 사업 순, 이관은 사업 목록 순 (같은 날 · 같은 종류 안에서만 차이)
+  const ctxs = X.projects.map((p) => ({ p, c: siteCtxOf(p, X, X.today), go: site(p.id) }));
+  for (const { p, c, go } of ctxs) {
     const G = govItems(c) ?? [];
     for (const r of c.gov.values()) {
       const g = G.find((x) => x.id === r.itemId);
@@ -57,12 +58,16 @@ export function activityAll(X: ActInputs): ActRow[] {
       add(r.bulk || r.date, r.by, r.v ? '점검 결과' : '관리기준', p.id, r.v ? `${nm} — ${r.v}${r.memo ? ` · ${r.memo}` : ''}` : `${nm} 완료 체크${r.bulk ? ` (지난 기한 정리 · 완료한 날 ${md(r.date)})` : ''}`, go);
       for (const it of r.items) for (const h of it.hist) add(h.date, h.by, '보완 지적', p.id, `${trunc(it.text, 30)} — ${h.a}${h.note ? ` · ${h.note}` : ''}`, go);
     }
+  }
+  for (const { p, c, go } of ctxs) {
     const L = planDuties(c);
     for (const r of c.planChk.values()) {
       if (!r.date) continue;
       const d0 = L.find((x) => x.id === r.dutyId);
       add(r.bulk || r.date, r.by, '계획서 약속', p.id, `${d0 ? trunc(d0.t, 40) : r.dutyId} 완료 체크${r.bulk ? ` (지난 기한 정리 · 완료한 날 ${md(r.date)})` : ''}`, go);
     }
+  }
+  for (const { p, c, go } of ctxs) {
     for (const x of c.agr) add(x.date, x.by, '협약변경', p.id, `${AGR_KINDS.find((y) => y[0] === x.kind)?.[1] ?? ''} · ${x.st}${x.text ? ` · ${x.text}` : ''}`, go);
     for (const r of c.reports ?? []) if (r.note || r.req) add(r.at || r.week, r.by, '주간 특이사항', p.id, trunc([r.note, r.req ? `협조 요청: ${r.req}` : ''].filter(Boolean).join(' / '), 60), view('doc/check', { k: p.id }));
     if (p.bidAt && p.bidAt.date) add(p.bidAt.date, p.bidAt.by, '수주', p.id, `선정 결과 '${p.bidRes || '지움'}'`, go);
@@ -79,16 +84,16 @@ export function activityAll(X: ActInputs): ActRow[] {
   for (const m of X.meetings) add(m.at || m.date, m.by, '회의록', m.projectId, `${trunc(m.title, 40)} 작성`, view('doc/meet', { mt: m.id }));
   for (const a of X.actions) {
     const go = view('doc/meet', { act: a.id });
-    add(a.at, a.by, '액션 아이템', a.projectId, `${trunc(a.text, 40)} 등록 → ${first(a.whoId) || '담당 없음'}`, go);
+    add(a.at, a.by, '액션 아이템', a.projectId, `${trunc(a.text, 40)} 등록 → ${first(a.whoId) || '미지정'}`, go);
     if (a.done && a.doneDate) add(a.doneDate, a.doneBy || a.whoId, '액션 아이템', a.projectId, `${trunc(a.text, 40)} 완료`, go);
   }
   for (const s of X.subtasks) {
     const t = taskById.get(s.taskId);
     const k = t?.projectId ?? '';
     add(s.createdDate, s.createdBy || s.assigneeId, '세부 작업', k, `${trunc(s.text, 36)} 추가${s.assigneeId && s.createdBy && s.assigneeId !== s.createdBy ? ` → ${first(s.assigneeId)}` : ''}`, taskGo(t));
-    if (s.done && s.doneDate) add(s.doneDate, s.assigneeId, '세부 작업', k, `${trunc(s.text, 36)} 완료`, taskGo(t));
+    if (s.done && s.doneDate) add(s.doneDate, s.doneBy || s.assigneeId, '세부 작업', k, `${trunc(s.text, 36)} 완료`, taskGo(t));
   }
-  // 최근 순 (같은 날은 모은 순서 그대로 — 데모 sort 와 같음)
+  // 최근 순 (같은 날은 모은 순서 그대로 — 데모 sort 와 같음, 모으는 순서도 데모 activityAll 순)
   return out.sort((a, b) => (a.d < b.d ? 1 : a.d > b.d ? -1 : 0));
 }
 

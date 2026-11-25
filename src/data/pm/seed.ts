@@ -142,6 +142,7 @@ export function seedSubtasks(fns: readonly PmTaskFunctions[], today: string): Pm
         estHours: 0,
         done: false,
         doneDate: '',
+        doneBy: '',
         memo: '',
         createdBy: '',
         createdDate: today,

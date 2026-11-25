@@ -214,9 +214,8 @@ export function createPmStore(today = todayStr()) {
     if (!s) return;
     s.assigneeId = x.assigneeId;
     s.due = x.due;
-    if (done === true) { s.done = true; s.doneDate = day; }
-    else if (done === false) { s.done = false; s.doneDate = ''; }
-    void by;
+    if (done === true) { s.done = true; s.doneDate = day; s.doneBy = by; }
+    else if (done === false) { s.done = false; s.doneDate = ''; s.doneBy = ''; }
   };
 
   return {
@@ -313,7 +312,7 @@ export function createPmStore(today = todayStr()) {
      */
     async addSubtask(taskId: string, text: string, assigneeId: string, due: string, by: string, day = todayStr(), estHours = 0): Promise<PmSubtask> {
       const order = Math.max(-1, ...state.subtasks.filter((s) => s.taskId === taskId).map((s) => s.order)) + 1;
-      const s: PmSubtask = { id: nid('s'), taskId, text, assigneeId, due, estHours: +estHours || 0, done: false, doneDate: '', memo: '', createdBy: by, createdDate: day, fromFp: false, order, legacyKey: '' };
+      const s: PmSubtask = { id: nid('s'), taskId, text, assigneeId, due, estHours: +estHours || 0, done: false, doneDate: '', doneBy: '', memo: '', createdBy: by, createdDate: day, fromFp: false, order, legacyKey: '' };
       state.subtasks.push(s);
       if (assigneeId && assigneeId !== by && due) {
         const sv = planOf(assigneeId, due);
@@ -321,11 +320,12 @@ export function createPmStore(today = todayStr()) {
       }
       return clone(s);
     },
-    async updateSubtask(id: string, patch: Partial<Omit<PmSubtask, 'id' | 'taskId'>>, day = todayStr()) {
+    /** 고치기 — 완료 체크면 완료한 날 · 사람(by)도 (데모 subDone · planDone: dd · ddBy) */
+    async updateSubtask(id: string, patch: Partial<Omit<PmSubtask, 'id' | 'taskId' | 'doneDate' | 'doneBy'>>, by: string, day = todayStr()) {
       const s = state.subtasks.find((x) => x.id === id);
       if (!s) throw new Error('세부 작업을 찾을 수 없습니다');
       Object.assign(s, patch);
-      if ('done' in patch) s.doneDate = patch.done ? day : '';
+      if ('done' in patch) { s.doneDate = patch.done ? day : ''; s.doneBy = patch.done ? by : ''; }
     },
     async removeSubtask(id: string) {
       const xt = state.tickets.filter((x) => x.subtaskId === id && x.status !== '취소').pop();

@@ -89,7 +89,7 @@ export function usePmMutations(me: string, nameOf?: (id: string) => string) {
     bulkUpdate: m((items: Array<{ next: PmTask; summary: string }>) => s.bulkUpdate(items, me)),
     setProgress: m(({ id, pct, why }: { id: string; pct: number; why: string }) => s.setProgress(id, pct, why, me)),
     addSubtask: m(({ taskId, text, assigneeId, due, est }: { taskId: string; text: string; assigneeId: string; due: string; est?: number }) => s.addSubtask(taskId, text, assigneeId, due, me, todayStr(), est ?? 0)),
-    updateSubtask: m(({ id, patch }: { id: string; patch: Partial<Omit<PmSubtask, 'id' | 'taskId'>> }) => s.updateSubtask(id, patch)),
+    updateSubtask: m(({ id, patch }: { id: string; patch: Partial<Omit<PmSubtask, 'id' | 'taskId' | 'doneDate' | 'doneBy'>> }) => s.updateSubtask(id, patch, me)),
     removeSubtask: m((id: string) => s.removeSubtask(id)),
     // 업무계획 (3-6)
     setPlanDay: m(({ date, items, who }: { date: string; items: PmPlanItem[]; who?: string }) => s.setPlanDay(who ?? me, date, items)),

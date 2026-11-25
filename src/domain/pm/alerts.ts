@@ -182,7 +182,7 @@ export function myAlerts(me: string, X: AlertInputs): PmAlert[] {
   // 내가 맡긴 일이 끝났을 때 (7일) — 세부 작업 · 액션 아이템
   for (const s of X.subtasks) {
     const t = taskOf.get(s.taskId);
-    if (!t || s.legacyKey || !s.done || s.createdBy !== me || !s.assigneeId || s.assigneeId === me || !recent(s.doneDate)) continue;
+    if (!t || s.legacyKey || !s.done || s.createdBy !== me || !s.assigneeId || s.assigneeId === me || s.doneBy === me || !recent(s.doneDate)) continue;
     out.push({ lv: 'ok', txt: `맡긴 일 완료 · ${X.shortOf(t.projectId)} ${trunc(s.text, 28)} (${short(s.assigneeId)} · ${monthDay(s.doneDate)})`, go: view('dash/plan') });
   }
   for (const a of X.actions) if (a.done && a.by === me && a.whoId !== me && a.doneBy !== me && recent(a.doneDate)) out.push({ lv: 'ok', txt: `액션 아이템 완료 · ${trunc(a.text, 30)} (${short(a.whoId)} · ${monthDay(a.doneDate)})`, go: view('doc/meet', { act: a.id }) });

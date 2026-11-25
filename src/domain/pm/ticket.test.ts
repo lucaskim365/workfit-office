@@ -91,7 +91,7 @@ test('대리 처리 표시 · 취소하면 다시 발행 가능 · 보류·재�
 });
 
 test('세부 작업 티켓: 마감 = 예정일 → 업무 종료일, 완료하면 세부 작업도 완료', () => {
-  const s: PmSubtask = { id: 's1', taskId: 'P2|01-01', text: 'API 연결', assigneeId: 'u1', due: '', estHours: 0, done: false, doneDate: '', memo: '', createdBy: '', createdDate: TODAY, fromFp: false, order: 0, legacyKey: '' };
+  const s: PmSubtask = { id: 's1', taskId: 'P2|01-01', text: 'API 연결', assigneeId: 'u1', due: '', estHours: 0, done: false, doneDate: '', doneBy: '', memo: '', createdBy: '', createdDate: TODAY, fromFp: false, order: 0, legacyKey: '' };
   let x = makeSubTicket('P2-0002', task(), s, ctx);
   assert.equal(x.due, '2026-11-30');
   assert.equal(x.parent, '자재 입고');

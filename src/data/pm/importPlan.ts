@@ -236,7 +236,7 @@ export function buildImportPreview(state: DemoState, users: readonly GwUserLite[
     list.forEach((s, i) => {
       const row: PmSubtask = {
         id: s.id, taskId: key, text: s.txt, assigneeId: idOf(s.who), due: s.due ?? '', estHours: Number(s.est) || 0,
-        done: !!s.done, doneDate: s.dd ?? '', memo: '', createdBy: idOf(s.by), createdDate: s.d ?? '', fromFp: false, order: i,
+        done: !!s.done, doneDate: s.dd ?? '', doneBy: idOf(s.ddBy), memo: '', createdBy: idOf(s.by), createdDate: s.d ?? '', fromFp: false, order: i,
         // 예전 WBS 번호면 '옛 업무' 기록으로만 (11/24 사용자 — 다시 잇는 화면 없음)
         legacyKey: taskIds.has(key) ? '' : key,
       };

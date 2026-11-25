@@ -40,7 +40,28 @@ test('세부 작업 티켓: 완료하면 세부 작업 완료, 진행 중이면 
   const after = snap.subtasks.find((v) => v.id === sub.id)!;
   assert.equal(after.done, true);
   assert.equal(after.doneDate, TODAY);
+  assert.equal(after.doneBy, 'u3', '승인한 사람 = 완료한 사람 (데모 tkMove ddBy)');
+  await s.moveTicket(x.no, '진행중', '다시 볼 것', 'u3', nameOf, TODAY); // 재오픈 → 완료 풀림
+  const re = (await s.snapshot()).subtasks.find((v) => v.id === sub.id)!;
+  assert.deepEqual([re.done, re.doneDate, re.doneBy], [false, '', '']);
+  await s.moveTicket(x.no, '검토요청', '', 'u1', nameOf, TODAY);
+  await s.moveTicket(x.no, '완료', '', 'u3', nameOf, TODAY);
   await s.removeSubtask(sub.id); // 완료된 티켓이면 지울 수 있음
+});
+
+test('세부 작업 완료 체크: 완료한 날 · 사람 = 체크한 사람 (담당과 달라도), 풀면 비움 (데모 subDone · planDone ddBy)', async () => {
+  const { s, t } = await setup();
+  const sub = await s.addSubtask(t.id, '남이 맡은 일', 'u3', '', 'u3', TODAY);
+  assert.equal(sub.doneBy, '');
+  await s.updateSubtask(sub.id, { done: true }, 'u1', TODAY);
+  let x = (await s.snapshot()).subtasks.find((v) => v.id === sub.id)!;
+  assert.deepEqual([x.done, x.doneDate, x.doneBy, x.assigneeId], [true, TODAY, 'u1', 'u3']);
+  await s.updateSubtask(sub.id, { memo: '메모만' }, 'u3', TODAY); // 완료 말고 다른 칸은 완료한 사람 그대로
+  x = (await s.snapshot()).subtasks.find((v) => v.id === sub.id)!;
+  assert.equal(x.doneBy, 'u1');
+  await s.updateSubtask(sub.id, { done: false }, 'u1', TODAY);
+  x = (await s.snapshot()).subtasks.find((v) => v.id === sub.id)!;
+  assert.deepEqual([x.done, x.doneDate, x.doneBy], [false, '', '']);
 });
 
 test('업무를 고치면 티켓도 따라가고 변경 이력에 "티켓 반영"', async () => {

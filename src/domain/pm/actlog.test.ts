@@ -70,6 +70,36 @@ test('활동 기록 (activityAll): 기록마다 한 줄 · 데모 글자 · 최�
   assert.deepEqual(L.map((x) => x.d), [...L.map((x) => x.d)].sort().reverse(), '최근 순');
 });
 
+test('활동 기록: 세부 작업 완료 = 완료 체크한 사람 · 액션 담당 빔 = 미지정 · 같은 날은 데모 순서', () => {
+  const X = inputs();
+  const q = pmProjectSchema.parse({ id: 'P8', company: '둘째', biz: '정부일반형', start: '2026-07-01', end: '2027-03-31' });
+  const D = '2026-11-24';
+  const L = activityAll({
+    ...X,
+    projects: [X.projects[0], q],
+    logs: [], tickets: [], weekChecks: [], docs: [], issues: [], crs: [], meetings: [], reports: [],
+    gov: [pmGovRecordSchema.parse({ id: 'P9|g_mid', projectId: 'P9', itemId: 'g_mid', v: '적합', date: D, by: 'u1' }),
+      pmGovRecordSchema.parse({ id: 'P8|g_mid', projectId: 'P8', itemId: 'g_mid', v: '적합', date: D, by: 'u1' })],
+    planChecks: [pmPlanCheckSchema.parse({ id: 'P9|d1', projectId: 'P9', dutyId: 'd1', date: D, by: 'u1' }),
+      pmPlanCheckSchema.parse({ id: 'P8|d1', projectId: 'P8', dutyId: 'd1', date: D, by: 'u1' })],
+    agreements: [pmAgreementChangeSchema.parse({ id: 'a1', projectId: 'P9', date: D, kind: 'ext', st: '신청함', by: 'u1' }),
+      pmAgreementChangeSchema.parse({ id: 'a2', projectId: 'P8', date: D, kind: 'ext', st: '신청함', by: 'u1' })],
+    actions: [pmActionSchema.parse({ id: 'x2', projectId: 'P9', text: '담당 빈 일', by: 'u1', at: '2026-11-12' })],
+    subtasks: [
+      pmSubtaskSchema.parse({ id: 's1', taskId: 'P9|01-01', text: '남이 맡은 일', assigneeId: 'u2', createdBy: 'u2', createdDate: '2026-11-13', done: true, doneDate: '2026-11-15', doneBy: 'u1' }),
+      pmSubtaskSchema.parse({ id: 's3', taskId: 'P9|01-01', text: '담당 없는 일', createdBy: 'u2', createdDate: '2026-11-13', done: true, doneDate: '2026-11-15', doneBy: 'u1' }),
+      pmSubtaskSchema.parse({ id: 's4', taskId: 'P9|01-01', text: '예전 완료', assigneeId: 'u2', createdBy: 'u2', createdDate: '2026-11-13', done: true, doneDate: '2026-11-15' }),
+    ],
+  });
+  const line = (txt: string) => L.find((x) => x.cat === '세부 작업' && x.txt === txt);
+  assert.equal(line('남이 맡은 일 완료')?.who, 'u1', '담당(u2)이 아니라 체크한 사람');
+  assert.equal(line('담당 없는 일 완료')?.who, 'u1');
+  assert.equal(line('예전 완료 완료')?.who, 'u2', '완료한 사람 기록이 없으면 담당');
+  assert.ok(L.some((x) => x.cat === '액션 아이템' && x.txt === '담당 빈 일 등록 → 미지정'));
+  // 같은 날: 점검(모든 사업) → 약속(모든 사업) → 사업마다 협약변경 (데모 activityAll 순)
+  assert.deepEqual(L.filter((x) => x.d === D).map((x) => `${x.cat}:${x.k}`), ['점검 결과:P9', '점검 결과:P8', '계획서 약속:P9', '계획서 약속:P8', '협약변경:P9', '협약변경:P8']);
+});
+
 test('활동 기록 거르기 (pActLog): 기간 · 사람 · 사업 · 종류 · 검색', () => {
   const L = activityAll(inputs());
   const label = (id: string) => names[id] ?? '';
