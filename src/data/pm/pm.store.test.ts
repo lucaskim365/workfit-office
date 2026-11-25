@@ -106,3 +106,30 @@ test('내 업무(3-5): 진행률 기록이 진행 중 티켓에도 · 나중에 
   assert.equal(snap.msOk[0].id, t.id);
   assert.match(snap.logs.at(-1)!.text, /마일스톤 승인 — u3 부장/);
 });
+
+test('업무계획(3-6): 그날 저장 · 반복 업무가 고친 앞날에도 · 남에게 배정한 세부 작업이 그 사람 저장된 날에 · 번호 바뀌면 따라감 · 임시저장 30일', async () => {
+  const { s, t } = await setup();
+  await s.setPlanDay('u1', '2026-11-26', [{ taskId: t.id, auto: true }, { text: '현장 미팅', hours: 2 }]);
+  await s.setPlanDay('u1', '2026-11-24', [{ text: '지난 날' }]);
+  let snap = await s.snapshot();
+  assert.deepEqual(snap.planDays.find((p) => p.date === '2026-11-26')!.items, [{ taskId: t.id }, { text: '현장 미팅', hours: 2 }], '자동 표시는 떼고 저장');
+  await s.addPlanRep('u1', [4], '주간보고', TODAY); // 목요일 = 11/26
+  snap = await s.snapshot();
+  assert.equal(snap.planDays.find((p) => p.date === '2026-11-26')!.items[0].text, '주간보고');
+  assert.equal(snap.planDays.find((p) => p.date === '2026-11-24')!.items.length, 1, '지난 날은 그대로');
+  // u3 가 12/1 계획을 고쳐 둠 → u1 이 u3 에게 12/1 세부 작업 배정
+  await s.setPlanDay('u3', '2026-12-01', [{ text: '회의' }]);
+  const sub = await s.addSubtask(t.id, '화면 API', 'u3', '2026-12-01', 'u1', TODAY, 3);
+  snap = await s.snapshot();
+  assert.deepEqual(snap.planDays.find((p) => p.who === 'u3')!.items[1], { taskId: t.id, subId: sub.id, hours: 3 });
+  await s.updateTask(t.id, { ...t, id: `${t.projectId}|99-99`, code: '99-99' }, 'u1');
+  snap = await s.snapshot();
+  assert.ok(snap.planDays.every((p) => p.items.every((it) => it.taskId !== t.id)), '옛 번호 없음');
+  await s.savePdfDraft({ who: 'u1', date: '2026-10-01', dept: '개발', name: 'u1', rows: [], at: '' }, TODAY);
+  await s.savePdfDraft({ who: 'u1', date: TODAY, dept: '개발', name: 'u1', rows: [['a', '', '50%']], at: '11/25 10:00' }, TODAY);
+  snap = await s.snapshot();
+  assert.deepEqual(snap.pdfDrafts.map((x) => x.date), [TODAY], '30일 지난 임시저장은 지움');
+  await s.ensureCarryFrom('2026-11-26');
+  await s.ensureCarryFrom('2026-12-01');
+  assert.equal((await s.snapshot()).settings.carryFrom, '2026-11-26', '처음 한 번만');
+});

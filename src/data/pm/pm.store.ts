@@ -1,8 +1,9 @@
-import { applyProgress, makeBaseline, todayStr } from '@/domain/pm/rules';
+import { addDays, applyProgress, makeBaseline, todayStr } from '@/domain/pm/rules';
 import type {
   PmAction, PmAgreementChange, PmBaseline, PmChangeLog, PmGovLink, PmGovRecord, PmIssue, PmLater, PmMilestoneOk, PmPlanCheck,
-  PmProject, PmSubtask, PmTask, PmTaskDone, PmTaskFunctions, PmUpdRequest, PmWeekCheck,
+  PmPdfDraft, PmPlanDay, PmPlanItem, PmPlanRep, PmProject, PmSubtask, PmTask, PmTaskDone, PmTaskFunctions, PmUpdRequest, PmWeekCheck,
 } from '@/domain/pm/schema';
+import { wdOf } from '@/domain/pm/plan';
 import type { PmPlan } from '@/domain/pm/site';
 import { LOAD_MAX_DEFAULT } from '@/domain/pm/team';
 import { SEED_BASE_DATE, SEED_VERSION, seedFunctions, seedPlanFunctions, seedPlans, seedProjects, seedSubtasks, seedTasks } from './seed';
@@ -45,7 +46,7 @@ export interface PmSnapshot {
   actions: PmAction[];
   // ── 3-4 (팀 현황) ──
   /** 화면 설정 (데모 S.loadMax — 모두가 같이 보는 값) */
-  settings: { loadMax: number };
+  settings: { loadMax: number; carryFrom: string };
   // ── 3-5 (내 업무) ──
   /** 진행률 '변동 없음' 확인 (주마다) */
   weekChecks: PmWeekCheck[];
@@ -53,6 +54,13 @@ export interface PmSnapshot {
   later: PmLater[];
   /** 진행률 갱신 요청 (보내는 화면은 5단계 주간 진행률) */
   updReq: PmUpdRequest[];
+  // ── 3-6 (업무계획) ──
+  /** 직접 고친 날의 계획 (사람 · 날짜마다) */
+  planDays: PmPlanDay[];
+  /** 반복 업무 (사람마다) */
+  planReps: PmPlanRep[];
+  /** 일일 업무 보고 임시저장 (사람 · 날짜마다, 30일) */
+  pdfDrafts: PmPdfDraft[];
 }
 
 const clone = <T>(v: T): T => structuredClone(v);
@@ -96,8 +104,9 @@ export function createPmStore(today = todayStr()) {
   const state: PmSnapshot = { projects, tasks, functions, subtasks, baselines, logs: [], done: [], tickets: [], sourceVersion: SEED_VERSION,
     baseDate: SEED_BASE_DATE, plans: seedPlans(), planFunctions: seedPlanFunctions(),
     gov: [], planChecks: [], govLinks: [], agreements: [], msOk: [], issues: [], actions: [],
-    settings: { loadMax: LOAD_MAX_DEFAULT },
+    settings: { loadMax: LOAD_MAX_DEFAULT, carryFrom: '' },
     weekChecks: [], later: [], updReq: [],
+    planDays: [], planReps: [], pdfDrafts: [],
   };
 
   const log = (projectId: string, code: string, kind: PmChangeLog['kind'], text: string, by: string, day: string) => {
@@ -118,7 +127,10 @@ export function createPmStore(today = todayStr()) {
     for (const t of state.tasks) t.predecessorIds = t.predecessorIds.map((x) => (x === oldId ? newId : x));
     // 세부 작업 티켓도 새 번호로 (업무 티켓은 syncTickets 가 이력과 함께)
     for (const x of state.tickets) if (x.subtaskId && x.taskId === oldId) x.taskId = newId;
+    // 업무계획 줄도 새 번호로 (rekey 2193)
+    for (const p of state.planDays) for (const it of p.items) if (it.taskId === oldId) it.taskId = newId;
   };
+  const planOf = (who: string, date: string) => state.planDays.find((p) => p.who === who && p.date === date);
   /** 업무를 고치면 업무 티켓도 따라감 (wbsSyncTicket) → 변경 이력 꼬리 " · 티켓 P2-0001 반영" */
   const syncTickets = (old: PmTask, next: PmTask, by: string, day: string) => {
     const i = state.tickets.findIndex((x) => x.taskId === old.id && !x.subtaskId && x.status !== '취소' && !x.legacyKey);
@@ -239,10 +251,18 @@ export function createPmStore(today = todayStr()) {
       a.doneBy = done ? by : '';
     },
 
-    async addSubtask(taskId: string, text: string, assigneeId: string, due: string, by: string, day = todayStr()): Promise<PmSubtask> {
+    /**
+     * 세부 작업 추가 (subNew). 남에게 배정하면서 예정일을 정했고 받는 사람이 그날 계획을 이미 고쳐 저장했으면 거기에도 넣음
+     * (안 고친 날은 자동 초안에 예정일 세부 작업으로 들어감 — subAdd 5832)
+     */
+    async addSubtask(taskId: string, text: string, assigneeId: string, due: string, by: string, day = todayStr(), estHours = 0): Promise<PmSubtask> {
       const order = Math.max(-1, ...state.subtasks.filter((s) => s.taskId === taskId).map((s) => s.order)) + 1;
-      const s: PmSubtask = { id: nid('s'), taskId, text, assigneeId, due, estHours: 0, done: false, doneDate: '', memo: '', createdBy: by, createdDate: day, fromFp: false, order, legacyKey: '' };
+      const s: PmSubtask = { id: nid('s'), taskId, text, assigneeId, due, estHours: +estHours || 0, done: false, doneDate: '', memo: '', createdBy: by, createdDate: day, fromFp: false, order, legacyKey: '' };
       state.subtasks.push(s);
+      if (assigneeId && assigneeId !== by && due) {
+        const sv = planOf(assigneeId, due);
+        if (sv && !sv.items.some((x) => x.subId === s.id)) sv.items.push({ taskId, subId: s.id, ...(s.estHours ? { hours: s.estHours } : {}) });
+      }
       return clone(s);
     },
     async updateSubtask(id: string, patch: Partial<Omit<PmSubtask, 'id' | 'taskId'>>, day = todayStr()) {
@@ -398,6 +418,35 @@ export function createPmStore(today = todayStr()) {
       p.bidRes = v;
       p.bidAt = v ? { date: day, by } : null;
       log(projectId, '-', '수정', v ? `선정 결과 '${v}' 기록` : `선정 결과 지움 (이전: ${old})`, by, day);
+    },
+
+    // ── 업무계획 (3-6) ──────────────────────────────
+    /** 그날 계획 저장 (planSet) — 고치는 순간 그날은 '수정함' */
+    async setPlanDay(who: string, date: string, items: readonly PmPlanItem[]) {
+      const next = items.map(({ auto: _a, ...x }) => clone(x));
+      state.planDays = [...state.planDays.filter((p) => !(p.who === who && p.date === date)), { id: `${who}|${date}`, who, date, items: next }];
+    },
+    /** 어제 남은 일이 자동으로 넘어오기 시작하는 날 — 처음 한 번만 (S.carryFrom) */
+    async ensureCarryFrom(date: string) {
+      if (!state.settings.carryFrom) state.settings.carryFrom = date;
+    },
+    /** 반복 업무 추가 (planRepAdd) — 이미 직접 고친 앞날(오늘부터)에도 맨 앞에 넣음 */
+    async addPlanRep(who: string, wd: number[], text: string, day = todayStr()) {
+      const cur = state.planReps.find((r) => r.id === who) ?? { id: who, items: [] };
+      state.planReps = [...state.planReps.filter((r) => r.id !== who), { id: who, items: [...cur.items, { wd: [...wd], text }] }];
+      for (const p of state.planDays) if (p.who === who && p.date >= day && wd.includes(wdOf(p.date)) && !p.items.some((x) => x.text === text)) p.items.unshift({ text, rep: true });
+    },
+    async removePlanRep(who: string, index: number) {
+      const cur = state.planReps.find((r) => r.id === who);
+      if (cur) cur.items.splice(index, 1);
+    },
+    /** 일일 업무 보고 임시저장 (pdfDraftSave) — 30일 지난 내 임시저장은 지움 */
+    async savePdfDraft(x: Omit<PmPdfDraft, 'id'>, day = todayStr()) {
+      const cut = addDays(day, -30);
+      state.pdfDrafts = [...state.pdfDrafts.filter((r) => !(r.who === x.who && (r.date === x.date || r.date < cut))), { ...clone(x), id: `${x.who}|${x.date}` }];
+    },
+    async removePdfDraft(who: string, date: string) {
+      state.pdfDrafts = state.pdfDrafts.filter((r) => !(r.who === who && r.date === date));
     },
 
     /** 몰림 기준 주당 마감 (loadMax 6008: 1 이상, 잘못 넣으면 8) */

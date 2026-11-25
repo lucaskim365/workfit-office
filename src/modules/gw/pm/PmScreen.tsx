@@ -12,6 +12,7 @@ import { OverviewView } from './views/dash/OverviewView';
 import { SiteView } from './views/dash/SiteView';
 import { TeamHoursView, TeamLoadView, TeamTodayView } from './views/dash/TeamView';
 import { MyView } from './views/dash/MyView';
+import { PlanView } from './views/plan/PlanView';
 
 /** 옮긴 보기 → 화면. 없는 보기는 '옮기는 중' 자리 */
 const VIEWS: Record<string, ComponentType> = {
@@ -25,6 +26,7 @@ const VIEWS: Record<string, ComponentType> = {
   'sched/load': TeamLoadView,
   'dash/hours': TeamHoursView,
   'dash/my': MyView,
+  'dash/plan': PlanView,
 };
 
 /**

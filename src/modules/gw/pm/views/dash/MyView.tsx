@@ -12,6 +12,8 @@ import {
 import { usePmDerived, usePmMutations, usePmSiteMutations, usePmSites, type PmDerived } from '@/features/pm/usePm';
 import { usePmPeople } from '../../usePmPeople';
 import { usePmModals } from '../ticket/usePmModals';
+import { usePmPlanCtx } from '@/features/pm/usePmPlan';
+import { planEditable, planMarkTask, planRecentIdx, planUpdDates, todayRecord } from '@/domain/pm/plan';
 import { EmptyHint, ProgressBar, ProjectTag, Tag } from '../wbs/parts';
 import { CardHead, ScreenHead, SiteStatusTag } from './parts';
 
@@ -60,6 +62,7 @@ export function MyView() {
   const sites = usePmSites(d);
   const mut = usePmMutations(me, people.nameOf);
   const smut = usePmSiteMutations(me);
+  const C = usePmPlanCtx(d);
   const [, setParams] = useSearchParams();
   const shortOf = (id: string) => { const p = d?.snap.projects.find((x) => x.id === id); return p ? shortName(p, d!.snap.projects) : id; };
   const modals = usePmModals({ d, people, mut, shortOf });
@@ -80,11 +83,13 @@ export function MyView() {
     const w = myWork(me, X, laterIds, sort, sortL);
     const ib = myInbox(me, { ...X, tickets: d.snap.tickets, msOk: new Map(d.snap.msOk.map((x) => [x.id, x])), issues: d.snap.issues, actions: d.snap.actions, pmOf });
     const sitePm = (id: string) => { const p = d.snap.projects.find((x) => x.id === id); return p ? pmOf(p)[0] ?? '' : ''; };
-    const U = { ...X, logs: d.snap.logs, checks: d.snap.weekChecks, tickets: d.snap.tickets, baseDate: d.snap.baseDate, sitePm };
+    // 업무계획에서 체크 · 메모한 날도 갱신으로 · 최근 7일 업무계획에 넣은 업무 = '최근 한 업무' (updIdx · planRecentIdx)
+    const U = { ...X, logs: d.snap.logs, checks: d.snap.weekChecks, tickets: d.snap.tickets, baseDate: d.snap.baseDate, sitePm,
+      more: C ? planUpdDates(C) : undefined, planRecent: C ? planRecentIdx(C) : undefined };
     return { X, w, ib, U, upd: myUpdList(me, U), sites: mySites(w, X) };
     // pmOf 는 people 에 기댐
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [d, me, sort, sortL, people.idByName]);
+  }, [d, C, me, sort, sortL, people.idByName]);
 
   if (!d || !calc) return <EmptyHint title="내 업무를 불러오는 중입니다" />;
   if (!me) return <EmptyHint title="로그인한 사용자를 알 수 없습니다" hint="그룹웨어에 다시 로그인하면 내 업무가 나옵니다." />;
@@ -103,6 +108,7 @@ export function MyView() {
     if (tk && tk.status !== '완료' && tk.status !== '취소') { say(`티켓 ${tk.no}(${tk.status})로 처리 중입니다. 티켓에서 검토 요청 → 승인하면 완료됩니다`, true); return; }
     const left = (d.subsByTask.get(t.id) ?? []).filter((s) => !s.done).length;
     if (left && !confirm(`아직 안 끝난 세부 작업이 ${left}건 있습니다.\n그래도 '${t.name}' 업무를 완료로 바꿀까요? (세부 작업은 그대로 남습니다)`)) return;
+    if (C) { const items = planMarkTask(planEditable(C, me, d.today), t.id, true); if (items) mut.setPlanDay.mutate({ date: d.today, items }); }
     mut.setProgress.mutate({ id: t.id, pct: 100, why: 'TASK 완료 처리' });
     say(`'${t.name}' 완료 — 실적 100%. 잘못 눌렀으면 업무 창의 [완료 취소]로 되돌릴 수 있습니다`);
   };
@@ -120,7 +126,7 @@ export function MyView() {
   const head = (
     <ScreenHead title="내 업무" desc={`${people.labelOf(me)} · 진행률을 기록하면 업무 목록과 팀 현황에 바로 반영됩니다`}>
       <Button size="sm" disabled title="이슈 등록은 이슈 화면과 같이 5단계에서 옮깁니다">+ 이슈 (5단계)</Button>
-      <Button size="sm" variant="primary" disabled title="업무계획의 오늘 할 일로 이동 — 업무계획(3-6)을 옮기면 켭니다">오늘 할 일 (3-6)</Button>
+      <Button size="sm" variant="primary" onClick={() => goView('dash/plan')} title="업무계획의 오늘 할 일로 이동">오늘 할 일</Button>
     </ScreenHead>
   );
 
@@ -218,6 +224,9 @@ export function MyView() {
     </button>
   );
   const inboxRef = 'pm-my-inbox';
+  const rec = C ? todayRecord(C, me, shortOf) : { rows: [], auto: false };
+  const recDone = rec.rows.filter((r) => r.done).length;
+  const recP = rec.rows.length ? Math.round((recDone / rec.rows.length) * 100) : 0;
 
   return (
     <div className="space-y-4">
@@ -239,10 +248,10 @@ export function MyView() {
           <KBox n={w.nLate} label="지연된 내 업무" tone="text-danger" onClick={() => { setSort('late'); openBoard('all'); }} title="눌러서 지금 할 일 보기 (지연 우선)" />
           <KBox n={w.nWeek} label="이번 주 마감" tone="text-amber" onClick={() => { setSort('late'); openBoard('all'); }} title="눌러서 지금 할 일 보기 (7일 안 마감 포함)" />
           <KBox n={ib.total} label="나에게 온 일" tone="text-teal" onClick={() => document.getElementById(inboxRef)?.scrollIntoView({ behavior: 'smooth', block: 'center' })} title="아래 '처리할 일'로" />
-          <KBox label="오늘 기록 (3-6)" title="업무계획의 오늘 할 일 완료 비율 — 업무계획(3-6)을 옮기면 켭니다">
-            <i className="relative grid h-[46px] w-[46px] place-items-center rounded-full" style={{ background: 'conic-gradient(var(--color-ok) 0%, var(--color-border) 0)' }}>
+          <KBox label="오늘 기록" onClick={() => goView('dash/plan')} title="업무계획의 오늘 할 일 완료 비율 — 눌러서 업무계획으로">
+            <i className="relative grid h-[46px] w-[46px] place-items-center rounded-full" style={{ background: `conic-gradient(var(--color-ok) ${recP}%, var(--color-border) 0)` }}>
               <span className="absolute inset-[5px] rounded-full bg-panel" />
-              <b className="relative text-[13px] font-extrabold text-ink3">0<em className="text-[10px] not-italic">/0</em></b>
+              <b className={`relative text-[13px] font-extrabold ${rec.rows.length ? 'text-ink' : 'text-ink3'}`}>{recDone}<em className="text-[10px] not-italic">/{rec.rows.length}</em></b>
             </i>
           </KBox>
         </div>
@@ -258,9 +267,9 @@ export function MyView() {
 
       <div className={`${sec} flex flex-wrap items-center gap-2.5 px-4 py-2.5`}>
         <b className="text-[12.5px] text-ink">오늘 업무 기록</b>
-        <span className="text-[11.5px] text-ink3">아직 없음 — 업무계획의 '오늘 할 일'에서 체크 · 메모하면 기록됩니다</span>
+        <span className="text-[11.5px] text-ink3">{rec.rows.length ? `${recDone} / ${rec.rows.length}건 완료${rec.auto ? ' · 자동 초안' : ''}` : '아직 없음'} — 업무계획의 '오늘 할 일'에서 체크 · 메모하면 기록됩니다</span>
         <span className="flex-1" />
-        <Button size="sm" disabled title="업무계획(3-6)을 옮기면 켭니다">업무계획 열기 (3-6)</Button>
+        <Button size="sm" onClick={() => goView('dash/plan')}>업무계획 열기</Button>
         <Button size="sm" disabled title="수행일지(3-7)를 옮기면 켭니다">지난 기록 (3-7)</Button>
       </div>
 

@@ -11,6 +11,9 @@ export interface PmPerson {
   /** "이름 직급" */
   label: string;
   dept: string;
+  /** 직급 · 직책 (팀 보고 모아 받기 버튼 — 팀장) */
+  position: string;
+  jobTitle: string;
 }
 
 export function usePmPeople() {
@@ -20,7 +23,7 @@ export function usePmPeople() {
     () =>
       (q.data ?? [])
         .filter((u) => u.status !== '미사용')
-        .map((u) => ({ id: u.id, name: u.name, label: u.position ? `${u.name} ${u.position}` : u.name, dept: u.dept ?? '' }))
+        .map((u) => ({ id: u.id, name: u.name, label: u.position ? `${u.name} ${u.position}` : u.name, dept: u.dept ?? '', position: u.position ?? '', jobTitle: u.jobTitle ?? '' }))
         .sort((a, b) => a.name.localeCompare(b.name, 'ko')),
     [q.data],
   );

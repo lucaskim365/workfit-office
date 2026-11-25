@@ -317,3 +317,54 @@ export const pmChangeLogSchema = z.object({
   by: z.string().default(''),
 });
 export type PmChangeLog = z.infer<typeof pmChangeLogSchema>;
+
+// ── 3-6 업무계획 (데모 S.plan · S.planRep · S.pdfDraft) ──
+/**
+ * 업무계획 한 줄 — 업무(taskId) · 세부 작업(taskId+subId) · 직접 쓴 일(text) 중 하나.
+ * done = 오늘 할 몫 끝(세부 작업 줄은 세부 작업 완료가 기준) · pct = 직접 쓴 일의 진행률 · hours = 실제로 쓴 시간.
+ * ticketNo · actionId = 티켓 · 회의 액션에서 가져온 줄 · from = 처음 계획한 날(넘어온 일) · rep = 반복 업무 · auto = 자동 초안
+ */
+export const pmPlanItemSchema = z.object({
+  taskId: z.string().optional(),
+  subId: z.string().optional(),
+  text: z.string().optional(),
+  done: z.boolean().optional(),
+  memo: z.string().optional(),
+  hours: z.number().optional(),
+  pct: z.number().optional(),
+  rep: z.boolean().optional(),
+  ticketNo: z.string().optional(),
+  actionId: z.string().optional(),
+  from: z.string().optional(),
+  auto: z.boolean().optional(),
+});
+export type PmPlanItem = z.infer<typeof pmPlanItemSchema>;
+
+/** 그날 직접 고친 계획 (`pmPlans`) — 쓴 날만 저장. id = `${사용자 ID}|${날짜}` */
+export const pmPlanDaySchema = z.object({
+  id: z.string().min(1),
+  who: z.string().min(1),
+  date: day,
+  items: z.array(pmPlanItemSchema).default([]),
+});
+export type PmPlanDay = z.infer<typeof pmPlanDaySchema>;
+
+/** 반복 업무 (`pmPlanReps`) — 사람마다. wd = 요일(1 월 ~ 5 금). id = 사용자 ID */
+export const pmPlanRepSchema = z.object({
+  id: z.string().min(1),
+  items: z.array(z.object({ wd: z.array(z.number()), text: z.string().min(1) })).default([]),
+});
+export type PmPlanRep = z.infer<typeof pmPlanRepSchema>;
+
+/** 일일 업무 보고 임시저장 (`pmPdfDrafts`) — rows = [업무 내용, 비고, 진행상태]. id = `${사용자 ID}|${날짜}`. 30일 지나면 지움 */
+export const pmPdfDraftSchema = z.object({
+  id: z.string().min(1),
+  who: z.string().min(1),
+  date: day,
+  dept: z.string().default(''),
+  name: z.string().default(''),
+  rows: z.array(z.tuple([z.string(), z.string(), z.string()])).default([]),
+  /** 저장한 때 "11/25 14:03" */
+  at: z.string().default(''),
+});
+export type PmPdfDraft = z.infer<typeof pmPdfDraftSchema>;

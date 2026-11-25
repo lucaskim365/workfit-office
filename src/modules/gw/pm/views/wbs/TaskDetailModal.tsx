@@ -7,6 +7,9 @@ import type { PmDerived, usePmMutations } from '@/features/pm/usePm';
 import type { usePmPeople } from '../../usePmPeople';
 import { makeSubTicket, subTicketOf, tkOpen } from '@/domain/pm/ticket';
 import { StatusTag } from '../ticket/parts';
+import { HOURS, planEditable, planMarkTask } from '@/domain/pm/plan';
+import { hourText } from '@/domain/pm/team';
+import { planCtxOf } from '@/features/pm/usePmPlan';
 import { ProjectTag, Tag } from './parts';
 
 /**
@@ -39,9 +42,16 @@ export function TaskDetailModal({ id, d, people, mut, shortOf, onClose, onEdit, 
   const preds = t.predecessorIds.map((x) => d.taskMap.get(x)).filter(Boolean);
   const tk = d.taskTicket.get(t.id);
 
+  /** 오늘 할 일에 이 업무 줄이 있으면 체크 상태를 맞춤 (planMarkTask) */
+  const markPlan = (on: boolean) => {
+    if (!people.me) return;
+    const items = planMarkTask(planEditable(planCtxOf(d), people.me, today), t.id, on);
+    if (items) mut.setPlanDay.mutate({ date: today, items });
+  };
   const complete = () => {
     const left = subs.filter((s) => !s.done).length;
     if (left && !confirm(`아직 안 끝난 세부 작업이 ${left}건 있습니다.\n그래도 '${t.name}' 업무를 완료로 바꿀까요? (세부 작업은 그대로 남습니다)`)) return;
+    markPlan(true);
     mut.setProgress.mutate({ id: t.id, pct: 100, why: 'TASK 완료 처리' });
     setMsg(`완료 — 실적 100%. 잘못 눌렀으면 [완료 취소]로 되돌릴 수 있습니다`);
   };
@@ -49,6 +59,7 @@ export function TaskDetailModal({ id, d, people, mut, shortOf, onClose, onEdit, 
     if (!info) return;
     const prev = undoPct(info);
     if (!confirm(`'${t.name}' 완료를 취소할까요?\n진행률을 ${prev}%로 되돌립니다.`)) return;
+    markPlan(false);
     mut.setProgress.mutate({ id: t.id, pct: prev, why: 'TASK 완료 취소' });
     setMsg(`완료를 취소했습니다 — 진행률 ${prev}%`);
   };
@@ -172,7 +183,7 @@ function ProgressQuick({ pct, onSet }: { pct: number; onSet: (v: number) => void
  * 세부 작업 (subBox 5336): 추가·체크·담당·기한·삭제·메모 + 세부 작업 티켓(줄마다 [발행] / 티켓 번호, 미발행 모두 발행, 추가하면서 발행).
  * 다 끝내도 자동 완료 안 함 — 안내만 (subSync). 업무 상세 창과 티켓 창이 같이 쓴다.
  */
-export function SubtaskBox({ taskId, d, people, mut, onMsg, taskName, taskDone, onOpenTicket }: {
+export function SubtaskBox({ taskId, d, people, mut, onMsg, taskName, taskDone, onOpenTicket, inline }: {
   taskId: string;
   d: PmDerived;
   people: ReturnType<typeof usePmPeople>;
@@ -181,12 +192,26 @@ export function SubtaskBox({ taskId, d, people, mut, onMsg, taskName, taskDone, 
   taskName: string;
   taskDone: boolean;
   onOpenTicket: (no: string) => void;
+  /** 업무계획 오늘 할 일 줄 안에서 펼친 것 — 처음 쪼갠 내 세부 작업이 그 업무 줄을 대신함 (subAdd ctx inline) */
+  inline?: boolean;
 }) {
   const subs = d.subsByTask.get(taskId) ?? [];
   const task = d.taskMap.get(taskId);
   const [txt, setTxt] = useState('');
   const [who, setWho] = useState(people.me);
   const [due, setDue] = useState('');
+  const [est, setEst] = useState('');
+  const me = people.me;
+  const today = d.today;
+  const C = planCtxOf(d);
+  const todayIts = me ? planEditable(C, me, today) : [];
+  const inToday = new Set(todayIts.map((x) => x.subId).filter(Boolean));
+  /** [+ 오늘] (subToday) */
+  const toToday = (s: PmSubtask) => {
+    if (inToday.has(s.id)) { onMsg('이미 오늘 할 일에 있습니다'); return; }
+    mut.setPlanDay.mutate({ date: today, items: [...todayIts, { taskId, subId: s.id, ...(s.estHours ? { hours: s.estHours } : {}) }] });
+    onMsg('오늘 할 일에 넣었습니다');
+  };
   const [withTk, setWithTk] = useState(false);
   const [memoOpen, setMemoOpen] = useState<string | null>(null);
   const tks = d.snap.tickets;
@@ -213,10 +238,21 @@ export function SubtaskBox({ taskId, d, people, mut, onMsg, taskName, taskDone, 
     const s = txt.trim();
     if (!s) return;
     if (withTk && !who) { onMsg('티켓을 같이 발행하려면 담당을 고르세요'); return; }
-    const made = await mut.addSubtask.mutateAsync({ taskId, text: s, assigneeId: who, due });
+    const mineBefore = subs.filter((x) => x.assigneeId === me).length;
+    const made = (await mut.addSubtask.mutateAsync({ taskId, text: s, assigneeId: who, due, est: +est || 0 })) as PmSubtask;
     setTxt('');
     setDue('');
-    if (withTk) await issueOne(made as PmSubtask);
+    // 카드에서 처음 쪼갠 내 세부 작업 → 오늘 할 일의 '업무 통째' 줄을 그 세부 작업으로
+    if (inline && who === me && mineBefore === 0) {
+      const i = todayIts.findIndex((x) => x.taskId === taskId && !x.subId);
+      if (i >= 0) {
+        const a = todayIts.map((x) => ({ ...x }));
+        a[i] = { ...a[i], subId: made.id, ...(made.estHours && !a[i].hours ? { hours: made.estHours } : {}) };
+        mut.setPlanDay.mutate({ date: today, items: a });
+      }
+    }
+    if (who && who !== me) onMsg(`${people.nameOf(who)}에게 배정했습니다${due ? ` — ${monthDay(due)} 할 일에 들어갑니다` : ''}`);
+    if (withTk) await issueOne(made);
   };
   const remove = async (id: string) => {
     try { await mut.removeSubtask.mutateAsync(id); } catch (e) { onMsg(e instanceof Error ? e.message : String(e)); }
@@ -252,9 +288,10 @@ export function SubtaskBox({ taskId, d, people, mut, onMsg, taskName, taskDone, 
               </select>
             ) : (
               <span className="whitespace-nowrap text-[11px] text-ink3">
-                {people.nameOf(s.assigneeId)}{s.due ? ` · ~${monthDay(s.due)}` : ''}{s.done && s.doneDate ? ` · ${monthDay(s.doneDate)} 완료` : ''}
+                {people.nameOf(s.assigneeId)}{s.estHours ? ` · ${hourText(s.estHours)}` : ''}{s.due ? ` · ~${monthDay(s.due)}` : ''}{s.done && s.doneDate ? ` · ${monthDay(s.doneDate)} 완료` : ''}
               </span>
             )}
+            {!s.done && me && s.assigneeId === me && (inToday.has(s.id) ? <Tag tone="run">오늘</Tag> : <Button size="sm" onClick={() => toToday(s)} title="오늘 할 일에 넣기">+ 오늘</Button>)}
             {(() => {
               const x = tkOf(s.id);
               if (x) return <Button size="sm" onClick={() => onOpenTicket(x.no)} title="티켓 열기"><StatusTag s={x.status} /> {x.no}</Button>;
@@ -284,6 +321,10 @@ export function SubtaskBox({ taskId, d, people, mut, onMsg, taskName, taskDone, 
         <select className="w-[110px] rounded border border-border-hi px-1 py-1 text-[12px]" value={who} onChange={(e) => setWho(e.target.value)} title="담당">
           <option value="">담당 없음</option>
           {people.people.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
+        </select>
+        <select className="w-[76px] rounded border border-border-hi px-1 py-1 text-[12px]" value={est} onChange={(e) => setEst(e.target.value)} title="예상 시간">
+          <option value="">시간</option>
+          {HOURS.map((h) => <option key={h} value={h}>{h}h</option>)}
         </select>
         <input type="date" className="w-[132px] rounded border border-border-hi px-1 py-1 text-[12px]" value={due} onChange={(e) => setDue(e.target.value)} title="예정일 (선택)" />
         <label className="flex items-center gap-1 text-[11.5px]" title="추가하면서 담당자에게 티켓 발행"><input type="checkbox" checked={withTk} onChange={(e) => setWithTk(e.target.checked)} />🎫 티켓도 발행</label>

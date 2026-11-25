@@ -5,7 +5,7 @@ import { leftText, monthDay, shortName } from '@/domain/pm/rules';
 import { agoText } from '@/domain/pm/site';
 import {
   HOUR_PERIODS, LOAD_WEEKS, PERSON_WBS, hourRange, hourSummary, hourText, loadCell, loadOrder, loadWeeks, projectNum, reassignList, teamRows,
-  type HourPeriod, type HourRow, type PersonTab,
+  type HourPeriod, type PersonTab,
 } from '@/domain/pm/team';
 import { usePmDerived, usePmMutations, usePmSiteMutations, type PmDerived } from '@/features/pm/usePm';
 import { usePmPeople } from '../../usePmPeople';
@@ -13,6 +13,9 @@ import { usePmModals } from '../ticket/usePmModals';
 import { EmptyHint, ProjectTag } from '../wbs/parts';
 import { CardHead, ScreenHead } from './parts';
 import { PersonModal } from './PersonModal';
+import { usePmPlanCtx } from '@/features/pm/usePmPlan';
+import { isWeekend, pDone, planDay, planDaysOf, planH, planHourRows, planText, type PlanCtx } from '@/domain/pm/plan';
+import { TeamPdfModal } from '../plan/PlanModals';
 
 /**
  * 대시보드 › 팀 현황 — 오늘 (pTeam 3579) · 앞으로 4주 (schedLoad 4164) · 투입 시간 (pHours 8299). 3-4단계.
@@ -31,6 +34,7 @@ function useTeamBase() {
   const [pop, setPop] = useState<PersonPop | null>(null);
   const shortOf = (id: string) => { const p = d?.snap.projects.find((x) => x.id === id); return p ? shortName(p, d!.snap.projects) : id || '사내 · 기타'; };
   const modals = usePmModals({ d, people, mut, shortOf });
+  const C = usePmPlanCtx(d);
   /** 업무 목록으로 (wbsGoto) — 사업 · 담당 · 기간 · 상태 */
   const goWbs = (o: { k: string; who: string; period: string; st?: string }) => {
     const next = new URLSearchParams();
@@ -53,7 +57,7 @@ function useTeamBase() {
       {modals.node}
     </>
   );
-  return { people, d, shortOf, modals, goWbs, openPerson: (who: string, k: string, tab: PersonTab) => setPop({ who, k, tab }), node };
+  return { people, d, C, shortOf, modals, goWbs, openPerson: (who: string, k: string, tab: PersonTab) => setPop({ who, k, tab }), node };
 }
 
 /** 사업 고르기 (sitePk) — 업무가 있거나 협약 시작일이 있는 사업, 번호 순 */
@@ -75,13 +79,16 @@ const Initials = ({ name }: { name: string }) => (
 
 export function TeamTodayView() {
   const B = useTeamBase();
-  const { d, people, shortOf } = B;
+  const { d, C, people, shortOf } = B;
   const [k, setK] = useState('all');
+  const [col, setCol] = useState<'plan' | 'now'>('plan');
+  const [teamPdf, setTeamPdf] = useState(false);
   const rows = useMemo(() => {
     if (!d) return [];
-    return teamRows(people.people.map((p) => ({ id: p.id, dept: p.dept })), { tasks: d.snap.tasks, liveMap: d.liveMap, projects: d.snap.projects, today: d.today, tickets: d.snap.tickets, logs: d.snap.logs }, k);
-  }, [d, people.people, k]);
-  if (!d) return <EmptyHint title="팀 현황을 불러오는 중입니다" />;
+    // 마지막 업데이트에 업무계획을 직접 고친 날도 (lastAct)
+    return teamRows(people.people.map((p) => ({ id: p.id, dept: p.dept })), { tasks: d.snap.tasks, liveMap: d.liveMap, projects: d.snap.projects, today: d.today, tickets: d.snap.tickets, logs: d.snap.logs, lastMore: C ? (id) => planDaysOf(C, id) : undefined }, k);
+  }, [d, C, people.people, k]);
+  if (!d || !C) return <EmptyHint title="팀 현황을 불러오는 중입니다" />;
   const today = d.today;
   const nLate = rows.filter((r) => r.late).length;
   const nStale = rows.filter((r) => r.stale).length;
@@ -107,12 +114,12 @@ export function TeamTodayView() {
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <div className="inline-flex overflow-hidden rounded-md border border-border-hi text-[12px] font-bold">
-          <button type="button" disabled title="팀원이 업무계획에 올린 오늘 할 일 — 업무계획 화면(3-6)을 옮기면 켭니다" className="cursor-not-allowed px-3 py-1 text-ink3">오늘 계획 (3-6)</button>
-          <button type="button" className="border-l border-border-hi bg-navy px-3 py-1 text-white" title="일정상 오늘이 업무 기간 안에 있는 업무">기간 중 업무</button>
+          <button type="button" onClick={() => setCol('plan')} title="팀원이 업무계획에 올린 오늘 할 일 (안 고쳤으면 자동 초안)" className={`px-3 py-1 ${col === 'plan' ? 'bg-navy text-white' : 'text-ink2'}`}>오늘 계획</button>
+          <button type="button" onClick={() => setCol('now')} className={`border-l border-border-hi px-3 py-1 ${col === 'now' ? 'bg-navy text-white' : 'text-ink2'}`} title="일정상 오늘이 업무 기간 안에 있는 업무">기간 중 업무</button>
         </div>
         <span className="text-[11px] text-ink3">카드 가운데에 보여 줄 것</span>
         <span className="flex-1" />
-        <Button size="sm" disabled title="팀원들의 오늘 일일 업무 보고를 한 PDF로 묶기 — 업무계획(3-6)과 같이 옮깁니다">팀 일일 보고 모아 받기 (3-6)</Button>
+        <Button size="sm" variant="primary" onClick={() => setTeamPdf(true)} title="팀원들의 오늘 일일 업무 보고를 한 PDF로 묶기">팀 일일 보고 모아 받기</Button>
       </div>
 
       {rows.length ? (
@@ -138,7 +145,7 @@ export function TeamTodayView() {
                   {num(r.doneN, '완료', 'text-ok', 'done', r.id)}
                 </div>
                 <div className="min-h-[68px] flex-1 px-3.5 py-2 text-[12px]">
-                  {r.today.length ? r.today.slice(0, 3).map((t) => (
+                  {col === 'plan' ? <PlanCell C={C} who={r.id} shortOf={shortOf} onOpenTask={B.modals.openTask} /> : r.today.length ? r.today.slice(0, 3).map((t) => (
                     <button key={t.id} type="button" onClick={() => B.modals.openTask(t.id)} className="flex w-full items-center gap-1.5 py-0.5 text-left hover:text-teal">
                       <ProjectTag>{shortOf(t.projectId)}</ProjectTag>
                       <span className="min-w-0 flex-1 truncate">{t.name}</span>
@@ -160,8 +167,35 @@ export function TeamTodayView() {
         </section>
       )}
       <p className="text-[11px] text-ink3">※ 지연 많은 사람부터 · 회색 카드 = 급한 업무(지연 · 7일 내 마감 · 진행 중)가 있는데 일주일 넘게 업데이트(변경 이력 · 티켓 처리)가 없음 · 숫자를 누르면 그 업무 목록 · 협약 이전 · 탈락 사업 업무는 세지 않음</p>
+      {teamPdf && <TeamPdfModal C={C} me={people.me} people={people} shortOf={shortOf} onDone={() => undefined} onClose={() => setTeamPdf(false)} />}
       {B.node}
     </div>
+  );
+}
+
+/** 카드 가운데 '오늘 계획' (teamPlanCell) — 팀원 업무계획의 오늘 항목 */
+function PlanCell({ C, who, shortOf, onOpenTask }: { C: PlanCtx; who: string; shortOf: (id: string) => string; onOpenTask: (id: string) => void }) {
+  if (isWeekend(C.today)) return <span className="text-ink3">주말</span>;
+  const its = planDay(C, who, C.today);
+  const own = !!C.saved(who, C.today);
+  const hs = its.reduce((v, x) => v + planH(C, x), 0);
+  if (!its.length) return <span className="text-ink3">오늘 계획 없음</span>;
+  return (
+    <>
+      {its.map((it, i) => {
+        const t = C.task(it.taskId);
+        const dn = pDone(C, it);
+        const s = it.subId ? C.sub(it) : undefined;
+        return t ? (
+          <button key={i} type="button" onClick={() => onOpenTask(t.id)} className={`flex w-full items-center gap-1.5 py-0.5 text-left hover:text-teal ${dn ? 'opacity-60' : ''}`}>
+            {dn && <span className="text-ok">✓</span>}<ProjectTag>{shortOf(t.projectId)}</ProjectTag>
+            <span className="min-w-0 flex-1 truncate">{s ? <><span className="text-ink3">{t.name} –</span> <b>{s.text}</b></> : t.name}</span>
+            <span className="whitespace-nowrap text-[11px] text-ink3">{C.live(t).pct}%</span>{C.late(t) && <span className="text-[11px] text-danger">지연</span>}
+          </button>
+        ) : <div key={i} className={`truncate py-0.5 ${dn ? 'opacity-60' : ''}`}>{dn && <span className="text-ok">✓ </span>}✎ {planText(C, it, shortOf)}</div>;
+      })}
+      <div className="text-[11px] text-ink3">{own ? '' : '자동 초안 · '}완료 {its.filter((x) => pDone(C, x)).length}/{its.length}{hs ? ` · ${hourText(hs)}` : ''}</div>
+    </>
   );
 }
 
@@ -288,17 +322,16 @@ export function TeamLoadView() {
 
 // ── 투입 시간 ────────────────────────────────────────
 
-/** 업무계획 '시간' 칸 기록 — 업무계획 화면(3-6)을 옮기면 여기로 들어온다. 지금은 0건 */
-const hourRowsOf = (_d: PmDerived): HourRow[] => [];
 
 export function TeamHoursView() {
   const B = useTeamBase();
-  const { d, people, shortOf } = B;
+  const { d, C, people, shortOf } = B;
   const [per, setPer] = useState<HourPeriod>('week');
   const [who, setWho] = useState('');
-  if (!d) return <EmptyHint title="팀 현황을 불러오는 중입니다" />;
+  if (!d || !C) return <EmptyHint title="팀 현황을 불러오는 중입니다" />;
   const [from, to, label] = hourRange(per, d.today);
-  const S = hourSummary(hourRowsOf(d), from, to);
+  // 업무계획 '시간' 칸에 적은 것 (hoursRows)
+  const S = hourSummary(planHourRows(C, shortOf), from, to);
   const cell = (h: number) => (h ? <span>{hourText(h)}</span> : <span className="text-ink3">-</span>);
   const kpi = (l: string, v: ReactNode, s: ReactNode) => (
     <div className="rounded-xl border border-border bg-panel px-4 py-3 shadow-sm">

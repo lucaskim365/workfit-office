@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { pmStore, type PmSnapshot } from '@/data/pm/pm.store';
 import { doneInfoOf, liveOf, todayStr, type FilterCtx, type Live } from '@/domain/pm/rules';
-import type { PmAgreementChange, PmProject, PmSubtask, PmTask, PmTaskDone, PmTaskFunctions } from '@/domain/pm/schema';
+import type { PmAgreementChange, PmPlanItem, PmProject, PmSubtask, PmTask, PmTaskDone, PmTaskFunctions } from '@/domain/pm/schema';
 import { isDrop, lastUpdate, siteBrief, siteCtxOf, siteStage, type SiteBrief, type SiteCtx, type SiteInputs, type SiteStage } from '@/domain/pm/site';
 import { taskTicketIndex, ticketDoneInfo, type PmTicket } from '@/domain/pm/ticket';
 
@@ -83,9 +83,11 @@ export function usePmMutations(me: string, nameOf?: (id: string) => string) {
     updateTask: m(({ id, next }: { id: string; next: PmTask }) => s.updateTask(id, next, me, nameOf)),
     bulkUpdate: m((items: Array<{ next: PmTask; summary: string }>) => s.bulkUpdate(items, me)),
     setProgress: m(({ id, pct, why }: { id: string; pct: number; why: string }) => s.setProgress(id, pct, why, me)),
-    addSubtask: m(({ taskId, text, assigneeId, due }: { taskId: string; text: string; assigneeId: string; due: string }) => s.addSubtask(taskId, text, assigneeId, due, me)),
+    addSubtask: m(({ taskId, text, assigneeId, due, est }: { taskId: string; text: string; assigneeId: string; due: string; est?: number }) => s.addSubtask(taskId, text, assigneeId, due, me, todayStr(), est ?? 0)),
     updateSubtask: m(({ id, patch }: { id: string; patch: Partial<Omit<PmSubtask, 'id' | 'taskId'>> }) => s.updateSubtask(id, patch)),
     removeSubtask: m((id: string) => s.removeSubtask(id)),
+    // 업무계획 (3-6)
+    setPlanDay: m(({ date, items, who }: { date: string; items: PmPlanItem[]; who?: string }) => s.setPlanDay(who ?? me, date, items)),
     resetBaseline: m(({ projectId, label }: { projectId: string; label: string }) => s.resetBaseline(projectId, label, me)),
     // 티켓
     issueTickets: m((list: PmTicket[]) => s.issueTickets(list)),
@@ -151,5 +153,11 @@ export function usePmSiteMutations(me: string) {
     markNoChange: m((taskIds: string[]) => s.markNoChange(taskIds, me)),
     approveMilestone: m(({ taskId, byName }: { taskId: string; byName: string }) => s.approveMilestone(taskId, me, byName)),
     setActionDone: m(({ id, done }: { id: string; done: boolean }) => s.setActionDone(id, done, me)),
+    // 업무계획 (3-6)
+    ensureCarryFrom: m((date: string) => s.ensureCarryFrom(date)),
+    addPlanRep: m(({ wd, text }: { wd: number[]; text: string }) => s.addPlanRep(me, wd, text)),
+    removePlanRep: m((index: number) => s.removePlanRep(me, index)),
+    savePdfDraft: m((x: { date: string; dept: string; name: string; rows: Array<[string, string, string]>; at: string }) => s.savePdfDraft({ ...x, who: me })),
+    removePdfDraft: m((date: string) => s.removePdfDraft(me, date)),
   };
 }
