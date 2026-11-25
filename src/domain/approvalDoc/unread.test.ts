@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { approvalDocSchema, APPROVAL_BOXES, type ApprovalBox, type ApprovalDoc } from './schema';
 import type { ApprovalPostReadShare } from '@/domain/approvalPostRead/schema';
-import { baselineReadDocIds, isDocRead, unreadByBox } from './unread';
+import { baselineReadDocIds, isDocRead, rejectBaselineDocIds, unreadByBox } from './unread';
 
 const me = 'U012';
 const doc = (id: string, over: Partial<ApprovalDoc> = {}): ApprovalDoc =>
@@ -52,7 +52,15 @@ test('상신함·완료함·임시함은 안읽음을 세지 않는다', () => {
 
 // ── 처음 적용할 때의 기준선 ──
 
-test('처음 적용할 때 대기·참조·수신함의 기존 문서와 브라우저에 남은 반려 열람 기록을 읽음으로 남긴다', () => {
+test('처음 적용할 때 대기·참조·수신·반려함의 기존 문서를 읽음으로 남긴다(후열함은 남기지 않는다)', () => {
   const byBox = boxes({ 대기: [doc('A')], 참조: [doc('C')], 수신: [doc('D')], 반려: [doc('E'), doc('E2')], 후열: [doc('F')] });
-  assert.deepEqual(baselineReadDocIds(byBox, new Set(['E'])).sort(), ['A', 'C', 'D', 'E']);
+  assert.deepEqual(baselineReadDocIds(byBox).sort(), ['A', 'C', 'D', 'E', 'E2']);
+});
+
+test('반려함 기준선은 반려함의 기존 문서만 읽음으로 남긴다 — 이후 새로 반려된 문서는 안읽음', () => {
+  const before = boxes({ 대기: [doc('A')], 반려: [doc('E'), doc('E2')] });
+  const read = new Set(rejectBaselineDocIds(before));
+  assert.deepEqual([...read].sort(), ['E', 'E2']);
+  const after = boxes({ 반려: [doc('E'), doc('E2'), doc('E3')] });
+  assert.deepEqual([...unreadByBox(after, me, read, []).반려.ids], ['E3']);
 });
