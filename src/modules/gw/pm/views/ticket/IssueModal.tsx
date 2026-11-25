@@ -16,7 +16,7 @@ const sel = 'rounded border border-border-hi bg-panel px-1.5 py-1 text-[12px]';
 /**
  * 티켓 발행 창 (openIssue 1791 · submitIssue 1823 · showIssued 1841).
  * 업무 1건당 티켓 1건. 담당 = 업무 첫 담당, 마감 = 업무 종료일, 우선순위 = 마일스톤 높음 · 종료일 지남 긴급.
- * 승인자 기본 = 업무 PM(이름이 그룹웨어 사용자 1명과 맞을 때). 발행 알림 칸은 3단계(알림 연동)에서.
+ * 승인자 기본 = 업무 PM(이름이 그룹웨어 사용자 1명과 맞을 때). 발행 알림(데모의 Slack · 메일 · 앱 알림 체크)은 1차에 없음 — 그룹웨어 알림 연결은 2차 (11/25 결정, 설계 0장 · 3.5).
  */
 export function IssueModal({ ids, d, people, mut, shortOf, onClose, onIssued }: {
   ids: string[];

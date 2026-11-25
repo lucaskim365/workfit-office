@@ -229,7 +229,8 @@ export function moveTicket(x0: PmTicket, to: PmTicketStatus, cmt: string, me: st
   }
   if ((to === '보류' || (from === '검토요청' && to === '진행중')) && !cmt) return { ok: false, error: from === '검토요청' ? '반려 사유를 코멘트란에 입력해 주세요.' : '보류 사유를 코멘트란에 입력해 주세요.' };
   if (from === '완료' && to === '진행중' && !cmt) return { ok: false, error: '재오픈 사유를 코멘트란에 입력해 주세요.' };
-  const expect = tkExpected(x0);
+  // 대리 처리 판단 (tkMove 2008 expect): 보류는 처리할 사람을 따지지 않음 — 안내 문구(tkExpected)와 다름
+  const expect = x0.status === '보류' ? '' : tkExpected(x0);
   const proxy = expect && expect !== me && to !== '취소' ? ' (대리 처리)' : '';
   const tail = `${cmt ? ` — ${cmt}` : ''}${proxy}`;
   // 검토자가 있으면 '완료'는 먼저 검토 통과만 기록하고 승인자 차례로
@@ -337,7 +338,8 @@ export function syncTicketWithTask(x0: PmTicket, old: PmTask, n: PmTask, me: str
 
 // ── 목록 ─────────────────────────────────────────────
 
-export type TicketStFilter = 'open' | 'all' | 'late' | PmTicketStatus;
+/** doing = 처리 중 (접수 + 진행중) — 위 숫자 칸 '처리 중'을 눌렀을 때 그 숫자 그대로 */
+export type TicketStFilter = 'open' | 'all' | 'late' | 'doing' | PmTicketStatus;
 export interface TicketFilter { projectId: string; who: string; st: TicketStFilter; q: string }
 export const TICKET_FILTER_DEFAULT: TicketFilter = { projectId: 'all', who: 'all', st: 'open', q: '' };
 
@@ -350,7 +352,8 @@ export function filterTickets(ts: readonly PmTicket[], f: TicketFilter, today: s
     if (f.who !== 'all' && x.assigneeId !== f.who) return false;
     if (f.st === 'open' && !tkOpen(x)) return false;
     if (f.st === 'late' && !tkLate(x, today)) return false;
-    if (!['all', 'open', 'late', '취소'].includes(f.st) && x.status !== f.st) return false;
+    if (f.st === 'doing' && x.status !== '접수' && x.status !== '진행중') return false;
+    if (!['all', 'open', 'late', 'doing', '취소'].includes(f.st) && x.status !== f.st) return false;
     if (q && !`${x.no} ${x.title} ${x.code} ${x.legacyKey} ${nameOf(x.assigneeId)} ${x.output}`.toLowerCase().includes(q)) return false;
     return true;
   });
@@ -384,7 +387,8 @@ export function openByAssignee(ts: readonly PmTicket[], today: string) {
 /** 발행 추천 (tkRec 1878): 미완료 · 티켓 없음 · 시작 있음 · 시작 ≤ 오늘+7. 미리보기 = 안 끝난 것 중 시작이 오늘과 가까운 순 */
 export function ticketRecommend(ts: readonly PmTask[], liveMap: ReadonlyMap<string, Live>, issued: ReadonlySet<string>, today: string) {
   const t7 = addDays(today, 7);
-  const rec = ts.filter((t) => t.start && t.start <= t7 && !issued.has(t.id) && (liveMap.get(t.id)?.status ?? t.status) !== '완료' && (liveMap.get(t.id)?.pct ?? t.actualPct) < 100);
+  // ts = 집계 대상 업무만 (부르는 쪽이 workItem 으로 거름 — tkRec 1879)
+  const rec = ts.filter((t) => t.start && t.start <= t7 && !issued.has(t.id) && (liveMap.get(t.id)?.status ?? t.status) !== '완료');
   const near = rec.filter((t) => !t.end || t.end >= today).sort((a, b) => Math.abs(diffDays(a.start, today)) - Math.abs(diffDays(b.start, today)));
   return { rec, near, today: rec.filter((t) => t.start === today).length };
 }

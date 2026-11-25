@@ -7,6 +7,7 @@ import {
   type PmTicket, type PmTicketStatus, type TicketFilter, type TicketStFilter,
 } from '@/domain/pm/ticket';
 import { usePmDerived, usePmMutations } from '@/features/pm/usePm';
+import { workItemOf } from '@/domain/pm/team';
 import { usePmPeople } from '../../usePmPeople';
 import { EmptyHint, ProjectTag, Tag } from '../wbs/parts';
 import { LegacyTag, PrioTag, StatusTag, TicketCard, TypeTag, workLabel } from './parts';
@@ -18,7 +19,7 @@ import { usePmModals } from './usePmModals';
  * 담당별 미완료 · 보드(끌어 놓아 상태 이동) / 리스트 · CSV(Jira).
  */
 const COLS: readonly PmTicketStatus[] = [...PM_TICKET_FLOW, '보류'];
-const ST_OPTS: ReadonlyArray<readonly [TicketStFilter, string]> = [['open', '미완료 전체'], ['all', '전체'], ['late', '마감 경과'], ...COLS.map((s) => [s, s] as const), ['취소', '발행 취소']];
+const ST_OPTS: ReadonlyArray<readonly [TicketStFilter, string]> = [['open', '미완료 전체'], ['all', '전체'], ['late', '마감 경과'], ['doing', '처리 중 (접수 · 진행중)'], ...COLS.map((s) => [s, s] as const), ['취소', '발행 취소']];
 const inp = 'rounded border border-border-hi bg-panel px-2 py-1 text-[12px]';
 
 export function TicketListView() {
@@ -44,7 +45,7 @@ export function TicketListView() {
 
   const st = ticketStats(tickets, today);
   const asg = openByAssignee(tickets, today);
-  const R = ticketRecommend(d.snap.tasks, d.liveMap, new Set(d.taskTicket.keys()), today);
+  const R = ticketRecommend(d.snap.tasks.filter(workItemOf(d.snap)), d.liveMap, new Set(d.taskTicket.keys()), today);
   const goRec = () => setParams({ v: 'task/wbs', period: 'rec' });
   const goWbs = () => setParams({ v: 'task/wbs' });
   const pickSt = (s: TicketStFilter) => setF((x) => ({ ...x, st: s }));
@@ -140,8 +141,8 @@ export function TicketListView() {
   }
 
   const kpis: Array<{ l: string; v: number; unit: string; s: string; st: TicketStFilter; tone?: string }> = [
-    { l: '발행된 티켓', v: st.total, unit: '건', s: `미접수 ${st.issued}건`, st: 'open' },
-    { l: '처리 중', v: st.accepted + st.running, unit: '건', s: `접수 ${st.accepted} · 진행 ${st.running} · 보류 ${st.hold}`, st: '진행중' },
+    { l: '발행된 티켓', v: st.total, unit: '건', s: `미접수 ${st.issued}건`, st: 'all' },
+    { l: '처리 중', v: st.accepted + st.running, unit: '건', s: `접수 ${st.accepted} · 진행 ${st.running} · 보류 ${st.hold}`, st: 'doing' },
     { l: '검토 · 승인 대기', v: st.review, unit: '건', s: '검토요청 상태', st: '검토요청', tone: st.review ? 'text-navy' : '' },
     { l: '마감 경과', v: st.late, unit: '건', s: '미완료 · 마감일 경과', st: 'late', tone: st.late ? 'text-danger' : '' },
     { l: '완료율', v: st.donePct, unit: '%', s: `완료 ${st.done}건`, st: '완료' },
@@ -188,7 +189,7 @@ export function TicketListView() {
         </select>
         <select className={inp} value={f.who} onChange={(e) => setF((x) => ({ ...x, who: e.target.value }))}>
           <option value="all">전체 담당자</option>
-          {[...new Set(tickets.map((x) => x.assigneeId))].map((a) => <option key={a} value={a}>{people.labelOf(a) || '담당 없음'}</option>)}
+          {[...new Set(tickets.filter((x) => x.status !== '취소').map((x) => x.assigneeId))].map((a) => <option key={a} value={a}>{people.labelOf(a) || '담당 없음'}</option>)}
         </select>
         <select className={inp} value={f.st} onChange={(e) => pickSt(e.target.value as TicketStFilter)}>
           {ST_OPTS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}

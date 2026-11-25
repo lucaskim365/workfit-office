@@ -166,3 +166,12 @@ test('옛 업무 티켓은 업무 색인에 안 들어감', () => {
   assert.equal(pmTicketSchema.safeParse(x).success, true);
   assert.equal(taskTicketIndex([x]).size, 0);
 });
+
+test('검수 반영: 보류 → 작업 재개는 누가 해도 (대리 처리) 안 붙음 · 처리 중 거르기 = 접수 + 진행중', () => {
+  const held = { ...issue(), status: '보류' as const };
+  const r = moveTicket(held, '진행중', '', 'u4', TODAY, nameOf);
+  assert.equal(r.ok && r.ticket.hist.at(-1)!.text, '작업 재개');
+  const ts = (['발행', '접수', '진행중', '보류', '완료'] as const).map((s, i) => ({ ...issue(), no: `P2-000${i + 1}`, status: s }));
+  assert.deepEqual(filterTickets(ts, { ...TICKET_FILTER_DEFAULT, st: 'doing' }, TODAY).map((x) => x.status), ['접수', '진행중']);
+  assert.equal(filterTickets(ts, { ...TICKET_FILTER_DEFAULT, st: 'all' }, TODAY).length, 5, '발행된 티켓 = 완료 포함');
+});
