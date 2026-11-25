@@ -13,7 +13,7 @@ import { usePmDerived, usePmMutations, usePmSiteMutations, usePmSites, type PmDe
 import { usePmPeople } from '../../usePmPeople';
 import { usePmModals } from '../ticket/usePmModals';
 import { EmptyHint, ProgressBar, ProjectTag, Tag } from '../wbs/parts';
-import { CardHead, SiteStatusTag } from './parts';
+import { CardHead, ScreenHead, SiteStatusTag } from './parts';
 
 /**
  * 대시보드 › 내 업무 (pMy 3470) — 3-5단계. 로그인한 사람 = '나'.
@@ -117,6 +117,13 @@ export function MyView() {
     </div>
   );
 
+  const head = (
+    <ScreenHead title="내 업무" desc={`${people.labelOf(me)} · 진행률을 기록하면 업무 목록과 팀 현황에 바로 반영됩니다`}>
+      <Button size="sm" disabled title="이슈 등록은 이슈 화면과 같이 5단계에서 옮깁니다">+ 이슈 (5단계)</Button>
+      <Button size="sm" variant="primary" disabled title="업무계획의 오늘 할 일로 이동 — 업무계획(3-6)을 옮기면 켭니다">오늘 할 일 (3-6)</Button>
+    </ScreenHead>
+  );
+
   // ── 업무 보드 ───────────────────────────────────────
   if (board) {
     const inK = (t: PmTask) => board === 'all' || t.projectId === board;
@@ -178,6 +185,7 @@ export function MyView() {
     );
     return (
       <div className="space-y-3">
+        {head}
         <div className={`${sec} flex flex-wrap items-center gap-2.5 px-4 py-2.5`}>
           <Button size="sm" onClick={() => setBoard(null)}>← 내 업무 홈</Button>
           <b className="text-[13px] text-ink">{board === 'all' ? '전체 사업' : shortOf(board)} 업무</b>
@@ -213,6 +221,7 @@ export function MyView() {
 
   return (
     <div className="space-y-4">
+      {head}
       {/* 오늘 숫자 4개 (11-12 내 업무 = 내 하루) */}
       <div className="flex flex-wrap items-center gap-6 rounded-2xl border border-blue/20 bg-gradient-to-r from-blue-soft to-panel px-5 py-4">
         <div className="flex min-w-0 flex-1 items-center gap-4">

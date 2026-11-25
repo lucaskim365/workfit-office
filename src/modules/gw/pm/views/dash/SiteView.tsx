@@ -9,8 +9,8 @@ import type { PmAgreementChange } from '@/domain/pm/schema';
 import { usePmDerived, usePmMutations, usePmSiteMutations, usePmSites, type PmSiteRow } from '@/features/pm/usePm';
 import { usePmPeople } from '../../usePmPeople';
 import { usePmModals } from '../ticket/usePmModals';
-import { EmptyHint, Tag } from '../wbs/parts';
-import { CardHead, DeadlineRow, SiteStatusTag } from './parts';
+import { EmptyHint, ProjectTag, Tag } from '../wbs/parts';
+import { CardHead, DeadlineRow, ScreenHead, SiteStatusTag } from './parts';
 import { PastModal, TaskListModal } from './DashModals';
 import { SiteChips } from './OverviewView';
 import { AfterCard, AgreementCard, BidCard, Card, FlowCard, FnCard, GovWbsCard, InfoCard, UpdatesCard } from './SiteCards';
@@ -145,6 +145,7 @@ export function SiteView() {
 
   return (
     <div className="space-y-4">
+      <ScreenHead title={<><ProjectTag>{shortOf(k)}</ProjectTag> <span className="ml-1">{p.company}</span></>} desc="사업 하나의 기한 · 점검 · 약속 기능 진척을 한 화면에서 보고 처리합니다 · [전체]로 돌아가면 모든 사업을 비교" />
       <SiteChips rows={S.rows} all={S.all} cur={k} shortOf={shortOf} onAll={() => go('dash/overview')} onPick={(id) => pick(id)} />
 
       <FlowCard c={c} st={stage} nameOf={people.nameOf} onOpenTask={modals.openTask} onGoWbs={() => go('task/wbs', { k })} />

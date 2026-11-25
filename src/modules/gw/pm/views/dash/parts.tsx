@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { diffDays, leftText, monthDay, type PmSiteStatus } from '@/domain/pm/rules';
 import { GOV_BAD, SIDE_TEXT, SITE_STAGES, type Deadline, type SiteStage } from '@/domain/pm/site';
 import { ProjectTag, Tag } from '../wbs/parts';
@@ -91,6 +91,26 @@ export function CardHead({ title, children }: { title: ReactNode; children?: Rea
     <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-2.5">
       <h3 className="text-[13px] font-bold text-ink">{title}</h3>
       {children}
+    </div>
+  );
+}
+
+/**
+ * 화면 머리 (head 2712): 제목 + [?] 설명 펼치기 + 오른쪽 버튼. 설명은 [?]를 눌러야 보임 (데모 그대로).
+ * 데모는 펼친 상태를 사람 · 화면마다 저장(S.descOn)했지만 여기선 화면을 떠나면 닫힘 — 업무 목록 · 티켓 목록과 같음.
+ */
+export function ScreenHead({ title, desc, children }: { title: ReactNode; desc: ReactNode; children?: ReactNode }) {
+  const [on, setOn] = useState(false);
+  return (
+    <div>
+      <div className="flex flex-wrap items-center gap-2">
+        <h2 className="text-[15px] font-bold text-ink">{title}</h2>
+        <button type="button" onClick={() => setOn((o) => !o)} title={on ? '설명 닫기' : '이 화면 설명 보기'}
+          className={`grid h-5 w-5 place-items-center rounded-full border text-[11px] font-bold ${on ? 'border-teal bg-teal text-white' : 'border-border-hi text-ink3'}`}>?</button>
+        <span className="flex-1" />
+        {children}
+      </div>
+      {on && <p className="mt-2 rounded-lg bg-panel-alt px-3 py-2 text-[11.5px] leading-relaxed text-ink2">{desc}</p>}
     </div>
   );
 }

@@ -11,7 +11,7 @@ import { usePmDerived, usePmMutations, usePmSiteMutations, type PmDerived } from
 import { usePmPeople } from '../../usePmPeople';
 import { usePmModals } from '../ticket/usePmModals';
 import { EmptyHint, ProjectTag } from '../wbs/parts';
-import { CardHead } from './parts';
+import { CardHead, ScreenHead } from './parts';
 import { PersonModal } from './PersonModal';
 
 /**
@@ -99,7 +99,7 @@ export function TeamTodayView() {
 
   return (
     <div className="space-y-3">
-      <p className="text-[12px] text-ink3">팀원별로 오늘 할 일 · 지연 · 이번 주 마감을 봅니다 · [앞으로 4주]에서 마감이 몰리는 주를 봅니다</p>
+      <ScreenHead title="팀 현황" desc="팀원별로 오늘 할 일 · 지연 · 이번 주 마감을 봅니다 · [앞으로 4주]에서 마감이 몰리는 주를 봅니다" />
       <div className="flex flex-wrap items-center gap-2">
         <SitePick d={d} value={k} onChange={setK} />
         <span className="flex-1" />
@@ -186,13 +186,12 @@ export function TeamLoadView() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <p className="flex-1 text-[12px] text-ink3">팀원별로 앞으로 4주 동안 마감이 몰리는 주와 일을 나눠야 할 사람을 봅니다</p>
+      <ScreenHead title="팀 현황" desc="팀원별로 앞으로 4주 동안 마감이 몰리는 주와 일을 나눠야 할 사람을 봅니다">
         <label className="flex items-center gap-1.5 text-[11.5px] text-ink2">몰림 기준 주당 마감
           <input type="number" min={1} max={50} defaultValue={max} key={max} onBlur={(e) => { if (+e.target.value !== max) void smut.setLoadMax.mutateAsync(+e.target.value); }}
             onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }} className={`${inp} w-[70px]`} />건
         </label>
-      </div>
+      </ScreenHead>
 
       <section className="rounded-xl border border-border bg-panel shadow-sm">
         <CardHead title={`사람별 업무량 (앞으로 ${LOAD_WEEKS}주)`} />
@@ -310,7 +309,7 @@ export function TeamHoursView() {
   );
   return (
     <div className="space-y-4">
-      <p className="text-[12px] text-ink3">업무계획 · 일일 업무 보고의 '시간' 칸에 적은 시간을 사람별 · 사업별로 모아 봅니다 (시간을 안 적은 일은 빠짐)</p>
+      <ScreenHead title="팀 현황" desc="업무계획 · 일일 업무 보고의 '시간' 칸에 적은 시간을 사람별 · 사업별로 모아 봅니다 (시간을 안 적은 일은 빠짐)" />
       <div className="flex flex-wrap items-center gap-1.5">
         {HOUR_PERIODS.map(([v, l]) => <Button key={v} size="sm" variant={per === v ? 'primary' : 'secondary'} onClick={() => setPer(v)}>{l}</Button>)}
         <span className="ml-1.5 text-[11.5px] text-ink3">{monthDay(from)} ~ {monthDay(to)}</span>

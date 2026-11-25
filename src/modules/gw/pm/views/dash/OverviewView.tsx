@@ -8,7 +8,7 @@ import { usePmDerived, usePmMutations, usePmSiteMutations, usePmSites, type PmSi
 import { usePmPeople } from '../../usePmPeople';
 import { usePmModals } from '../ticket/usePmModals';
 import { EmptyHint, ProjectTag, Tag } from '../wbs/parts';
-import { CardHead, SIGNAL_BG, SiteStatusTag, StagePill, signalOf } from './parts';
+import { CardHead, SIGNAL_BG, ScreenHead, SiteStatusTag, StagePill, signalOf } from './parts';
 import { DeadlineListModal, PastModal, TaskListModal } from './DashModals';
 
 /**
@@ -83,11 +83,10 @@ export function OverviewView() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <p className="flex-1 text-[12px] text-ink3">사업마다 기한 · 보완 · 협약변경 · 갱신 상태를 한 줄로 보고, 줄을 누르면 그 사업 화면으로 들어갑니다.</p>
+      <ScreenHead title="통합 사업 현황" desc="사업마다 기한 · 보완 · 협약변경 · 갱신 상태를 한 줄로 보고, 줄을 누르면 그 사업 화면으로 들어갑니다">
         <Button size="sm" variant="secondary" disabled title="사업 등록은 기준정보 › 사업 화면과 같이 6단계에서 옮깁니다">+ 사업 등록 (6단계)</Button>
         <Button size="sm" variant="secondary" disabled title="이슈 등록은 이슈 화면과 같이 5단계에서 옮깁니다">+ 이슈 등록 (5단계)</Button>
-      </div>
+      </ScreenHead>
 
       <SiteChips rows={rows} all={all} cur={null} shortOf={shortOf} onAll={() => go('dash/overview')} onPick={(id) => openSite(id)} />
 
@@ -101,7 +100,7 @@ export function OverviewView() {
             <b className={`block text-[24px] leading-tight ${nAgr ? 'text-danger' : 'text-ink'}`}>{nAgr}<small className="ml-0.5 text-[12px] text-ink3">개</small></b>
           </button>
           <button type="button" onClick={() => setPop({ kind: 'stale' })} className="border-l border-border px-4 py-3 text-left hover:bg-panel-alt" title="2주 넘게 진행률 갱신이 없는 사업 — 진척률을 믿기 어려움">
-            <span className="text-[11.5px] font-bold text-ink2">2주 넘게 갱신 없음</span>
+            <span className="whitespace-nowrap text-[11.5px] font-bold text-ink2">2주 넘게 갱신 없음</span>
             <b className={`block text-[24px] leading-tight ${nStale ? 'text-amber' : 'text-ink'}`}>{nStale}<small className="ml-0.5 text-[12px] text-ink3">개</small></b>
           </button>
         </div>

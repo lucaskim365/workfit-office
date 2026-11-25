@@ -68,7 +68,7 @@ export default function PmScreen() {
             onSelect={go}
           />
           <div className="p-5 sm:p-6">
-            {route.screen.views && (
+            {route.screen.views && route.screen.id !== 'dash/overview' && (
               <div className="mb-4">
                 <PmViewSwitch items={route.screen.views} activeId={route.view} onSelect={go} />
               </div>
