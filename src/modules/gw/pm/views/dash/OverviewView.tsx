@@ -68,7 +68,7 @@ export function OverviewView() {
   const oldMs = ms.filter((a) => msOld(ctxOf.get(a.p.id)!, a.t));
   const warn: Array<{ lv: 'bad' | 'warn'; tag: string; who: string; title: string; meta: string; act: () => void }> = [
     ...ms.filter((a) => !msOld(ctxOf.get(a.p.id)!, a.t)).map((a) => ({ lv: a.lv as 'bad' | 'warn', tag: '◆ 마일스톤', who: shortOf(a.p.id), title: a.t.name, meta: leftText(a.t.end, today), act: () => modals.openTask(a.t.id) })),
-    ...lateActions(d.snap.actions, today).map((a) => ({ lv: 'warn' as const, tag: '액션 아이템', who: people.nameOf(a.whoId) || '담당 없음', title: a.text, meta: `기한 ${diffDays(a.due, today)}일 경과`, act: () => go('doc/meet') })),
+    ...lateActions(d.snap.actions, today).map((a) => ({ lv: 'warn' as const, tag: '액션 아이템', who: people.nameOf(a.whoId) || '담당 없음', title: a.text, meta: `기한 ${diffDays(a.due, today)}일 경과`, act: () => go('doc/meet', { act: a.id }) })),
   ];
 
   const order = urgent ? [...rows].sort((a, b) => b.b.score - a.b.score || a.b.stats.gap - b.b.stats.gap) : rows;

@@ -106,6 +106,14 @@ export function usePmMutations(me: string, nameOf?: (id: string) => string) {
     updateIssue: m(({ id, x }: { id: string; x: Parameters<typeof s.updateIssue>[1] }) => s.updateIssue(id, x)),
     removeIssue: m((id: string) => s.removeIssue(id)),
     escalateIssue: m((id: string) => s.escalateIssue(id)),
+    // 5단계: 회의록 · 액션 아이템
+    addMeeting: m((x: Parameters<typeof s.addMeeting>[0]) => s.addMeeting(x, me)),
+    updateMeeting: m(({ id, x }: { id: string; x: Parameters<typeof s.updateMeeting>[1] }) => s.updateMeeting(id, x)),
+    removeMeeting: m((id: string) => s.removeMeeting(id)),
+    addAction: m((x: Parameters<typeof s.addAction>[0]) => s.addAction(x, me)),
+    updateAction: m(({ id, x }: { id: string; x: Parameters<typeof s.updateAction>[1] }) => s.updateAction(id, x, me)),
+    removeAction: m((id: string) => s.removeAction(id)),
+    setActionDone: m(({ id, done }: { id: string; done: boolean }) => s.setActionDone(id, done, me)),
   };
 }
 

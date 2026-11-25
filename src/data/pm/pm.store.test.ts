@@ -204,3 +204,22 @@ test('5단계 이슈 저장: 등록(긴급이면 보고됨) · 수정 · 윗선 
   L = (await s.snapshot()).issues;
   assert.deepEqual(L.map((i) => i.id), ['I-001']);
 });
+
+test('5단계 회의록 · 액션 저장: 회의 사업을 바꾸면 그 회의 액션도 · 완료 켜면 날짜 · 회의 지우면 액션은 남고 출처만 지움', async () => {
+  const s = createPmStore('2026-11-25');
+  const id = await s.addMeeting({ projectId: 'P2', type: '주간 회의', title: '주간 회의', date: '2026-11-24', place: '', attIds: ['u1'], ext: '', content: '진척 공유', decision: '' }, 'u1');
+  const a = await s.addAction({ text: 'I/O 리스트 요청', whoId: 'u2', due: '2026-12-01', projectId: 'P2', meetingId: id }, 'u1');
+  assert.deepEqual([a.by, a.at, a.done], ['u1', '2026-11-25', false]);
+  await s.updateMeeting(id, { projectId: 'P3', type: '주간 회의', title: '주간 회의', date: '2026-11-24', place: '', attIds: ['u1'], ext: '', content: '진척 공유', decision: '범위 확정' });
+  await s.updateAction(a.id, { text: a.text, whoId: 'u2', due: a.due, projectId: 'P3', meetingId: id, done: true }, 'u2');
+  let x = (await s.snapshot()).actions.find((v) => v.id === a.id)!;
+  assert.deepEqual([x.projectId, x.done, x.doneDate, x.doneBy], ['P3', true, '2026-11-25', 'u2']);
+  await s.removeMeeting(id);
+  x = (await s.snapshot()).actions.find((v) => v.id === a.id)!;
+  assert.deepEqual([(await s.snapshot()).meetings.length, x.meetingId], [0, '']);
+  await s.updateAction(a.id, { ...x, done: false }, 'u2');
+  x = (await s.snapshot()).actions.find((v) => v.id === a.id)!;
+  assert.deepEqual([x.done, x.doneDate, x.doneBy], [false, '', '']);
+  await s.removeAction(a.id);
+  assert.equal((await s.snapshot()).actions.length, 0);
+});

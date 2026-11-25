@@ -379,7 +379,7 @@ const INBOX: ReadonlyArray<{ nm: string; ds: string; go: string; goOk: boolean; 
   { nm: '내 티켓', ds: '배정받은 진행 중 티켓', go: 'task/ticket', goOk: true },
   { nm: '승인 대기', ds: '내가 검토 · 승인할 티켓 · 마일스톤 · CR', go: 'task/ticket', goOk: true },
   { nm: '이슈', ds: '내 담당 · 관련 미해결 이슈', go: 'risk/issue', goOk: true },
-  { nm: '액션 아이템', ds: '회의에서 맡은 후속 조치', go: 'doc/meet', goOk: false, goNote: '회의록 화면은 5단계' },
+  { nm: '액션 아이템', ds: '회의에서 맡은 후속 조치', go: 'doc/meet', goOk: true },
 ];
 type IbRow = Inbox['tickets'][number] | Approval | Inbox['issues'][number] | Inbox['actions'][number];
 type Inbox = ReturnType<typeof myInbox>;
@@ -498,7 +498,7 @@ const INBOX_HINT = [
   '티켓 목록에서 나에게 배정된 티켓이 발행되면 여기 나옵니다.',
   '내가 검토자 · 승인자인 티켓이 검토 요청되거나, 내가 PM인 사업의 마일스톤 업무가 끝나면 여기 나옵니다.',
   '이슈 화면에서 내가 담당이거나 관련자인 이슈가 등록되면 여기 나옵니다.',
-  '회의록(5단계)에서 나에게 액션 아이템이 배정되면 여기 나옵니다.',
+  '회의록 화면에서 나에게 액션 아이템이 배정되면 여기 나옵니다.',
 ];
 
 // ── 진행률 갱신 5건씩 (myUpdCard 7886) ───────────────

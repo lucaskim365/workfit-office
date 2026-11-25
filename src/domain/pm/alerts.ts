@@ -1,5 +1,5 @@
 import { addDays, diffDays, isDone, isLate, liveOf, monthDay, taskPeople, type Live } from './rules';
-import type { PmAction, PmChangeRequest, PmIssue, PmMilestoneOk, PmProject, PmSubtask, PmTask, PmUpdRequest } from './schema';
+import type { PmAction, PmChangeRequest, PmIssue, PmMeeting, PmMilestoneOk, PmProject, PmSubtask, PmTask, PmUpdRequest } from './schema';
 import {
   agrWarn, asIssues, dday, dlStat, dutyRec, isDrop, isPre, planDuties, siteStats, warrantyEnd, weekStart, govItems,
   type SiteCtx,
@@ -11,7 +11,7 @@ import { workItemOf } from './team';
 /**
  * 🔔 내 알림 (데모 myAlerts 2744 · bellGroup 2813) — PM 화면 안 목록만 (메신저 · 푸시는 2차, 11/25 결정).
  * 확인한 알림은 문구로 기억한다 (S.seen) → 건수 등 문구가 바뀌면 새 알림으로 다시 뜬다.
- * 요구사항(CR) 알림은 4단계(4-3)에서 더함, 회의록 알림은 5단계.
+ * 요구사항(CR) 알림은 4단계(4-3), 회의록 알림은 5단계(5-2)에서 더함.
  */
 
 /** 누르면 갈 곳 */
@@ -41,6 +41,8 @@ export interface AlertInputs extends UpdInputs {
   updReq: readonly PmUpdRequest[];
   /** 요구사항 변경 (4단계) */
   crs?: readonly PmChangeRequest[];
+  /** 회의록 (5단계) */
+  meetings?: readonly PmMeeting[];
   /** 사업마다 계산 묶음 (탈락 포함 — 여기서 뺌) */
   sites: readonly SiteCtx[];
   /** 사업 PM (사용자 ID 들) — 사업 정보 PM · 업무 목록 PM */
@@ -96,8 +98,8 @@ export function myAlerts(me: string, X: AlertInputs): PmAlert[] {
 
   // 액션 아이템: 남이 등록한 새 것 · 기한 된 것
   const actOpen = (a: PmAction) => !a.done;
-  for (const a of X.actions) if (actOpen(a) && a.whoId === me && a.by && a.by !== me && !(a.due && a.due <= T)) out.push({ lv: 'warn', txt: `새 액션 아이템 · ${trunc(a.text, 30)} (${short(a.by)} 등록${a.due ? ` · ${monthDay(a.due)}까지` : ''})`, go: view('doc/meet') });
-  for (const a of X.actions) if (actOpen(a) && a.whoId === me && a.due && a.due <= T) out.push({ lv: a.due < T ? 'bad' : 'warn', txt: `액션 아이템 · ${trunc(a.text, 34)} (${dday(a.due, T)})`, go: view('doc/meet') });
+  for (const a of X.actions) if (actOpen(a) && a.whoId === me && a.by && a.by !== me && !(a.due && a.due <= T)) out.push({ lv: 'warn', txt: `새 액션 아이템 · ${trunc(a.text, 30)} (${short(a.by)} 등록${a.due ? ` · ${monthDay(a.due)}까지` : ''})`, go: view('doc/meet', { act: a.id }) });
+  for (const a of X.actions) if (actOpen(a) && a.whoId === me && a.due && a.due <= T) out.push({ lv: a.due < T ? 'bad' : 'warn', txt: `액션 아이템 · ${trunc(a.text, 34)} (${dday(a.due, T)})`, go: view('doc/meet', { act: a.id }) });
 
   // 이슈: 내 담당 · 관련 (남이 올린 것) · 내가 올린 이슈 해결됨 (30일)
   for (const i of X.issues) if (i.status !== '해결' && (i.ownerId === me || i.watchIds.includes(me)) && i.by !== me) out.push({ lv: i.sev === '긴급' ? 'bad' : 'warn', txt: `${i.sev === '긴급' ? '긴급 ' : ''}이슈 · ${i.id} ${trunc(i.title, 26)} (${i.ownerId === me ? '내 담당' : '관련자'} · ${i.status})`, go: view('risk/issue', { issue: i.id }) });
@@ -183,11 +185,13 @@ export function myAlerts(me: string, X: AlertInputs): PmAlert[] {
     if (!t || s.legacyKey || !s.done || s.createdBy !== me || !s.assigneeId || s.assigneeId === me || !recent(s.doneDate)) continue;
     out.push({ lv: 'ok', txt: `맡긴 일 완료 · ${X.shortOf(t.projectId)} ${trunc(s.text, 28)} (${short(s.assigneeId)} · ${monthDay(s.doneDate)})`, go: view('dash/plan') });
   }
-  for (const a of X.actions) if (a.done && a.by === me && a.whoId !== me && a.doneBy !== me && recent(a.doneDate)) out.push({ lv: 'ok', txt: `액션 아이템 완료 · ${trunc(a.text, 30)} (${short(a.whoId)} · ${monthDay(a.doneDate)})`, go: view('doc/meet') });
+  for (const a of X.actions) if (a.done && a.by === me && a.whoId !== me && a.doneBy !== me && recent(a.doneDate)) out.push({ lv: 'ok', txt: `액션 아이템 완료 · ${trunc(a.text, 30)} (${short(a.whoId)} · ${monthDay(a.doneDate)})`, go: view('doc/meet', { act: a.id }) });
   // CR: 사업 PM 에게 검토 대기 · 접수자에게 결과 (7일) — 누르면 그 CR 창 (crReview · crEdit)
   const crPm = (c: PmChangeRequest) => live.some((s) => s.p.id === c.projectId && isPm(s));
   for (const c of X.crs ?? []) if (c.status === '검토중' && c.by !== me && crPm(c)) out.push({ lv: 'warn', txt: `CR 검토 대기 · ${c.id} ${trunc(c.title, 28)}${c.by ? ` (${short(c.by)} 접수)` : ''}`, go: view('site/cr', { cr: c.id, review: '1' }) });
   for (const c of X.crs ?? []) if (c.status !== '검토중' && c.by === me && c.reviewer && c.reviewer !== me && recent(c.revD)) out.push({ lv: c.status === '승인' ? 'ok' : 'bad', txt: `CR ${c.status} · ${c.id} ${trunc(c.title, 26)} (${short(c.reviewer)})`, go: view('site/cr', { cr: c.id }) });
+  // 회의록: 참석자로 들어간 새 회의록 (작성자 본인 제외, 작성일부터 7일) — 누르면 그 회의 (mtOpen)
+  for (const m of X.meetings ?? []) if (m.attIds.includes(me) && m.by && m.by !== me && recent(m.at || m.date)) out.push({ lv: 'warn', txt: `새 회의록 · ${m.projectId ? `${X.shortOf(m.projectId)} ` : ''}${trunc(m.title, 28)} (${short(m.by)} 작성 · ${monthDay(m.date)})`, go: view('doc/meet', { mt: m.id }) });
   // 마일스톤: 완료됐고 승인만 남은 것 → 사업 PM
   for (const c of live.filter(isPm)) {
     const n = siteStats(c).ms.filter((t) => !isPre(t) && isDone(c.live(t)) && !X.msOk.has(t.id) && msReqOf(X.tasks, t).every((x) => isDone(L(x)))).length;

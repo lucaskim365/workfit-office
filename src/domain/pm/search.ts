@@ -1,11 +1,11 @@
 import { diffDays, isDone, liveOf, monthDay, taskPeople, type Live } from './rules';
-import type { PmAction, PmChangeRequest, PmIssue, PmProject, PmTask } from './schema';
+import type { PmAction, PmChangeRequest, PmIssue, PmMeeting, PmProject, PmTask } from './schema';
 import type { PmTicket } from './ticket';
 import type { AlertGo } from './alerts';
 
 /**
  * 전체 검색 (위쪽 검색칸 · Ctrl+K, 데모 GS_DO · gsFind 8181~) — 하는 일 · 화면 · 사업 · 업무 · 티켓 · 이슈 · 액션 아이템 · 사람.
- * 누르면 그 자리로. 요구사항(CR)은 4단계, 회의록은 5단계에서 더한다.
+ * 누르면 그 자리로. 요구사항(CR)은 4단계, 회의록은 5단계(5-2)에서 더함.
  */
 export type SearchGo = AlertGo;
 export interface SearchHit { grp: string; label: string; sub: string; go: SearchGo }
@@ -49,6 +49,8 @@ export interface SearchInputs {
   actions: readonly PmAction[];
   /** 요구사항 변경 (4단계) */
   crs?: readonly PmChangeRequest[];
+  /** 회의록 (5단계) */
+  meetings?: readonly PmMeeting[];
   people: ReadonlyArray<{ id: string; name: string; label: string; dept: string; position: string }>;
   shortOf: (projectId: string) => string;
   nameOf: (id: string) => string;
@@ -83,7 +85,8 @@ export function gsFind(q0: string, X: SearchInputs): SearchHit[] {
   }
   for (const x of X.tickets) if (hit(x.no) || hit(x.title)) push('티켓', `${x.no} ${x.title}`, `${X.shortOf(x.projectId)} · ${x.status} · ${X.nameOf(x.assigneeId) || '담당 없음'}`, { kind: 'ticket', no: x.no }, 5);
   for (const i of X.issues) if (hit(i.id) || hit(i.title)) push('이슈', `${i.id} ${i.title}`, `${i.sev} · ${i.status}`, v('risk/issue', { issue: i.id }), 5);
-  for (const a of X.actions) if (hit(a.text)) push('액션 아이템', a.text, `${X.nameOf(a.whoId) || '담당 없음'}${a.due ? ` · ~${monthDay(a.due)}` : ''}${a.done ? ' · 완료' : ''}`, v('doc/meet'), 5);
+  for (const m of X.meetings ?? []) if (hit(m.title) || hit(m.content) || hit(m.decision)) push('회의록', m.title, `${m.date || ''}${m.projectId ? ` · ${X.shortOf(m.projectId)}` : ''}`, v('doc/meet', { mt: m.id }), 5);
+  for (const a of X.actions) if (hit(a.text)) push('액션 아이템', a.text, `${X.nameOf(a.whoId) || '담당 없음'}${a.due ? ` · ~${monthDay(a.due)}` : ''}${a.done ? ' · 완료' : ''}`, v('doc/meet', { act: a.id }), 5);
   for (const c of X.crs ?? []) if (hit(c.id) || hit(c.title)) push('CR', `${c.id} ${c.title}`, c.status, v('site/cr', { cr: c.id }), 5);
   for (const u of X.people) if (hit(u.name) || hit(u.dept)) push('사람', u.label, `${u.dept || u.position || ''} · 누르면 이 사람의 진행 중 업무`, v('task/wbs', { who: u.id, period: 'now' }), 5);
   return R.map((x) => ({ ...x, label: trunc(x.label, 60), sub: trunc(x.sub, 60) }));

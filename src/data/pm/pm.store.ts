@@ -1,6 +1,6 @@
 import { addDays, applyProgress, makeBaseline, todayStr } from '@/domain/pm/rules';
 import type {
-  PmAction, PmAgreementChange, PmBaseline, PmChangeLog, PmChangeRequest, PmDoc, PmGovLink, PmGovRecord, PmIssue, PmLater, PmMilestoneOk, PmPlanCheck,
+  PmAction, PmAgreementChange, PmBaseline, PmChangeLog, PmChangeRequest, PmDoc, PmMeeting, PmGovLink, PmGovRecord, PmIssue, PmLater, PmMilestoneOk, PmPlanCheck,
   PmPdfDraft, PmPlanDay, PmPlanItem, PmPlanRep, PmProject, PmSubtask, PmTask, PmTaskDone, PmTaskFunctions, PmUpdRequest, PmWeekCheck,
 } from '@/domain/pm/schema';
 import { wdOf } from '@/domain/pm/plan';
@@ -78,6 +78,9 @@ export interface PmSnapshot {
   docs: PmDoc[];
   /** 요구사항 변경 (데모 S.crs) — 최근 접수가 앞 */
   crs: PmChangeRequest[];
+  // ── 5단계 ──
+  /** 회의록 (데모 S.meetings) */
+  meetings: PmMeeting[];
 }
 
 const clone = <T>(v: T): T => structuredClone(v);
@@ -127,6 +130,7 @@ export function createPmStore(today = todayStr()) {
     kpiDefs: [], kpiMeas: [], aiMeas: [], seen: [], favs: [],
     docs: [],
     crs: [],
+    meetings: [],
   };
 
   const log = (projectId: string, code: string, kind: PmChangeLog['kind'], text: string, by: string, day: string) => {
@@ -555,6 +559,44 @@ export function createPmStore(today = todayStr()) {
       i.esc = true;
       i.sev = '긴급';
       if (i.status === '열림') i.status = '대응중';
+    },
+
+    // ── 5단계: 회의록 · 액션 아이템 ──────────────────────
+    /** 회의록 작성 (mtForm 새로) → id */
+    async addMeeting(x: Omit<PmMeeting, 'id' | 'by' | 'at'>, by: string, day = todayStr()): Promise<string> {
+      const id = nid('M');
+      state.meetings.push({ ...clone(x), id, by, at: day });
+      return id;
+    },
+    /** 회의록 수정 — 이 회의에서 나온 액션 아이템의 사업도 따라감 (데모 kSet 은 어디서도 켜지 않음) */
+    async updateMeeting(id: string, x: Omit<PmMeeting, 'id' | 'by' | 'at'>) {
+      const m = state.meetings.find((v) => v.id === id);
+      if (!m) throw new Error('회의록을 찾을 수 없습니다');
+      Object.assign(m, clone(x));
+      for (const a of state.actions) if (a.meetingId === id) a.projectId = m.projectId;
+    },
+    /** 회의록 삭제 — 연결된 액션 아이템은 남기고 출처만 지움 */
+    async removeMeeting(id: string) {
+      state.meetings = state.meetings.filter((v) => v.id !== id);
+      for (const a of state.actions) if (a.meetingId === id) a.meetingId = '';
+    },
+    /** 액션 아이템 추가 (actForm 새로) */
+    async addAction(x: Pick<PmAction, 'text' | 'whoId' | 'due' | 'projectId' | 'meetingId'>, by: string, day = todayStr()): Promise<PmAction> {
+      const a: PmAction = { ...clone(x), id: nid('A'), by, at: day, done: false, doneDate: '', doneBy: '' };
+      state.actions.push(a);
+      return clone(a);
+    },
+    /** 액션 아이템 수정 — 완료를 새로 켜면 완료일 · 누가, 끄면 지움 */
+    async updateAction(id: string, x: Pick<PmAction, 'text' | 'whoId' | 'due' | 'projectId' | 'meetingId' | 'done'>, by: string, day = todayStr()) {
+      const a = state.actions.find((v) => v.id === id);
+      if (!a) throw new Error('액션 아이템을 찾을 수 없습니다');
+      const was = a.done;
+      Object.assign(a, clone(x));
+      if (x.done && !was) { a.doneDate = day; a.doneBy = by; }
+      if (!x.done) { a.doneDate = ''; a.doneBy = ''; }
+    },
+    async removeAction(id: string) {
+      state.actions = state.actions.filter((v) => v.id !== id);
     },
 
     // ── 4단계: 요구사항(CR) ──────────────────────────────

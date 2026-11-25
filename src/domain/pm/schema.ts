@@ -174,15 +174,16 @@ export const pmIssueSchema = z.object({
 });
 export type PmIssue = z.infer<typeof pmIssueSchema>;
 
-/** 액션 아이템 (`pmActions`) — 대시보드가 세는 칸만. 나머지는 5단계 */
+/** 액션 아이템 (`pmActions`, 데모 S.actions) — 회의에서 정한 후속 조치. 등록 · 수정은 회의록 화면 (actForm 3342) */
 export const pmActionSchema = z.object({
   id: z.string().min(1),
   projectId: z.string().default(''),
   meetingId: z.string().default(''),
   text: z.string().min(1),
   whoId: z.string().default(''),
-  /** 등록한 사람 (🔔 '새 액션 아이템' 알림 — 등록 화면은 5단계) */
+  /** 등록한 사람 · 등록일 (🔔 '새 액션 아이템' 알림) */
   by: z.string().default(''),
+  at: day.default(''),
   due: day.default(''),
   done: z.boolean().default(false),
   /** 완료한 날 · 사람 (actDone — 내 업무 '처리할 일'에서 체크) */
@@ -190,6 +191,25 @@ export const pmActionSchema = z.object({
   doneBy: z.string().default(''),
 });
 export type PmAction = z.infer<typeof pmActionSchema>;
+
+/** 회의록 (`pmMeetings`, 데모 S.meetings · mtForm 3317) — 사업 '' = 공통. 참석자 = 사내 사용자 ID, 외부 참석자는 글자 */
+export const PM_MEET_TYPES = ['착수 회의', '주간 회의', '도입기업 미팅', '현장 점검', '감리 · 점검 대응', '기술 검토', '완료 보고', '기타'] as const;
+export const pmMeetingSchema = z.object({
+  id: z.string().min(1),
+  projectId: z.string().default(''),
+  type: z.string().default('주간 회의'),
+  title: z.string().min(1),
+  date: day.default(''),
+  place: z.string().default(''),
+  attIds: z.array(z.string()).default([]),
+  ext: z.string().default(''),
+  content: z.string().default(''),
+  /** 결정 사항 — 주간 보고서 '금주 회의 결정사항'에 들어감 */
+  decision: z.string().default(''),
+  by: z.string().default(''),
+  at: day.default(''),
+});
+export type PmMeeting = z.infer<typeof pmMeetingSchema>;
 
 /** 진행률 '변동 없음' 확인 (`pmWeekChecks`, 데모 S.wcChk) — 그 주에 갱신한 것으로 침. id = `${주 시작일}|${taskId}` */
 export const pmWeekCheckSchema = z.object({
