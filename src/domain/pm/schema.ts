@@ -62,6 +62,11 @@ export const pmProjectSchema = z.object({
   /** 생산 라인 · 설비 (이름 글자 — 이슈 '발생 라인 / 설비' 고르기, 입력은 6단계 사업 정보) */
   lines: z.array(z.string()).default([]),
   equip: z.array(z.string()).default([]),
+  /** 총 사업비 · 정부 지원금 (원, 정수 — 금액이라 pm.manage 만 봄 · 데모는 만원). 계획서가 있으면 처음 한 번 계획서 총괄로 채움 (applyPlanInfo) */
+  budget: z.number().nullable().default(null),
+  subsidy: z.number().nullable().default(null),
+  /** 메모 */
+  note: z.string().default(''),
 });
 export type PmProject = z.infer<typeof pmProjectSchema>;
 
@@ -460,3 +465,64 @@ export const pmChangeRequestSchema = z.object({
   at: day.default(''),
 });
 export type PmChangeRequest = z.infer<typeof pmChangeRequestSchema>;
+
+// ── 6단계: 기준정보 (데모 S.orgs · S.codes · S.templates — 처음엔 업무 목록 · 사업에서 자동으로 만듦, ensureMaster 3647) ──
+
+/** 기업 · 기관 (`pmOrgs`) — 도입기업 · 공급기업 · 운영기관. 사업의 이름 글자와 이름으로 이어짐 (이름을 바꾸면 쓰는 곳도 같이) */
+export const PM_ORG_TYPES = ['도입기업', '공급기업', '운영기관'] as const;
+export const pmOrgSchema = z.object({
+  id: z.string().min(1),
+  type: z.enum(PM_ORG_TYPES),
+  name: z.string().min(1),
+  bizRegNo: z.string().default(''),
+  ceo: z.string().default(''),
+  region: z.string().default(''),
+  contact: z.string().default(''),
+  phone: z.string().default(''),
+  email: z.string().default(''),
+  note: z.string().default(''),
+  /** 사업 · 업무 목록에서 자동으로 추가됨 */
+  auto: z.boolean().default(false),
+});
+export type PmOrg = z.infer<typeof pmOrgSchema>;
+
+/** 코드 (`pmCodes`) — 사업구분 · 트랙 / 단계(사업구분마다 순서) / 업무 상태 */
+export const pmCodeSchema = z.object({
+  id: z.string().min(1),
+  group: z.enum(['biz', 'stage', 'status']),
+  name: z.string().min(1),
+  /** 사업구분 트랙 (가 · 나 · 다 …) */
+  track: z.string().default(''),
+  /** 단계: 어느 사업구분 · 순서 */
+  biz: z.string().default(''),
+  ord: z.number().default(0),
+  note: z.string().default(''),
+  auto: z.boolean().default(false),
+});
+export type PmCode = z.infer<typeof pmCodeSchema>;
+
+/** 표준 세부 업무 (`pmStdTasks`, 데모 S.codes.task) — 사업구분 › 단계 › 업무. 사업 등록 때 '표준 업무 목록 자동 생성'에 씀. off · dur = 협약 시작일부터 며칠 · 며칠 동안 */
+export const pmStdTaskSchema = z.object({
+  id: z.string().min(1),
+  biz: z.string().min(1),
+  stage: z.string().default(''),
+  ord: z.number().default(0),
+  code: z.string().default(''),
+  name: z.string().min(1),
+  output: z.string().default(''),
+  off: z.number().default(0),
+  dur: z.number().default(1),
+  milestone: z.boolean().default(false),
+  /** 처음 뽑아 온 사업 (P2 …) · 'std' = 보완으로 넣은 것 */
+  from: z.string().default(''),
+});
+export type PmStdTask = z.infer<typeof pmStdTaskSchema>;
+
+/** 업무 템플릿 (`pmTemplates`, 데모 S.templates) — 기준 사업의 업무 목록을 새 사업에 복사 */
+export const pmTemplateSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  baseId: z.string().min(1),
+  desc: z.string().default(''),
+});
+export type PmTemplate = z.infer<typeof pmTemplateSchema>;

@@ -13,7 +13,7 @@ export interface SearchHit { grp: string; label: string; sub: string; go: Search
 const v = (id: string, params?: Record<string, string>): SearchGo => ({ kind: 'view', v: id, ...(params ? { params } : {}) });
 /** 하는 일 (메뉴 길잡이) — [이름, 찾는 말, 갈 곳] */
 export const GS_DO: ReadonlyArray<readonly [string, string, SearchGo]> = [
-  ['사업 등록', '새 사업 수주 신규 등록 추가', v('master/base')],
+  ['사업 등록', '새 사업 수주 신규 등록 추가', v('master/base', { site: 'new' })],
   ['진행률 입력', '진행률 갱신 실적 입력 업데이트 퍼센트', v('dash/my')],
   ['오늘 할 일 · 일일 업무 보고', '업무계획 오늘 할일 일일보고 PDF 업무 보고', v('dash/plan')],
   ['티켓 발행 (업무 맡기기)', '업무 배정 맡기기 티켓 발행 지시', v('task/wbs')],
@@ -39,6 +39,8 @@ export const GS_DO: ReadonlyArray<readonly [string, string, SearchGo]> = [
 
 export interface SearchInputs {
   today: string;
+  /** 금액 화면을 볼 수 있음 (pm.manage) — 아니면 손익 · 견적 · 단가 '하는 일'을 뺌 */
+  money?: boolean;
   /** 화면 [보기 id, 이름, 메뉴 이름] — 탭에 보이는 것만 (menuList) */
   screens: ReadonlyArray<readonly [string, string, string]>;
   projects: readonly PmProject[];
@@ -67,7 +69,7 @@ export function gsFind(q0: string, X: SearchInputs): SearchHit[] {
   const L = (t: PmTask) => X.liveMap.get(t.id) ?? liveOf(t);
   const fin = (t: PmTask) => isDone(L(t));
 
-  for (const [l, kw, go] of GS_DO) if (hit(l) || hit(kw) || q.split(/\s+/).every((w) => `${l} ${kw}`.toLowerCase().includes(w))) push('하는 일', l, '바로 가기', go, 6);
+  for (const [l, kw, go] of GS_DO) if ((X.money !== false || go.kind !== 'view' || !go.v.startsWith('money/')) && (hit(l) || hit(kw) || q.split(/\s+/).every((w) => `${l} ${kw}`.toLowerCase().includes(w)))) push('하는 일', l, '바로 가기', go, 6);
   for (const [id, nm, menu] of X.screens) if (hit(nm) || hit(menu)) push('화면', nm, menu, v(id), 6);
   for (const p of X.projects) if (hit(p.company) || hit(X.shortOf(p.id)) || hit(p.bizNo) || hit(p.biz)) push('사업', `${X.shortOf(p.id)} · ${p.company}`, `${p.biz || ''} · PM ${p.pmName.split(/[\s/,]+/)[0] || X.nameOf(p.pmUserId) || '-'}`, v('dash/site', { k: p.id }), 6);
   // 업무: 이름 · 산출물 · 번호 · 묶음에 맞는 것을 안 끝난 것 · 마감 가까운 순으로. 8건 넘으면 '모두 보기' 한 줄

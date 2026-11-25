@@ -61,6 +61,7 @@ export const PERMISSIONS: PermissionDef[] = [
   P({ key: 'workplan.use', name: '업무계획·프로젝트', desc: '내 업무계획을 쓰고 프로젝트에 참여한다', area: 'workplan' }),
   P({ key: 'workplan.manage', name: '명단 순서·태그 관리', desc: '업무계획 명단 순서와 공용 태그를 정한다', area: 'workplan' }),
   P({ key: 'project.create', name: '프로젝트 만들기', desc: '새 프로젝트를 만들고 담당자를 배정한다', area: 'workplan' }),
+  ...pair('pm', '프로젝트 관리(PMS)', 'workplan', '프로젝트 관리 화면을 본다 — 1차는 로그인한 직원 모두 보므로 판정에 쓰지 않음', '사업 · 손익 · 견적 · 품목 단가 · 지원 기준 · 사업비 화면과 다른 화면의 금액 칸을 보고, 사업 · 기준정보를 관리한다'),
 
   // 게시판·소통
   P({ key: 'board.use', name: '게시판 읽기·쓰기', desc: '게시판 글을 읽고 쓴다', area: 'comm' }),

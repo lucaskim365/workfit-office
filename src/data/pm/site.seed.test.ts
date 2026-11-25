@@ -138,3 +138,22 @@ test('5단계 주간 진행률 · 보고서 (데모 pWeekCheck · docReport 값,
   const R = (k: string) => { const r = weekReport(ctx(k), 0, { tickets: [], issues: [], meetings: [], hours: () => 0 }); return [Math.round(r.act), Math.round(r.plan), r.done, r.n, r.late.length, r.wkNo]; };
   assert.deepEqual([R('P2'), R('P3'), R('P7')], [[7, 0, 15, 72, 0, 4], [4, 0, 6, 60, 0, 4], [1, 0, 2, 63, 0, 4]]);
 });
+
+test('6단계 기준정보 자동 생성 (데모 ensureMaster · seedTemplates 값, 기록 0건)', async () => {
+  const { deriveMaster } = await import('@/domain/pm/master');
+  const { m } = deriveMaster({ orgs: [], codes: [], stdTasks: [], templates: [] }, projects, tasks, false);
+  assert.deepEqual(m.orgs.map((o) => `${o.type}:${o.name}`), ['도입기업:신광테크', '공급기업:㈜이지엠', '운영기관:이노비즈협회', '도입기업:㈜효광', '도입기업:한일시멘트', '공급기업:워크핏 주식회사', '운영기관:중소기업기술정보진흥원',
+    '도입기업:㈜꽃샘식품', '도입기업:㈜저스템', '운영기관:광주TP', '도입기업:에이치엘만도 익산공장', '운영기관:전북TP', '도입기업:삼광기계 제2공장', '운영기관:경남TP', '도입기업:은혜기업', '도입기업:㈜에이엔피산업', '도입기업:금호기공', '도입기업:광우R&A']);
+  const C = (g: string) => m.codes.filter((c) => c.group === g);
+  assert.deepEqual(C('biz').map((c) => `${c.name}|${c.track}`), ['부처협업형(산업보안)|다', '자율형공장 (2025년)|가', '제조AI|라', '제조AI 특화 물류|라', '정부일반형|나', 'AX공통솔루션|마', 'AX단계별고도화|바']);
+  const by = (a: Array<{ biz: string }>) => Object.fromEntries(C('biz').map((b) => [b.name, a.filter((x) => x.biz === b.name).length]));
+  assert.equal(C('stage').length, 63);
+  assert.deepEqual(by(C('stage')), { '부처협업형(산업보안)': 38, '자율형공장 (2025년)': 0, 제조AI: 16, '제조AI 특화 물류': 9, 정부일반형: 0, AX공통솔루션: 0, AX단계별고도화: 0 });
+  assert.deepEqual(C('status').map((c) => c.name), ['계획', '진행중', '완료']);
+  assert.equal(m.stdTasks.length, 178);
+  assert.deepEqual(by(m.stdTasks), { '부처협업형(산업보안)': 73, '자율형공장 (2025년)': 0, 제조AI: 64, '제조AI 특화 물류': 41, 정부일반형: 0, AX공통솔루션: 0, AX단계별고도화: 0 });
+  assert.deepEqual([...new Set(m.stdTasks.map((t) => t.from))], ['P2', 'P7', 'P8', 'std']);
+  assert.deepEqual(m.templates.map((t) => `${t.id}:${t.name}:${t.baseId}`), ['T1:부처협업형(산업보안) 표준:P2', 'T2:제조AI 표준:P7', 'T3:제조AI 특화 물류 표준:P8']);
+  // 사업비 = 계획서 총괄 (데모 applyPlanInfo — 신광 39,822만 · 정부 19,440만 → 원)
+  assert.deepEqual(['P2', 'P3', 'P4', 'P9'].map((k) => { const p = projects.find((x) => x.id === k)!; return [p.budget, p.subsidy]; }), [[398220000, 194400000], [398134000, 194400000], [null, null], [392040000, 196020000]]);
+});

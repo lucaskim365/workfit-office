@@ -7,6 +7,7 @@ import { agoText, dday, dlEff, lateActions, msAlerts, msOld, type Deadline } fro
 import { usePmDerived, usePmMutations, usePmSiteMutations, usePmSites, type PmSiteRow } from '@/features/pm/usePm';
 import { usePmPeople } from '../../usePmPeople';
 import { usePmModals } from '../ticket/usePmModals';
+import { usePmAccess } from '@/features/pm/usePmAccess';
 import { EmptyHint, ProjectTag, Tag } from '../wbs/parts';
 import { CardHead, SIGNAL_BG, ScreenHead, SiteStatusTag, StagePill, signalOf } from './parts';
 import { DeadlineListModal, PastModal, TaskListModal } from './DashModals';
@@ -34,6 +35,7 @@ export function OverviewView() {
   const [pop, setPop] = useState<Pop | null>(() => (params.get('pop') === 'past' ? { kind: 'past' } : null));
   const shortOf = (id: string) => { const p = d?.snap.projects.find((x) => x.id === id); return p ? shortName(p, d!.snap.projects) : id; };
   const modals = usePmModals({ d, people, mut, shortOf });
+  const access = usePmAccess();
 
   if (!d || !S) return <EmptyHint title="사업 현황을 불러오는 중입니다" />;
   const { rows, all } = S;
@@ -49,7 +51,7 @@ export function OverviewView() {
   const openSite = (id: string, extra: Record<string, string> = {}) => go('dash/site', { k: id, ...extra });
 
   if (!rows.length) {
-    return <EmptyHint title="등록된 사업이 없습니다" hint="기준정보 › 사업에서 사업을 등록하거나(6단계), 업무 목록에 업무가 들어오면 여기 나옵니다." />;
+    return <EmptyHint title="등록된 사업이 없습니다" hint="기준정보 › 사업에서 사업을 등록하거나, 업무 목록에 업무가 들어오면 여기 나옵니다." />;
   }
 
   const sumN = (f: (r: PmSiteRow) => number) => rows.reduce((a, r) => a + f(r), 0);
@@ -85,7 +87,7 @@ export function OverviewView() {
   return (
     <div className="space-y-4">
       <ScreenHead title="통합 사업 현황" desc="사업마다 기한 · 보완 · 협약변경 · 갱신 상태를 한 줄로 보고, 줄을 누르면 그 사업 화면으로 들어갑니다">
-        <Button size="sm" variant="secondary" disabled title="사업 등록은 기준정보 › 사업 화면과 같이 6단계에서 옮깁니다">+ 사업 등록 (6단계)</Button>
+        <Button size="sm" variant="secondary" disabled={!access.manage} title={access.manage ? undefined : '사업 등록은 프로젝트 관리(PMS) 관리 권한이 필요합니다'} onClick={() => modals.openSite(null)}>+ 사업 등록</Button>
         <Button size="sm" variant="secondary" onClick={() => modals.openIssue(null)}>+ 이슈 등록</Button>
       </ScreenHead>
 

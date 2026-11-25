@@ -235,3 +235,22 @@ test('5단계 주간 보고 저장: 특이사항 · 협조 요청은 주마다 �
   await s.sendUpdRequest('u1', 'P3', 'pm2');
   assert.deepEqual((await s.snapshot()).updReq, [{ id: 'u1', date: '2026-11-25', by: 'pm2', projectId: 'P3' }]);
 });
+
+test('6단계 사업 등록 · 수정 · 삭제: 표준 업무 자동 생성(부처협업형 73건) · 기준선 · 새 기업 이름은 기준정보에', async () => {
+  const { pmProjectSchema } = await import('@/domain/pm/schema');
+  const s = createPmStore('2026-11-25');
+  const p = pmProjectSchema.parse({ id: 'P14', company: '㈜새회사', biz: '부처협업형(산업보안)', supplier: '워크핏 주식회사', start: '2027-01-04', end: '2027-09-30', pmName: '박명규 부장' });
+  assert.equal(await s.addProject(p, 'std', false, 'pm'), 73);
+  let snap = await s.snapshot();
+  assert.equal(snap.tasks.filter((t) => t.projectId === 'P14').length, 73);
+  assert.ok(snap.baselines.some((b) => b.id === 'P14' && b.label === '최초 계획 (템플릿 적용)'));
+  assert.ok(snap.orgs.some((o) => o.type === '도입기업' && o.name === '㈜새회사'));
+  assert.equal(await s.addProject(pmProjectSchema.parse({ id: 'P15', company: 'x', biz: '정부일반형', start: '2027-01-04', end: '2027-09-30' }), 'std', false, 'pm'), 0, '정부일반형은 표준 업무가 없음');
+  await assert.rejects(s.addProject(p, '', false, 'pm'), /이미 사용 중/);
+  await s.updateProject({ ...p, company: '㈜새회사2', summary: '착수 준비' }, 'pm');
+  snap = await s.snapshot();
+  assert.deepEqual([snap.projects.find((x) => x.id === 'P14')!.summary, snap.orgs.some((o) => o.name === '㈜새회사2')], ['착수 준비', true]);
+  await s.removeProject('P14', 'pm');
+  snap = await s.snapshot();
+  assert.deepEqual([snap.projects.some((x) => x.id === 'P14'), snap.tasks.some((t) => t.projectId === 'P14')], [false, false]);
+});

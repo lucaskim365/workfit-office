@@ -228,7 +228,7 @@ export function AfterCard({ c, nameOf, onAsAdd }: { c: SiteCtx; nameOf: (id: str
 }
 
 /** 사업 개요 (pSiteSum info) — 사업 정보 + 계획서 내장 데이터 */
-export function InfoCard({ c, short, onKpi }: { c: SiteCtx; short: string; onKpi: () => void }) {
+export function InfoCard({ c, short, onKpi, money, manage, onEdit }: { c: SiteCtx; short: string; onKpi: () => void; money: boolean; manage: boolean; onEdit: () => void }) {
   const s = c.p;
   const p = c.plan;
   const kv = (k: ReactNode, v: ReactNode, title?: string) => (
@@ -240,7 +240,7 @@ export function InfoCard({ c, short, onKpi }: { c: SiteCtx; short: string; onKpi
     <Card>
       <CardHead title="사업 개요">
         <span className="flex-1" />
-        <Button size="sm" variant="secondary" disabled title="협약 기간 · PM · 도입기업 · 현장 담당자 수정은 기준정보 › 사업 화면과 같이 6단계에서 옮깁니다">정보 수정 (6단계)</Button>
+        <Button size="sm" variant="secondary" disabled={!manage} title={manage ? '협약 기간 · PM · 도입기업 · 현장 담당자 · 사업비를 고칩니다' : '사업 정보 수정은 프로젝트 관리(PMS) 관리 권한이 필요합니다'} onClick={onEdit}>정보 수정</Button>
         <Button size="sm" variant="secondary" disabled title="계획서 PDF 원본 보관은 파일 저장소를 연결하는 7단계에서 켭니다. 계획서 내용(기능 목록 · 성과지표)은 이미 들어 있습니다">{p ? '계획서 PDF 등록' : '계획서 등록'} (7단계)</Button>
         {p ? <Tag tone="ok" title={p.file ?? ''}>계획서 {p.ver ?? ''}</Tag> : <Tag>사업계획서 미등록</Tag>}
       </CardHead>
@@ -253,7 +253,7 @@ export function InfoCard({ c, short, onKpi }: { c: SiteCtx; short: string; onKpi
         {p ? (
           <>
             {kv('목표 수준', p.level?.[1] ? <>{p.level[0] || '-'} → <b>{p.level[1]}</b></> : '-')}
-            {kv('사업비', planSum(p) ? <>{won(chon(planSum(p)))} <span className="text-[11px] text-ink3">(정부 {won(chon(planSum(p, 2)))})</span></> : '-')}
+            {money && kv('사업비', planSum(p) ? <>{won(chon(planSum(p)))} <span className="text-[11px] text-ink3">(정부 {won(chon(planSum(p, 2)))})</span></> : s.budget ? <>{won(Math.round(s.budget / 10000))}{s.subsidy ? <span className="text-[11px] text-ink3"> (정부 {won(Math.round(s.subsidy / 10000))})</span> : null}</> : '-')}
             {kv('구축 목표', (p.goal ?? []).length ? <div>{p.goal!.map((g) => <div key={g}>· {g}</div>)}</div> : '-')}
             {kv('성과지표', (p.kpis ?? []).length ? (
               <div>{p.kpis!.map((x) => <div key={x.name}>· {x.name} <span>{fmtN(x.base)} → <b>{fmtN(x.target)}</b> {x.unit ?? ''}</span></div>)}

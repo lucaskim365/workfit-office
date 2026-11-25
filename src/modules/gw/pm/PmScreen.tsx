@@ -4,7 +4,9 @@ import { GwHead, GwSideNav, GwSplit } from '@/modules/gw/_gw';
 import { shortName } from '@/domain/pm/rules';
 import type { AlertGo } from '@/domain/pm/alerts';
 import { usePmDerived, usePmMutations, usePmSiteMutations } from '@/features/pm/usePm';
-import { PM_MENUS, resolvePmRoute } from './menu';
+import { resolvePmRoute, visibleMenus } from './menu';
+import { usePmAccess } from '@/features/pm/usePmAccess';
+import { EmptyHint } from './views/wbs/parts';
 import { usePmPeople } from './usePmPeople';
 import { PmScreenTabs, PmViewSwitch } from './ui/PmTabs';
 import { FavBox, FavStar, PmBell, PmSearch, PmShellProvider, type Fav } from './ui/PmShell';
@@ -28,6 +30,7 @@ import { IssueView } from './views/issue/IssueView';
 import { MeetView } from './views/meet/MeetView';
 import { WeekCheckView } from './views/weekly/WeekCheckView';
 import { ReportView } from './views/weekly/ReportView';
+import { BaseView } from './views/master/BaseView';
 
 /** 옮긴 보기 → 화면. 없는 보기는 '옮기는 중' 자리 */
 const VIEWS: Record<string, ComponentType> = {
@@ -51,6 +54,7 @@ const VIEWS: Record<string, ComponentType> = {
   'doc/meet': MeetView,
   'doc/check': WeekCheckView,
   'doc/report': ReportView,
+  'master/base': BaseView,
 };
 
 const NO_TITLE = new Set(['sched/gantt', 'risk/delay']);
@@ -67,6 +71,9 @@ export default function PmScreen() {
   const [params, setParams] = useSearchParams();
   const route = resolvePmRoute(params.get('v'));
   const people = usePmPeople();
+  // 금액 화면 · 메뉴는 pm.manage 만 (설계 3.4)
+  const access = usePmAccess();
+  const menus = visibleMenus(access.money);
   const d = usePmDerived(people.nameOf);
   const mut = usePmMutations(people.me, people.nameOf);
   const smut = usePmSiteMutations(people.me);
@@ -80,7 +87,7 @@ export default function PmScreen() {
     next.set('v', viewId);
     // 화면을 바꾸면 업무 목록 사업 선택(k)·단계(stage)는 그 화면 것만 — 업무 목록 안에서만 유지
     if (!viewId.startsWith('task/wbs')) { next.delete('k'); next.delete('stage'); next.delete('period'); next.delete('who'); next.delete('st'); }
-    for (const x of ['q', 'board', 'inbox', 'pop', 'side', 'fix', 'cr', 'review', 'issue', 'mt', 'act']) next.delete(x);
+    for (const x of ['q', 'board', 'inbox', 'pop', 'side', 'fix', 'cr', 'review', 'issue', 'mt', 'act', 'site']) next.delete(x);
     setParams(next);
   };
   /** 알림 · 검색 · 즐겨찾기에서 갈 곳 */
@@ -94,7 +101,8 @@ export default function PmScreen() {
   const cur: Fav = { v: route.view, k: route.view === 'dash/site' ? params.get('k') ?? '' : '' };
   const favs = d?.snap.favs.find((r) => r.id === people.me)?.items ?? [];
   const shell = { cur, favs, toggleFav: () => smut.toggleFav.mutate(cur), go: goTo };
-  const tabs = route.menu.screens.filter((s) => !s.hidden);
+  const tabs = route.menu.screens.filter((s) => !s.hidden && (access.money || !s.money));
+  const blocked = !!route.screen.money && !access.money;
 
   return (
     <PmShellProvider value={shell}>
@@ -108,7 +116,7 @@ export default function PmScreen() {
               <GwSideNav
                 title="프로젝트 관리"
                 desc="사업 · 업무 · 점검 · 손익을 한 곳에서 관리합니다."
-                items={PM_MENUS.map((m) => ({ id: m.id, icon: m.icon, label: m.label }))}
+                items={menus.map((m) => ({ id: m.id, icon: m.icon, label: m.label }))}
                 activeId={route.menu.id}
                 onSelect={go}
               />
@@ -134,7 +142,9 @@ export default function PmScreen() {
                   {NO_TITLE.has(route.view) && <FavStar />}
                 </div>
               )}
-              {(() => { const V = VIEWS[route.view]; return V ? <V key={nav} /> : <PmPlaceholder viewId={route.view} />; })()}
+              {blocked
+                ? <EmptyHint title={access.loading ? '권한을 확인하는 중입니다' : '금액이 나오는 화면이라 프로젝트 관리(PMS) 관리 권한이 있어야 볼 수 있습니다'} hint={access.loading ? undefined : '권한은 관리자 콘솔 › 권한 › 역할 관리에서 최고 관리자가 지정합니다.'} />
+                : (() => { const V = VIEWS[route.view]; return V ? <V key={nav} /> : <PmPlaceholder viewId={route.view} />; })()}
             </div>
           </section>
         </GwSplit>

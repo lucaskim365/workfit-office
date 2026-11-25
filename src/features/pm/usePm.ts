@@ -101,6 +101,12 @@ export function usePmMutations(me: string, nameOf?: (id: string) => string) {
     commentTicket: m(({ no, text }: { no: string; text: string }) => s.commentTicket(no, text, me)),
     addTicketFile: m(({ no, name }: { no: string; name: string }) => s.addTicketFile(no, name, me)),
     removeTicketFile: m(({ no, index }: { no: string; index: number }) => s.removeTicketFile(no, index, me)),
+    // 6단계: 사업 등록 · 수정 · 삭제
+    addProject: m(({ p, tpl, keepPeople }: { p: PmProject; tpl: string; keepPeople: boolean }) => s.addProject(p, tpl, keepPeople, me)),
+    updateProject: m((p: PmProject) => s.updateProject(p, me)),
+    removeProject: m((id: string) => s.removeProject(id, me)),
+    completeTasks: m(({ ids, note }: { ids: string[]; note: string }) => s.completeTasks(ids, note, me)),
+    setTaskDates: m(({ items, note }: { items: Array<{ id: string; start: string; end: string }>; note: string }) => s.setTaskDates(items, note, me)),
     // 5단계: 이슈 (여러 화면에서 등록 창을 열어서 여기 둠)
     addIssue: m((x: Parameters<typeof s.addIssue>[0]) => s.addIssue(x, me)),
     updateIssue: m(({ id, x }: { id: string; x: Parameters<typeof s.updateIssue>[1] }) => s.updateIssue(id, x)),

@@ -1,6 +1,6 @@
 import { addDays, applyProgress, makeBaseline, todayStr } from '@/domain/pm/rules';
 import type {
-  PmAction, PmAgreementChange, PmBaseline, PmChangeLog, PmChangeRequest, PmDoc, PmMeeting, PmReport, PmGovLink, PmGovRecord, PmIssue, PmLater, PmMilestoneOk, PmPlanCheck,
+  PmAction, PmAgreementChange, PmBaseline, PmChangeLog, PmChangeRequest, PmDoc, PmMeeting, PmReport, PmGovLink, PmCode, PmOrg, PmStdTask, PmTemplate, PmGovRecord, PmIssue, PmLater, PmMilestoneOk, PmPlanCheck,
   PmPdfDraft, PmPlanDay, PmPlanItem, PmPlanRep, PmProject, PmSubtask, PmTask, PmTaskDone, PmTaskFunctions, PmUpdRequest, PmWeekCheck,
 } from '@/domain/pm/schema';
 import { wdOf } from '@/domain/pm/plan';
@@ -12,6 +12,7 @@ import { weekStart } from '@/domain/pm/site';
 import type { PmAiMeas, PmKpiDef, PmKpiMeas } from '@/domain/pm/kpi';
 import { nextCrId } from '@/domain/pm/cr';
 import { nextIssueId } from '@/domain/pm/issue';
+import { baseTplTasks, deriveMaster, makeTasks, stdTplTasks, type Master } from '@/domain/pm/master';
 
 /**
  * PM 저장소 — 1단계는 **메모리 전용** (§5.1: `pm*` 컬렉션이 아직 없어 `VITE_DB_DRIVER=appwrite` 여도 메모리).
@@ -83,6 +84,11 @@ export interface PmSnapshot {
   meetings: PmMeeting[];
   /** 주간 보고 작성 항목 (데모 S.reports) */
   reports: PmReport[];
+  // ── 6단계: 기준정보 (데모 S.orgs · S.codes · S.templates) ──
+  orgs: PmOrg[];
+  codes: PmCode[];
+  stdTasks: PmStdTask[];
+  templates: PmTemplate[];
 }
 
 const clone = <T>(v: T): T => structuredClone(v);
@@ -134,7 +140,18 @@ export function createPmStore(today = todayStr()) {
     crs: [],
     meetings: [],
     reports: [],
+    orgs: [], codes: [], stdTasks: [], templates: [],
   };
+
+  /** 기준정보를 사업 · 업무 목록에 맞춤 (ensureMaster) — 새 이름만 더함. 표준 세부 업무는 처음 한 번만 */
+  let stdSeeded = false;
+  const syncMaster = () => {
+    const cur: Master = { orgs: state.orgs, codes: state.codes, stdTasks: state.stdTasks, templates: state.templates };
+    const { m } = deriveMaster(cur, state.projects, state.tasks, stdSeeded);
+    stdSeeded = true;
+    Object.assign(state, m);
+  };
+  syncMaster();
 
   const log = (projectId: string, code: string, kind: PmChangeLog['kind'], text: string, by: string, day: string) => {
     state.logs.push({ id: nid('lg'), projectId, code, kind, text, date: day, by });
@@ -600,6 +617,57 @@ export function createPmStore(today = todayStr()) {
     },
     async removeAction(id: string) {
       state.actions = state.actions.filter((v) => v.id !== id);
+    },
+
+    // ── 6단계: 사업 등록 · 정보 수정 · 삭제 (siteForm 2919) ──
+    /**
+     * 사업 등록 — tpl: 'std' = 기준정보 표준 업무 자동 생성 · 템플릿 ID = 그 사업 업무 복사 · '' = 만들지 않음.
+     * 만든 업무는 협약 기간에 맞춰 날짜를 잡고 '최초 계획 (템플릿 적용)' 기준선을 만듦 → 만든 업무 수
+     */
+    async addProject(p: PmProject, tpl: string, keepPeople: boolean, by: string, day = todayStr()): Promise<number> {
+      if (state.projects.some((x) => x.id === p.id) || state.tasks.some((t) => t.projectId === p.id)) throw new Error('이미 사용 중인 사업키입니다');
+      state.projects.push(clone(p));
+      syncMaster();
+      const t = tpl === 'std' ? null : state.templates.find((x) => x.id === tpl);
+      const src = tpl === 'std' ? stdTplTasks(state, p.biz) : t ? baseTplTasks(state.projects.find((x) => x.id === t.baseId), state.tasks) : [];
+      if (!src.length) return 0;
+      const ts = makeTasks(p, src, keepPeople, state.tasks.length);
+      state.tasks.push(...ts);
+      log(p.id, '-', '추가', `템플릿 '${tpl === 'std' ? '기준정보 표준 TASK' : t!.name}' 적용 — TASK ${ts.length}건`, by, day);
+      state.baselines = [...state.baselines.filter((b) => b.id !== p.id), makeBaseline(p.id, ts, '최초 계획 (템플릿 적용)', day, by)];
+      return ts.length;
+    },
+    /** 사업 정보 수정 — 사업키는 그대로. 기업 이름이 새로 생기면 기준정보에 자동 추가 */
+    async updateProject(next: PmProject, by: string, day = todayStr()) {
+      const i = state.projects.findIndex((x) => x.id === next.id);
+      if (i < 0) throw new Error('사업을 찾을 수 없습니다');
+      state.projects[i] = clone(next);
+      syncMaster();
+      log(next.id, '-', '수정', '사업 정보 수정', by, day);
+    },
+    /** 업무 여러 건 완료 (prePastDone — 등록 때 '이미 한 일') */
+    async completeTasks(ids: readonly string[], note: string, by: string, day = todayStr()) {
+      for (const id of ids) { const i = findTask(id); state.tasks[i] = { ...state.tasks[i], status: '완료', actualPct: 100 }; }
+      const p = ids.length ? state.tasks[findTask(ids[0])].projectId : '';
+      if (p) log(p, '-', '수정', `${note} — TASK ${ids.length}건 완료 처리`, by, day);
+    },
+    /** 사업 삭제 — 발행된 티켓이 있으면 막음. 업무 · 이슈 · CR · 액션 · 사업에 딸린 기록을 같이 지우고, 회의록은 '공통'으로 */
+    async removeProject(id: string, by: string, day = todayStr()) {
+      const tks = state.tickets.filter((x) => x.projectId === id && x.status !== '취소');
+      if (tks.length) throw new Error(`발행된 티켓 ${tks.length}건이 있어 삭제할 수 없습니다. 티켓을 먼저 발행 취소하세요.`);
+      const n = state.tasks.filter((t) => t.projectId === id).length;
+      const gone = new Set(state.tasks.filter((t) => t.projectId === id).map((t) => t.id));
+      state.projects = state.projects.filter((x) => x.id !== id);
+      state.tasks = state.tasks.filter((t) => t.projectId !== id);
+      state.subtasks = state.subtasks.filter((x) => !gone.has(x.taskId));
+      state.issues = state.issues.filter((x) => x.projectId !== id);
+      state.crs = state.crs.filter((x) => x.projectId !== id);
+      state.actions = state.actions.filter((x) => x.projectId !== id);
+      for (const m of state.meetings) if (m.projectId === id) m.projectId = '';
+      state.templates = state.templates.filter((x) => x.baseId !== id);
+      state.baselines = state.baselines.filter((x) => x.id !== id);
+      for (const k of ['gov', 'planChecks', 'govLinks', 'agreements', 'docs', 'reports', 'weekChecks'] as const) (state[k] as Array<{ projectId: string }>) = (state[k] as Array<{ projectId: string }>).filter((x) => x.projectId !== id);
+      log(id, '-', '삭제', `사업 삭제 — TASK ${n}건`, by, day);
     },
 
     // ── 5단계: 주간 진행률 · 보고서 ──────────────────────

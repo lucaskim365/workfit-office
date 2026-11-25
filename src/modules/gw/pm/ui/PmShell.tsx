@@ -7,7 +7,8 @@ import { planRecentIdx, planUpdDates } from '@/domain/pm/plan';
 import type { PmProject } from '@/domain/pm/schema';
 import { usePmDerived, usePmSiteMutations, usePmSites } from '@/features/pm/usePm';
 import { planCtxOf } from '@/features/pm/usePmPlan';
-import { PM_MENUS } from '../menu';
+import { PM_MENUS, visibleMenus } from '../menu';
+import { usePmAccess } from '@/features/pm/usePmAccess';
 import type { usePmPeople } from '../usePmPeople';
 
 /**
@@ -97,14 +98,15 @@ export function PmSearch({ people }: { people: People }) {
     document.addEventListener('mousedown', down);
     return () => { document.removeEventListener('keydown', key); document.removeEventListener('mousedown', down); };
   }, []);
-  const screens = useMemo(() => PM_MENUS.flatMap((m) => m.screens.filter((s) => !s.hidden).flatMap((s) =>
-    [[s.id, s.label, m.label] as const, ...(s.views ?? []).filter((x) => x.id !== s.id).map((x) => [x.id, x.label, m.label] as const)])), []);
+  const { money } = usePmAccess();
+  const screens = useMemo(() => visibleMenus(money).flatMap((m) => m.screens.filter((s) => !s.hidden).flatMap((s) =>
+    [[s.id, s.label, m.label] as const, ...(s.views ?? []).filter((x) => x.id !== s.id).map((x) => [x.id, x.label, m.label] as const)])), [money]);
   const list: SearchHit[] = useMemo(() => {
     if (!d || !deb.trim()) return [];
     const shortOf = (id: string) => { const p = d.snap.projects.find((x) => x.id === id); return p ? shortName(p, d.snap.projects) : id; };
     return gsFind(deb, { today: d.today, screens, projects: d.snap.projects, tasks: d.snap.tasks, liveMap: d.liveMap, tickets: d.snap.tickets,
-      issues: d.snap.issues, actions: d.snap.actions, crs: d.snap.crs, meetings: d.snap.meetings, people: people.people, shortOf, nameOf: people.nameOf });
-  }, [d, deb, screens, people.people, people.nameOf]);
+      issues: d.snap.issues, actions: d.snap.actions, crs: d.snap.crs, meetings: d.snap.meetings, people: people.people, shortOf, nameOf: people.nameOf, money });
+  }, [d, deb, screens, people.people, people.nameOf, money]);
   useEffect(() => setSel(0), [deb]);
   const close = () => { setOpen(false); setQ(''); setDeb(''); inp.current?.blur(); };
   const pick = (x: SearchHit | undefined) => { if (!x || !sh) return; close(); sh.go(x.go); };

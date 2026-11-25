@@ -1,5 +1,5 @@
 import type { PmFunctionKind, PmProject, PmSubtask, PmTask, PmTaskFunctions } from '@/domain/pm/schema';
-import type { PmPlan } from '@/domain/pm/site';
+import { planSum, type PmPlan } from '@/domain/pm/site';
 import wbsData from './seed/wbs-data.json';
 import planData from './seed/plan-data.json';
 import fnData from './seed/fn-data.json';
@@ -62,6 +62,8 @@ export function seedProjects(): PmProject[] {
       annDue: '', evalDate: '', bidRes: '', bidAt: null, warrantyM: null,
       // 업종 · 소재지는 계획서 값으로 한 번 채움 (데모 applyPlanInfo 6902 — 켤 때 빈 칸만)
       ceo: '', industry: s(PLANS[p.k]?.industry), region: s(PLANS[p.k]?.region), bizRegNo: '', contactName: '', contactPhone: '', contactEmail: '', lines: [], equip: [],
+      // 총 사업비 · 정부 지원금 = 계획서 4.1 총괄 (천원 → 원, applyPlanInfo)
+      budget: PLANS[p.k] ? planSum(PLANS[p.k]) * 1000 : null, subsidy: PLANS[p.k] ? planSum(PLANS[p.k], 2) * 1000 : null, note: '',
     }) satisfies PmProject);
 }
 

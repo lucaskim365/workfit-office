@@ -20,6 +20,8 @@ export interface PmScreenDef {
   views?: PmView[];
   /** 메뉴 탭에 없는 화면 (데모 HIDDEN_PARENT) — 다른 화면 버튼 · 검색 · 즐겨찾기로만 들어옴 */
   hidden?: boolean;
+  /** 금액 화면 — pm.manage 만 보임 (설계 3.4) */
+  money?: boolean;
 }
 
 export interface PmMenuDef {
@@ -85,8 +87,8 @@ export const PM_MENUS: PmMenuDef[] = [
     icon: '📊',
     desc: '사업별 매출 · 원가 · 이익과 월별 · 연간 손익을 확인합니다.',
     screens: [
-      { id: 'money/site', label: '사업별 수익' },
-      { id: 'money/pl', label: '월별 · 연간 손익' },
+      { id: 'money/site', label: '사업별 수익', money: true },
+      { id: 'money/pl', label: '월별 · 연간 손익', money: true },
     ],
   },
   {
@@ -96,12 +98,17 @@ export const PM_MENUS: PmMenuDef[] = [
     desc: '사업 · 인력 · 코드와 지원 기준, 품목 단가를 관리합니다.',
     screens: [
       { id: 'master/base', label: '사업 · 인력 · 코드' },
-      { id: 'money/rules', label: '지원 기준 · 단가' },
-      { id: 'money/items', label: '품목 · 단가' },
+      { id: 'money/rules', label: '지원 기준 · 단가', money: true },
+      { id: 'money/items', label: '품목 · 단가', money: true },
       { id: 'master/log', label: '활동 기록' },
     ],
   },
 ];
+
+/** 권한에 맞는 메뉴 — 금액 화면은 pm.manage 만, 화면이 하나도 안 남는 메뉴는 숨김 (3.4: '메뉴 자체가 안 보임') */
+export function visibleMenus(money: boolean): PmMenuDef[] {
+  return PM_MENUS.map((m) => ({ ...m, screens: m.screens.filter((s) => money || !s.money) })).filter((m) => m.screens.length);
+}
 
 export interface PmRoute {
   menu: PmMenuDef;

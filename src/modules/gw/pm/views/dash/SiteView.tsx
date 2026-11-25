@@ -9,6 +9,7 @@ import type { PmAgreementChange } from '@/domain/pm/schema';
 import { usePmDerived, usePmMutations, usePmSiteMutations, usePmSites, type PmSiteRow } from '@/features/pm/usePm';
 import { usePmPeople } from '../../usePmPeople';
 import { usePmModals } from '../ticket/usePmModals';
+import { usePmAccess } from '@/features/pm/usePmAccess';
 import { EmptyHint, ProjectTag, Tag } from '../wbs/parts';
 import { CardHead, DeadlineRow, ScreenHead, SiteStatusTag } from './parts';
 import { PastModal, TaskListModal } from './DashModals';
@@ -45,6 +46,7 @@ export function SiteView() {
   const [dlAll, setDlAll] = useState(false);
   const shortOf = (id: string) => { const p = d?.snap.projects.find((x) => x.id === id); return p ? shortName(p, d!.snap.projects) : id; };
   const modals = usePmModals({ d, people, mut, shortOf });
+  const access = usePmAccess();
 
   // 사업 고르기: URL k → 없거나 틀리면 계획서 있는 첫 사업 → 탈락 아닌 첫 사업 (pSiteSum)
   const cur = useMemo<PmSiteRow | null>(() => {
@@ -185,7 +187,7 @@ export function SiteView() {
 
       <div className="grid items-stretch gap-4 lg:grid-cols-2">
         <div className="flex min-w-0 flex-col gap-4">
-          <InfoCard c={c} short={short} onKpi={() => go('site/kpi', { k: c.p.id })} />
+          <InfoCard c={c} short={short} onKpi={() => go('site/kpi', { k: c.p.id })} money={access.money} manage={access.manage} onEdit={() => modals.openSite(k)} />
           <UpdatesCard L={siteUpdates(c)} nameOf={people.nameOf} noteNow={!!d.snap.reports.find((r) => r.projectId === k && r.week === weekStart(today))?.note} onWrite={() => go('doc/check', { k })} />
           <AgreementCard c={c} onNew={() => setPop({ kind: 'agr', x: null })} onEdit={(x) => setPop({ kind: 'agr', x })} />
         </div>
