@@ -100,18 +100,19 @@ export function usePmMutations(me: string, nameOf?: (id: string) => string) {
   return {
     addTask: m((t: PmTask) => s.addTask(t, me)),
     updateTask: m(({ id, next, base }: { id: string; next: PmTask; base: PmBases }) => s.withBase(base).updateTask(id, next, me, nameOf)),
-    bulkUpdate: m((items: Array<{ next: PmTask; summary: string }>) => s.bulkUpdate(items, me)),
+    // G1: 화면 값으로 통째 쓰는 저장 — 표 = 저장 누를 때 화면의 그 기록 (화면이 저장소보다 늦은 몇 초 동안 남의 변경을 덮지 않게)
+    bulkUpdate: m(({ items, base }: { items: Array<{ next: PmTask; summary: string }>; base: PmBases }) => s.withBase(base).bulkUpdate(items, me)),
     setProgress: m(({ id, pct, why }: { id: string; pct: number; why: string }) => s.setProgress(id, pct, why, me)),
     addSubtask: m(({ taskId, text, assigneeId, due, est }: { taskId: string; text: string; assigneeId: string; due: string; est?: number }) => s.addSubtask(taskId, text, assigneeId, due, me, todayStr(), est ?? 0)),
     updateSubtask: m(({ id, patch }: { id: string; patch: Partial<Omit<PmSubtask, 'id' | 'taskId' | 'doneDate' | 'doneBy'>> }) => s.updateSubtask(id, patch, me)),
     removeSubtask: m((id: string) => s.removeSubtask(id)),
     // 업무계획 (3-6)
-    setPlanDay: m(({ date, items, who }: { date: string; items: PmPlanItem[]; who?: string }) => s.setPlanDay(who ?? me, date, items)),
+    setPlanDay: m(({ date, items, who, base }: { date: string; items: PmPlanItem[]; who?: string; base: PmBases }) => s.withBase(base).setPlanDay(who ?? me, date, items)),
     resetBaseline: m(({ projectId, label }: { projectId: string; label: string }) => s.resetBaseline(projectId, label, me)),
     // 티켓
     issueTickets: m((list: PmTicket[]) => s.issueTickets(list)),
     moveTicket: m(({ no, to, cmt }: { no: string; to: PmTicket['status']; cmt: string }) => s.moveTicket(no, to, cmt, me, nm)),
-    putTicket: m((x: PmTicket) => s.putTicket(x)),
+    putTicket: m(({ x, base }: { x: PmTicket; base: PmBases }) => s.withBase(base).putTicket(x)),
     commentTicket: m(({ no, text }: { no: string; text: string }) => s.commentTicket(no, text, me)),
     addTicketFile: m(({ no, name }: { no: string; name: string }) => s.addTicketFile(no, name, me)),
     removeTicketFile: m(({ no, index }: { no: string; index: number }) => s.removeTicketFile(no, index, me)),

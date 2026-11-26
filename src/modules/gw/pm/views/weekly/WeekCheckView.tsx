@@ -8,7 +8,7 @@ import { planEditable, planMarkTask, planRecentIdx, planUpdDates } from '@/domai
 import { updSortStable, wcBoard, wcPeople } from '@/domain/pm/weekly';
 import type { PmProject, PmTask } from '@/domain/pm/schema';
 import { usePmDerived, usePmMutations, usePmSiteMutations, usePmSites } from '@/features/pm/usePm';
-import { usePmPlanCtx } from '@/features/pm/usePmPlan';
+import { planDayBase, usePmPlanCtx } from '@/features/pm/usePmPlan';
 import { usePmPeople } from '../../usePmPeople';
 import { usePmModals } from '../ticket/usePmModals';
 import { EmptyHint, ProjectTag, Tag } from '../wbs/parts';
@@ -77,7 +77,7 @@ export function WeekCheckView() {
   const say = (t: string, bad?: boolean) => setMsg({ t, bad });
   const setPct = (t: PmTask, n: number) => {
     const was = isDone(d.liveMap.get(t.id) ?? { status: t.status, pct: t.actualPct });
-    if ((n >= 100 || was) && C) { const items = planMarkTask(planEditable(C, me, d.today), t.id, n >= 100); if (items) mut.setPlanDay.mutate({ date: d.today, items }); }
+    if ((n >= 100 || was) && C) { const items = planMarkTask(planEditable(C, me, d.today), t.id, n >= 100); if (items) mut.setPlanDay.mutate({ date: d.today, items, base: planDayBase(C, me, d.today) }); }
     mut.setProgress.mutate({ id: t.id, pct: n, why: '주간 진행률' });
     smut.markNoChange.mutate([t.id]);
     say(`'${t.name}' 진행률 ${n}% 기록`);

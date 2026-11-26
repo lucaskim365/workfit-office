@@ -9,6 +9,7 @@ import {
 import { DEV_TEAM_DEPT } from '@/domain/pm/team';
 import type { PmPlanItem } from '@/domain/pm/schema';
 import type { usePmMutations, usePmSiteMutations } from '@/features/pm/usePm';
+import { planDayBase } from '@/features/pm/usePmPlan';
 import type { PmPerson, usePmPeople } from '../../usePmPeople';
 import { ProjectTag, Tag } from '../wbs/parts';
 import { copyText, pdfOpen, pdfPage } from './planPdf';
@@ -42,7 +43,7 @@ export function PlanAddModal({ C, me, date, shortOf, mut, onDone, onClose }: {
       ...(txt ? [{ text: txt }] : []),
     ];
     if (!add.length) { setErr('추가할 업무를 고르거나 직접 입력해 주세요'); return; }
-    mut.setPlanDay.mutate({ date, items: [...planEditable(C, me, date), ...add] });
+    mut.setPlanDay.mutate({ date, items: [...planEditable(C, me, date), ...add], base: planDayBase(C, me, date) });
     onDone(`${monthDay(date)} 계획에 ${add.length}건 추가`);
     onClose();
   };
@@ -168,7 +169,7 @@ export function PlanPdfModal({ C, me, person, shortOf, mut, smut, onDone, onClos
   const toPlan = () => {
     const r = pdfToPlanApply(C, planEditable(C, me, date), pdfRowsClean(rows), shortOf);
     if (!r) { setErr('추가하거나 바꿀 업무가 없습니다 (이미 모두 같음)'); return; }
-    mut.setPlanDay.mutate({ date, items: r.items });
+    mut.setPlanDay.mutate({ date, items: r.items, base: planDayBase(C, me, date) });
     onDone(`${label}에 ${[r.add ? `${r.add}건 추가` : '', r.upd ? `${r.upd}건 진행률 반영` : ''].filter(Boolean).join(' · ')}했습니다`);
   };
   const refill = () => {

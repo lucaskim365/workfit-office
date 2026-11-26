@@ -1,6 +1,7 @@
 import { useEffect, useMemo } from 'react';
 import { nextWorkday, planCtx, type PlanCtx } from '@/domain/pm/plan';
 import { applyPmSnapshot, type PmDerived } from './usePm';
+import { pmBase, type PmBases } from '@/data/pm/pm.store';
 import { pmStore } from '@/data/pm/pmStoreInstance';
 import { useQueryClient } from '@tanstack/react-query';
 
@@ -16,6 +17,15 @@ export function planCtxOf(d: PmDerived): PlanCtx {
     drafts: snap.pdfDrafts, carryFrom: snap.settings.carryFrom,
   });
 }
+
+/**
+ * 그날 업무계획 저장(setPlanDay)의 기준표 (G1) — 저장은 그날 목록을 화면 값으로 통째 씀 → 표 = 화면의 그날 저장 기록(없으면 null).
+ * 다른 탭 · 다른 사람이 그사이 그날 계획을 바꿨으면 막힘.
+ */
+export const planDayBase = (C: PlanCtx, who: string, date: string): PmBases => {
+  const it = C.saved(who, date);
+  return [pmBase('planDays', `${who}|${date}`, it ? { items: it } : null, ['items'])];
+};
 
 export function usePmPlanCtx(d: PmDerived | null): PlanCtx | null {
   const qc = useQueryClient();

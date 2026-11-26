@@ -976,8 +976,9 @@ export function createPmStore(today = todayStr(), opts: PmStoreOpts = {}) {
 
     // ── 6-4: 지원 기준 · 단가 · 품목 · 단가 ─────────────────
     /** 단가 · 계산 기준 (mnCfgForm) */
+    /** 단가 · 계산 기준 창 칸만 저장 — 기본 월 간접비(ohDefault)는 간접비 창(saveOh)이 맡으므로 지금 값 그대로 (G1: 옛 화면 값으로 덮지 않게) */
     async saveMoneyCfg(c: PmMoneyCfg) {
-      state.moneyCfg = pmMoneyCfgSchema.parse(clone(c));
+      state.moneyCfg = pmMoneyCfgSchema.parse({ ...clone(c), ohDefault: state.moneyCfg.ohDefault });
     },
     /** 지원 기준 추가 · 수정 (mnRuleForm) — id 가 없으면 새로 */
     async saveFundRule(r: PmFundRule): Promise<PmFundRule> {

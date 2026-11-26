@@ -4,6 +4,7 @@ import { Button } from '@/shared/ui/Button';
 import { addDays } from '@/domain/pm/rules';
 import { PM_TASK_STATUSES, type PmTask } from '@/domain/pm/schema';
 import type { PmDerived, usePmMutations } from '@/features/pm/usePm';
+import { pmBase, type PmBases } from '@/data/pm/pm.store';
 import type { usePmPeople } from '../../usePmPeople';
 
 /**
@@ -29,6 +30,8 @@ export function BulkEditModal({ ids, d, people, mut, onClose, onDone }: {
 
   const apply = () => {
     const items: Array<{ next: PmTask; summary: string }> = [];
+    // G1: 화면의 업무 t 에 고른 칸을 얹어 통째로 씀 → 표 = 저장 누를 때 화면의 그 업무들
+    const base: PmBases = [];
     for (const id of ids) {
       const t = d.taskMap.get(id);
       if (!t) continue;
@@ -57,13 +60,13 @@ export function BulkEditModal({ ids, d, people, mut, onClose, onDone }: {
         n.execMemo = exec.trim();
         ch.push('실행 주체 변경');
       }
-      if (ch.length) items.push({ next: n, summary: ch.join(', ') });
+      if (ch.length) { items.push({ next: n, summary: ch.join(', ') }); base.push(pmBase('tasks', t.id, t)); }
     }
     if (!items.length) {
       setMsg('바꿀 항목을 하나 이상 입력해 주세요');
       return;
     }
-    mut.bulkUpdate.mutate(items, { onSuccess: onDone });
+    mut.bulkUpdate.mutate({ items, base }, { onSuccess: onDone });
   };
 
   const inp = 'w-full rounded border border-border-hi px-2 py-1 text-[12.5px]';

@@ -7,6 +7,7 @@ import {
   tkReviewPending, type PmTicketPrio, type TicketDraft,
 } from '@/domain/pm/ticket';
 import type { PmDerived, usePmMutations } from '@/features/pm/usePm';
+import { pmBase } from '@/data/pm/pm.store';
 import type { usePmPeople } from '../../usePmPeople';
 import { Tag } from '../wbs/parts';
 import { SubtaskBox } from '../wbs/TaskDetailModal';
@@ -65,7 +66,8 @@ export function TicketDetailModal({ no, d, people, mut, onClose, onOpenTicket, o
     const r = applyTicketDraft(x, D, me, d.today, people.nameOf, t?.end ?? '');
     if (!r.ok) { fail(new Error(r.error)); return; }
     if (!r.changed) return;
-    await mut.putTicket.mutateAsync(r.ticket);
+    // G1: 화면 값 x 에 고친 칸을 얹어 티켓을 통째로 씀 → 표 = 화면의 x
+    await mut.putTicket.mutateAsync({ x: r.ticket, base: [pmBase('tickets', x.no, x)] });
     setDraft({});
     ok(`${x.no} 수정 ${r.changed}건 반영${r.ticket.status !== x.status ? ' — 담당이 바뀌어 다시 접수해야 합니다' : ''}`);
   };
@@ -185,8 +187,8 @@ export function TicketDetailModal({ no, d, people, mut, onClose, onOpenTicket, o
               <input
                 type="range" min={0} max={100} step={1} defaultValue={x.prog} key={x.prog}
                 disabled={!(x.status === '접수' || x.status === '진행중')}
-                onMouseUp={(e) => { const n = +(e.target as HTMLInputElement).value; if (n !== x.prog) void mut.putTicket.mutateAsync(setTicketProg(x, n, me, d.today)); }}
-                onKeyUp={(e) => { const n = +(e.target as HTMLInputElement).value; if (n !== x.prog) void mut.putTicket.mutateAsync(setTicketProg(x, n, me, d.today)); }}
+                onMouseUp={(e) => { const n = +(e.target as HTMLInputElement).value; if (n !== x.prog) void mut.putTicket.mutateAsync({ x: setTicketProg(x, n, me, d.today), base: [pmBase('tickets', x.no, x)] }); }}
+                onKeyUp={(e) => { const n = +(e.target as HTMLInputElement).value; if (n !== x.prog) void mut.putTicket.mutateAsync({ x: setTicketProg(x, n, me, d.today), base: [pmBase('tickets', x.no, x)] }); }}
                 className="w-[130px]" aria-label="진행률"
               />
               <b>{x.prog}%</b>

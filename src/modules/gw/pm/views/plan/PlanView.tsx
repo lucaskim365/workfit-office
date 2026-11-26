@@ -8,7 +8,7 @@ import {
 import { hourText } from '@/domain/pm/team';
 import type { PmPlanItem, PmTask } from '@/domain/pm/schema';
 import { usePmDerived, usePmMutations, usePmSiteMutations, type PmDerived } from '@/features/pm/usePm';
-import { usePmPlanCtx } from '@/features/pm/usePmPlan';
+import { planDayBase, usePmPlanCtx } from '@/features/pm/usePmPlan';
 import { usePmPeople } from '../../usePmPeople';
 import { usePmModals } from '../ticket/usePmModals';
 import { SubtaskBox } from '../wbs/TaskDetailModal';
@@ -57,7 +57,7 @@ export function PlanView() {
   if (!me) return <EmptyHint title="로그인한 사용자를 알 수 없습니다" hint="그룹웨어에 다시 로그인하면 내 업무계획이 나옵니다." />;
   const say = (text: string, bad?: boolean) => setMsg({ text, bad });
   /** 그날 계획 고치기 (planMut) — 고치는 순간 그날은 저장되고 자동 초안 표시가 떨어짐 */
-  const edit = (date: string, fn: (a: PmPlanItem[]) => void) => { const a = planEditable(C, me, date, all); fn(a); mut.setPlanDay.mutate({ date, items: a }); };
+  const edit = (date: string, fn: (a: PmPlanItem[]) => void) => { const a = planEditable(C, me, date, all); fn(a); mut.setPlanDay.mutate({ date, items: a, base: planDayBase(C, me, date) }); };
 
   const weeks = planWeeks(d.today);
   const head = (

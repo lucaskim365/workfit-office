@@ -12,7 +12,7 @@ import {
 import { usePmDerived, usePmMutations, usePmSiteMutations, usePmSites, type PmDerived } from '@/features/pm/usePm';
 import { usePmPeople } from '../../usePmPeople';
 import { usePmModals } from '../ticket/usePmModals';
-import { usePmPlanCtx } from '@/features/pm/usePmPlan';
+import { planDayBase, usePmPlanCtx } from '@/features/pm/usePmPlan';
 import { planEditable, planMarkTask, planRecentIdx, planUpdDates, todayRecord } from '@/domain/pm/plan';
 import { EmptyHint, ProgressBar, ProjectTag, Tag } from '../wbs/parts';
 import { CardHead, ScreenHead, SiteStatusTag } from './parts';
@@ -109,7 +109,7 @@ export function MyView() {
     if (tk && tk.status !== '완료' && tk.status !== '취소') { say(`티켓 ${tk.no}(${tk.status})로 처리 중입니다. 티켓에서 검토 요청 → 승인하면 완료됩니다`, true); return; }
     const left = (d.subsByTask.get(t.id) ?? []).filter((s) => !s.done).length;
     if (left && !confirm(`아직 안 끝난 세부 작업이 ${left}건 있습니다.\n그래도 '${t.name}' 업무를 완료로 바꿀까요? (세부 작업은 그대로 남습니다)`)) return;
-    if (C) { const items = planMarkTask(planEditable(C, me, d.today), t.id, true); if (items) mut.setPlanDay.mutate({ date: d.today, items }); }
+    if (C) { const items = planMarkTask(planEditable(C, me, d.today), t.id, true); if (items) mut.setPlanDay.mutate({ date: d.today, items, base: planDayBase(C, me, d.today) }); }
     mut.setProgress.mutate({ id: t.id, pct: 100, why: 'TASK 완료 처리' });
     say(`'${t.name}' 완료 — 실적 100%. 잘못 눌렀으면 업무 창의 [완료 취소]로 되돌릴 수 있습니다`);
   };

@@ -170,7 +170,7 @@ test('ⓔ 오래된 화면: B 가 고친 업무를 A 가 옛 화면에서 고치
   const Y = await taskOf(A, 'P2', 1);
   await B.setProgress(X.id, 50, 'B 기록', 'u2');
   const w0 = db.stats.writes;
-  await assert.rejects(A.updateTask(X.id, { ...X, name: 'A 가 고친 이름' }, 'u1', nameOf), /다른 사람이 먼저 고쳤습니다/);
+  await assert.rejects(A.updateTask(X.id, { ...X, name: 'A 가 고친 이름' }, 'u1', nameOf), /다른 곳(.*)에서 먼저 고쳤습니다/);
   assert.equal(db.stats.writes, w0, '아무것도 안 씀');
   assert.equal(A.peek().snap.tasks.find((t) => t.id === X.id)!.actualPct, 50, '다시 읽어 B 값이 보임');
   await A.updateTask(Y.id, { ...Y, name: 'A 가 고친 Y' }, 'u1', nameOf);
@@ -404,7 +404,7 @@ test('F2 번호 없는 새 문서가 이미 있으면(남이 먼저 만듦) 아�
   const t = await taskOf(A, 'P3');
   await B.approveMilestone(t.id, 'u3', 'u3');
   const w0 = db.stats.writes;
-  await assert.rejects(A.approveMilestone(t.id, 'u3', 'u3'), /다른 사람이 먼저 고쳤습니다/);
+  await assert.rejects(A.approveMilestone(t.id, 'u3', 'u3'), /다른 곳(.*)에서 먼저 고쳤습니다/);
   assert.equal(db.stats.writes, w0);
 });
 

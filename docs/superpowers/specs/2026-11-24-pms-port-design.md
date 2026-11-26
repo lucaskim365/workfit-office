@@ -1334,7 +1334,7 @@ src/modules/gw/pm/  화면 (React + Tailwind, shared/ui 공용 부품)
 | updateProject | 사업 수정 SiteFormModal (복사) | projects/id + K3(기업 · 공급 · 기관 · 사업구분) 덧막이 |
 | saveCode | 기준정보 코드 창 (pop 상태) | codes/id (수정만) + K3(이름) 덧막이. '표준 단계로 등록' 단추 = 새로 만들기 → 해당 없음 |
 | saveStd · saveOrg | 세부 업무 · 기업 창 (pop 상태) | stdTasks/id · orgs/id (수정만) |
-| saveMoneyCfg | 단가 · 계산 기준 CfgModal (복사) | moneyCfg, 비교 칸 = 창이 고치는 7칸 (나머지는 저장 때 지금 값) |
+| saveMoneyCfg | 단가 · 계산 기준 CfgModal (복사) | moneyCfg, 비교 칸 = 창이 고치는 7칸. 저장소도 7칸만 바꾸고 기본 월 간접비(ohDefault)는 지금 값 그대로 (G1 — 간접비 창이 맡음) |
 | saveFundRule · saveItem | 지원 기준 · 품목 창 (pop 상태) | fundRules/id · items/id (수정만) |
 | saveQuote | 견적 고치기 QuoteEditor (같은 그리기의 snap) | contracts/cid + funds/사업. 새 견적도 funds 줄(E 의 재원 값을 씀). 새 견적 저장 뒤 훅이 새 계약 줄을 표에 더함(M4 — 실제 창은 저장 뒤 목록으로 나감) |
 | saveFund | 재원 FundModal (같은 그리기의 snap) | funds/사업 (없던 기록이면 null) |
@@ -1350,15 +1350,19 @@ src/modules/gw/pm/  화면 (React + Tailwind, shared/ui 공용 부품)
 | updateMeeting · updateAction | 회의록 · 액션 창 (`?mt=` · `?act=`, pop) | meetings/id · actions/id |
 | updateCr | CR 창 (`?cr=`, pop.c) | crs/id |
 | reviewCr | CR 검토 창 (pop.c — 열 때 본 일정 · 비용 영향으로 승인, M2) | crs/id (넘기면 더 안전 — 남이 일정 · 비용을 고쳤으면 다시 보고 승인) |
-| putTicket | 티켓 상세 (저장 때 화면 값 + 고친 칸만) | 해당 없음 |
-| bulkUpdate · setTlinks | 일괄 수정 (저장 때 화면 값 + 고른 칸) · 연결 쌍 | 해당 없음 |
+| putTicket | 티켓 상세 [수정] · 진행률 끌기 (화면 값 x + 고친 칸을 통째로 씀) | **G1**: tickets/no = 저장 누를 때 화면의 x (화면이 저장소보다 늦은 몇 초 동안 남의 변경을 덮지 않게) |
+| bulkUpdate | 일괄 수정 (화면의 업무 + 고른 칸을 통째로 씀) | **G1**: tasks/id 여러 줄 = 저장 누를 때 화면의 그 업무들 |
+| setTlinks | 연결 쌍 | 해당 없음 (쌍만) |
 | setProgress · updateSubtask · setReport · setLoadMax · setFixItemState · moveTicket 등 | 고른 칸 하나 · 버튼 한 번 | 해당 없음 |
-| setPlanDay · savePdfDraft | 업무계획 (저장 때 화면 값 · 본인 것) | 해당 없음 |
+| setPlanDay | 업무계획 · 내 업무 · 주간 진행률 · 업무 창의 오늘 할 일 (그날 목록을 화면 값으로 통째로 씀) | **G1**: planDays/`사람|날짜`, 비교 칸 = items (`planDayBase` — 다른 탭 · 다른 사람이 그날 계획을 바꿨으면 막힘) |
+| savePdfDraft · addPlanRep · setSeen · toggleFav · setReport | 본인 임시저장 · 저장소가 지금 기록에 더하거나 칸만 바꿈 | 해당 없음 |
 | add* · 새로 만들기 | — | 해당 없음 (F2 · partial lock 그대로) |
 
 - **창이 열린 채 같은 기록을 다른 저장 함수로 고치는 곳 (M5)**: **없음** — 점검 결과의 지적 사항 상태(setFixItemState)는 따로 창(FixItemsModal)이고 [결과 고치기]는 새 창(새 표). 사업 수정 뒤 setBidResult · 견적의 registerItems(품목)는 표 밖 기록이거나 창이 닫힘.
 - **사소 같이 고침**: ① '일부만 저장' 오른쪽 위 글 = 창 글과 같은 뜻("다시 저장하지 말고 창을 닫아 목록에서 확인 · 사업 등록이면 [삭제]로 지운 뒤 다시 등록") ② 다음 PM 저장이 성공하면 오른쪽 위 빨간 안내 지움 ③ PmSaveLayer 진행 표시는 PM 저장만 셈(`mutationKey ['pm','save']`) ④ 업무 수정 DB 실패 때 번호 칸 빨간 테두리 안 함 ⑤ pm-zz-check 머리말.
 - **테스트 (C1 · C3 · C5)**: `data/pm/pmStale.test.ts` 64개 — R12 a · c · d · e · f(표 · 표 없이 둘 다) / M3 있고 없음 2 / M4 견적 잇달아 / M7 실패 · 일부만 저장 뒤 표 그대로 / 표 줄 26개마다 '혼자 고치기(열기 → 다시 읽기 → 저장 → 잇달아)' 안 막힘 + '남이 먼저 고침' 막힘 · 쓰기 0 / 서로 다른 기록 · 창 없는 저장 · 새로 만들기 / 메모리 모드 표 무시. PM 테스트 290 · tsc · build 통과 · 공용 2파일 diff 0.
+- **G1 (F5 검수 11/26 18:20, 7-7 첫 커밋)**: 화면이 저장소보다 늦은 몇 초(새로 붙어 다시 읽는 중) 안에 '화면 값으로 통째 쓰는 저장'을 누르면 표가 없어 덮던 것 → putTicket · bulkUpdate · setPlanDay 에 '화면 값 = 표'(보드 끌기와 같음), saveMoneyCfg 는 저장소가 7칸만. 다시 훑기 — 저장 함수 중 인자로 기록을 통째로 바꾸는 것(`state.X[i] = clone(인자)` · `Object.assign(기록, 인자)` · filter+push): 위 표의 줄 말고는 없음(syncTickets · moveTicket · setTaskDates · completeTasks · setProgress 는 저장소 지금 기록에서 계산, savePdfDraft · setReport · setSeen · toggleFav · addPlanRep 는 지금 기록에 더하거나 칸만). 테스트 = 표 26 → 29줄(putTicket · bulkUpdate · setPlanDay 각 혼자 안 막힘 · 남이 먼저 막힘) + 단가 7칸(B 간접비 남음).
+- **사소 (F5 검수)**: ① 저장 실패 안내를 오른쪽 위 → 왼쪽 아래로 (창의 닫기를 가리던 것). 창 안 따로 안내는 안 더함 — 이 안내가 창 위에 보임 ② 글 "다른 사람이" → "다른 곳(다른 사람 · 다른 탭)에서".
 - **화면 확인 C2 (11/26 17:3x~17:53, 사용자 허락 "Go ahead" — 개발 DB pm* 에 ZZ 기록만, 로컬 `.env` VITE_PM_DRIVER 시험 동안만)**: 두 탭 A · B, 캡처 `C:/Users/jw/ego/pm-f5-20261126/` (스크립트 lib + r1~r5).
   - (a) CR-001(ZZ검수) — A 창 연 채 B 가 일정 영향 0 → 7 저장 → A 요청자만 고쳐 [저장] = ① 막힘 "다른 사람이 먼저 고쳤습니다. 저장하지 않았습니다 — 다시 읽었으니 창을 닫고…" → 같은 창 [저장] 다시 = 표로 막힘 "이 창을 연 뒤…" (a02) → 새로 고침 뒤 7 · 요청자 그대로 (a03).
   - (b) A 가 대시보드에 31초 → 그사이 B 가 제목 · 일정 9 → A Ctrl+K "ZZ검수" Enter → CR 창은 **옛 값**(옛 제목 · 7), 뒤 목록은 B 값(+9일) (b01) → A 상세만 고쳐 저장 = 막힘 (b02) → B 제목 · 9 남음 · 상세 안 써짐 (b03).

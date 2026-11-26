@@ -100,7 +100,7 @@ export function RulesView() {
 }
 
 /** 단가 · 계산 기준 창 (mnCfgForm) */
-/** 단가 창이 고치는 칸 (나머지는 저장 때 지금 값 그대로) — 기준표 비교 칸 (F5) */
+/** 단가 창이 고치는 칸 = 기준표 비교 칸 (F5). 나머지(기본 월 간접비)는 저장소가 지금 값 그대로 둠 (G1) */
 const CFG_KEYS = ['cloudMonthly', 'cloudMonths', 'kosaName', 'kosaMonthly', 'workH', 'revBasis', 'laborOn'] as const;
 export function CfgModal({ c, onSave, onClose }: { c: PmMoneyCfg; onSave: (c: PmMoneyCfg, base: PmBases) => Promise<void>; onClose: () => void }) {
   const [base] = useState<PmBases>(() => [pmBase('moneyCfg', undefined, c, CFG_KEYS)]);

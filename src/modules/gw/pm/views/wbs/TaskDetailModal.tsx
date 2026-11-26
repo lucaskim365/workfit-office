@@ -9,7 +9,7 @@ import { makeSubTicket, subTicketOf, tkOpen } from '@/domain/pm/ticket';
 import { StatusTag } from '../ticket/parts';
 import { HOURS, planEditable, planMarkTask } from '@/domain/pm/plan';
 import { hourText } from '@/domain/pm/team';
-import { planCtxOf } from '@/features/pm/usePmPlan';
+import { planCtxOf, planDayBase } from '@/features/pm/usePmPlan';
 import { ProjectTag, Tag } from './parts';
 
 /**
@@ -45,8 +45,9 @@ export function TaskDetailModal({ id, d, people, mut, shortOf, onClose, onEdit, 
   /** 오늘 할 일에 이 업무 줄이 있으면 체크 상태를 맞춤 (planMarkTask) */
   const markPlan = (on: boolean) => {
     if (!people.me) return;
-    const items = planMarkTask(planEditable(planCtxOf(d), people.me, today), t.id, on);
-    if (items) mut.setPlanDay.mutate({ date: today, items });
+    const C0 = planCtxOf(d);
+    const items = planMarkTask(planEditable(C0, people.me, today), t.id, on);
+    if (items) mut.setPlanDay.mutate({ date: today, items, base: planDayBase(C0, people.me, today) });
   };
   const complete = () => {
     const left = subs.filter((s) => !s.done).length;
@@ -209,7 +210,7 @@ export function SubtaskBox({ taskId, d, people, mut, onMsg, taskName, taskDone, 
   /** [+ 오늘] (subToday) */
   const toToday = (s: PmSubtask) => {
     if (inToday.has(s.id)) { onMsg('이미 오늘 할 일에 있습니다'); return; }
-    mut.setPlanDay.mutate({ date: today, items: [...todayIts, { taskId, subId: s.id, ...(s.estHours ? { hours: s.estHours } : {}) }] });
+    mut.setPlanDay.mutate({ date: today, items: [...todayIts, { taskId, subId: s.id, ...(s.estHours ? { hours: s.estHours } : {}) }], base: planDayBase(C, me, today) });
     onMsg('오늘 할 일에 넣었습니다');
   };
   const [withTk, setWithTk] = useState(false);
@@ -248,7 +249,7 @@ export function SubtaskBox({ taskId, d, people, mut, onMsg, taskName, taskDone, 
       if (i >= 0) {
         const a = todayIts.map((x) => ({ ...x }));
         a[i] = { ...a[i], subId: made.id, ...(made.estHours && !a[i].hours ? { hours: made.estHours } : {}) };
-        mut.setPlanDay.mutate({ date: today, items: a });
+        mut.setPlanDay.mutate({ date: today, items: a, base: planDayBase(C, me, today) });
       }
     }
     if (who && who !== me) onMsg(`${people.nameOf(who)}에게 배정했습니다${due ? ` — ${monthDay(due)} 할 일에 들어갑니다` : ''}`);

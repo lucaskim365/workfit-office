@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import test, { mock } from 'node:test';
 import { quoteDraft } from '@/domain/pm/quote';
+import { liveOf } from '@/domain/pm/rules';
+import { makeTaskTicket } from '@/domain/pm/ticket';
 import { fillMyungsung } from '@/domain/pm/quoteDemo';
 import { createPmStore, pmBase, type PmBases, type PmSnapshot, type PmStore } from './pm.store';
 import { PmConflictError, PmStaleWindowError } from './pmSync';
@@ -14,7 +16,7 @@ import { reread, seededDb, snapDiff } from './pmTestStores';
 const TODAY = '2026-11-25';
 mock.timers.enable({ apis: ['Date'], now: new Date(2026, 10, 25, 12) });
 const nameOf = (id: string) => id;
-const STALE = /이 창을 연 뒤 다른 사람이 먼저 고쳤습니다\. 저장하지 않았습니다 — 창을 닫고 다시 열어/;
+const STALE = /이 창을 연 뒤 다른 곳\(다른 사람 · 다른 탭\)에서 먼저 고쳤습니다\. 저장하지 않았습니다 — 창을 닫고 다시 열어/;
 
 async function two() {
   const db = seededDb(TODAY);
@@ -238,6 +240,18 @@ const ROWS: Row[] = [
     name: 'reviewCr (검토 창)', once: true, setup: async (s) => ({ c: await s.addCr({ projectId: 'P2', cat: '기능 추가', title: 'ZZ', desc: '', req: '', date: TODAY, prio: '보통', days: 5, cost: 100 }, 'u1') }),
     open: (x, c) => { const r = x.crs.find((y) => y.id === c.c.id)!; return { base: [pmBase('crs', r.id, r)], save: (s, tag) => s.reviewCr(r.id, tag === 'A' ? '승인' : '반려', `의견 ${tag}`, 'u1') }; },
   },
+  // ── G1 (F5 검수): 화면 값으로 통째 쓰는 저장 — 표 = 저장 누를 때 화면의 그 기록 ──
+  {
+    name: 'putTicket (티켓 상세 · 진행률 끌기)',
+    setup: async (s) => { const t = p2t(await s.snapshot()); const ctx = { today: TODAY, me: 'u1', approverOf: () => 'u3', nameOf, live: liveOf(t) }; await s.issueTickets([makeTaskTicket('P0-0000', { task: t, assigneeId: 'u1', prio: '보통', due: '2026-12-01' }, { reviewerId: '', approverId: '', memo: '' }, ctx)]); return {}; },
+    open: (x) => { const k = x.tickets[0]; return { base: [pmBase('tickets', k.no, k)], save: (s, tag) => s.putTicket({ ...k, due: `2026-12-${n(tag)}` }) }; },
+  },
+  { name: 'bulkUpdate (일괄 수정)', open: (x) => { const ts = [p2t(x, 3), p2t(x, 4)]; return { base: ts.map((t) => pmBase('tasks', t.id, t)), save: (s, tag) => s.bulkUpdate(ts.map((t) => ({ next: { ...t, md: n(tag) }, summary: `공수 ${n(tag)}` })), 'u1') }; } },
+  {
+    name: 'setPlanDay (그날 업무계획 — 본인 다른 탭)',
+    setup: async (s) => { await s.setPlanDay('u1', TODAY, [{ text: 'ZZ 처음' }]); return {}; },
+    open: (x) => { const r = x.planDays.find((y) => y.id === `u1|${TODAY}`) ?? null; return { base: [pmBase('planDays', `u1|${TODAY}`, r ? { items: r.items } : null, ['items'])], save: (s, tag) => s.setPlanDay('u1', TODAY, [{ text: `ZZ ${tag}` }]) }; },
+  },
 ];
 
 for (const row of ROWS) {
@@ -266,6 +280,18 @@ for (const row of ROWS) {
 }
 
 // ── C3: 잘못 막지 않음 ──
+
+test('G1 saveMoneyCfg — 단가 창은 7칸만: B 가 기본 월 간접비를 바꾼 뒤 A 가 옛 화면 값으로 단가 저장 → 저장 됨 · B 간접비 남음', async () => {
+  const { db, A, B } = await two();
+  const c0 = snapOf(A).moneyCfg;
+  const base = [pmBase('moneyCfg', undefined, c0, CFG_KEYS)];
+  await B.saveOh('2026-03', null, '', 4_000_000, 'u2', TODAY);
+  await A.refresh();
+  await A.withBase(base).saveMoneyCfg({ ...c0, cloudMonthly: 333000 });
+  const s = await reread(db, TODAY);
+  assert.equal(s.moneyCfg.cloudMonthly, 333000);
+  assert.equal(s.moneyCfg.ohDefault, 4_000_000, 'B 의 기본 월 간접비');
+});
 
 test('C3 서로 다른 기록: A 는 업무 X 창, B 는 업무 Y 를 고침 → A 저장 됨 · 둘 다 남음', async () => {
   const { db, A, B } = await two();
