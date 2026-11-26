@@ -53,7 +53,7 @@ export function SiteFormModal({ s, presetTpl, d, people, mut, smut, money, short
   const today = todayStr();
   const [v, setV] = useState<V>(() => {
     if (s) return { ...s, budget: man(s.budget), subsidy: man(s.subsidy), warrantyM: s.warrantyM == null ? '' : String(s.warrantyM), lines: [...s.lines], equip: [...s.equip], tpl: '', keepPeople: false };
-    const base = pmProjectSchema.parse({ id: nextProjectKey(snap.projects, snap.tasks), supplier: '워크핏 주식회사', pmName: people.labelOf(people.me), pmUserId: people.me, start: today, end: addDays(today, 270) });
+    const base = pmProjectSchema.parse({ id: nextProjectKey(snap.projects, snap.tasks, snap.lastProjectNo), supplier: '워크핏 주식회사', pmName: people.labelOf(people.me), pmUserId: people.me, start: today, end: addDays(today, 270) });
     return { ...base, budget: '', subsidy: '', warrantyM: '', tpl: presetTpl ?? 'std', keepPeople: false };
   });
   const [endTouched, setEndTouched] = useState(false);

@@ -61,7 +61,7 @@ export class PmExistsError extends Error {
   constructor(public readonly coll: string, public readonly key: string) { super(`'${coll}/${key}' 문서가 이미 있습니다`); this.name = 'PmExistsError'; }
 }
 export class PmRateLimitError extends Error {
-  /** 다시 써도 되는 시각까지 남은 ms (머리말이 없으면 undefined → 10초) */
+  /** 다시 써도 되는 시각까지 남은 ms (머리말이 없으면 undefined → 10 → 20 → 40초, pmSync.write) */
   constructor(public readonly resetMs?: number) { super('쓰기 제한 (429)'); this.name = 'PmRateLimitError'; }
 }
 /** 컬렉션이 없음 (스위치 가드 — 5.7.4) */
@@ -130,8 +130,8 @@ export const PM_COLLS: readonly PmCollDef[] = [
   { name: 'pmChangeLogs', kinds: one('logs', pmChangeLogSchema), idx: ['projectId', 'date'], sort: 'stamp' },
 ];
 export const LOG_COLL = 'pmChangeLogs';
-/** DB 에 넣지 않는 스냅숏 칸 — 계획서 내장 데이터(코드에 묶음) · meta 로 가는 둘 (5.7.1) */
-export const PM_NOT_STORED: readonly SnapKey[] = ['plans', 'planFunctions', 'sourceVersion'];
+/** DB 에 넣지 않는 스냅숏 칸 — 계획서 내장 데이터(코드에 묶음) · meta 로 가는 것 (5.7.1, lastProjectNo = 결정 (가)) */
+export const PM_NOT_STORED: readonly SnapKey[] = ['plans', 'planFunctions', 'sourceVersion', 'lastProjectNo'];
 
 /** 저장 계층만 쓰는 body 칸 — 이 코드가 모르는 칸으로 보지 않음 (N3 지키기에서 뺌) */
 export const RESERVED_BODY_KEYS = ['rekeyFrom'] as const;
@@ -177,7 +177,7 @@ export interface PmDocRec { key: string; id: string; kind: string; rec: Record<s
 /** 스냅숏 → 컬렉션 · 종류별 기록 (배열 순서 그대로) */
 export function recsOf(_def: PmCollDef, kd: PmKindDef, snap: PmSnapshot): PmDocRec[] {
   if (kd.kind === 'meta') {
-    const rec = { id: 'meta', baseDate: snap.baseDate, sourceVersion: snap.sourceVersion, stdSeeded: true };
+    const rec = { id: 'meta', baseDate: snap.baseDate, sourceVersion: snap.sourceVersion, lastProjectNo: snap.lastProjectNo, stdSeeded: true };
     return [{ key: docKeyOf({ kind: 'meta', id: 'meta' }), id: 'meta', kind: 'meta', rec }];
   }
   if (kd.single) {

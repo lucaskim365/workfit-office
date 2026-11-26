@@ -39,13 +39,19 @@ export class PmTooBigError extends Error {
 export const BODY_MAX = 1_000_000;
 /** 한 번에 같이 보내는 쓰기 수 (K4 d) */
 const PARALLEL = 5;
-/** 같은 저장에서 429 를 기다리는 횟수 */
-const RATE_RETRY = 3;
+/** 쓰기 제한(429) — 머리말에 다시 써도 되는 시각이 없으면 10 → 20 → 40초 … 로 늘려 기다림 (F1) */
 const RATE_WAIT_MS = 10_000;
+/** 한 번 막힌 자리에서 합쳐 이만큼 넘게 기다려도 안 되면 '일부만 저장' — Appwrite 제한 창(60초)보다 길게 (F1) */
+export const RATE_GIVE_UP_MS = 65_000;
 /** 진행 표시를 보내는 쓰기 수 (K4 d) */
 export const PROGRESS_FROM = 20;
 
-export interface PmProgress { done: number; total: number }
+export interface PmProgress {
+  done: number;
+  total: number;
+  /** 쓰기 제한으로 기다리는 중 (이번에 기다릴 ms) — 쓰기 수와 상관없이 알림 (F1) */
+  waitMs?: number;
+}
 
 type OpKind = 'insert' | 'save' | 'remove';
 interface Op {
@@ -105,7 +111,10 @@ export function createPmSync(db: PmDb) {
     const bad = new Map<string, number>();
     let total = 0;
     PM_COLLS.forEach((def, ci) => {
-      const rows = got[ci];
+      // 쪽(100건씩)을 읽는 사이 변동으로 같은 문서가 두 번 오면 나중 것 하나만 — 안 그러면 다음 저장마다 '같은 id 기록이 2건'
+      const uniq = new Map<string, PmRow>();
+      for (const row of got[ci]) uniq.set(docKeyOf(row), row);
+      const rows = [...uniq.values()];
       total += rows.length;
       const kn = new Map<string, Known>();
       known.set(def.name, kn);
@@ -134,7 +143,7 @@ export function createPmSync(db: PmDb) {
         const s = snap as unknown as Record<string, unknown>;
         if (kd.kind === 'meta') {
           const m = list[0]?.rec;
-          if (m) { snap.baseDate = String(m.baseDate ?? ''); snap.sourceVersion = String(m.sourceVersion ?? ''); }
+          if (m) { snap.baseDate = String(m.baseDate ?? ''); snap.sourceVersion = String(m.sourceVersion ?? ''); snap.lastProjectNo = Number(m.lastProjectNo) || 0; }
         } else if (kd.single) {
           if (list[0]) s[kd.field] = kd.schema ? list[0].rec : { ...(s[kd.field] as object), ...list[0].rec };
         } else s[kd.field] = list.map((x) => x.rec);
@@ -189,7 +198,8 @@ export function createPmSync(db: PmDb) {
           if (mark) fin.push(op(def, kd, d, 'save', st, withUnknown(kd, k?.raw ?? '', d.rec), norm));
         }
       }
-      for (const [key, k] of kn) if (k.inState && !seen.has(key)) rms.push({ coll: def.name, kind: 'remove', key });
+      // 지우기도 마지막으로 아는 글자와 비교 — 남이 방금 고친 문서를 모른 채 지우지 않게
+      for (const [key, k] of kn) if (k.inState && !seen.has(key)) rms.push({ coll: def.name, kind: 'remove', key, expect: k.raw });
       const first = def.numbered || def.name === 'pmProjects';
       if (def.name === LOG_COLL) { if (ins.length || ups.length) P5.push([...ins, ...ups]); }
       else {
@@ -221,56 +231,99 @@ export function createPmSync(db: PmDb) {
     return bodyOf({ ...extra, ...rec, ...(mark ? { rekeyFrom: mark } : {}) });
   }
 
-  /** ① 고칠 문서만 DB 내용과 비교 — 하나라도 다르거나 없어졌으면 아무것도 안 쓰고 PmConflictError */
+  /**
+   * ① 쓰기 전 확인 — 하나라도 걸리면 아무것도 안 쓴다.
+   * - 고치기 · 지우기: DB 내용이 마지막으로 아는 글자와 다르거나 없어졌으면 → PmConflictError
+   * - 새로 만들기 (F2): 같은 key 가 이미 있으면 → 번호 문서 = PmNumberTakenError(다시 읽고 다음 번호) / 사업 = PmProjectTakenError / 그 밖 = PmConflictError.
+   *   변경 이력은 무작위 id 라 안 봄 (저장마다 읽기 1번을 아끼려고).
+   */
   async function check(p: PmPlan) {
     const by = new Map<string, Op[]>();
     // ⑥ 번호 바꾸기 표시 지우기는 같은 저장 안에서 방금 쓴 문서라 expect 없음 → 비교 안 함
-    for (const o of p.phases.flat(2)) if (o.kind === 'save' && o.expect !== undefined) { const a = by.get(o.coll) ?? []; a.push(o); by.set(o.coll, a); }
+    for (const o of p.phases.flat(2)) {
+      const look = o.kind === 'insert' ? o.coll !== LOG_COLL : o.expect !== undefined;
+      if (look) { const a = by.get(o.coll) ?? []; a.push(o); by.set(o.coll, a); }
+    }
+    let changed = false;
+    let project = '';
+    let number = '';
+    let exists = false;
     await Promise.all([...by].map(async ([coll, ops]) => {
       const rows = await db.coll(coll).get(ops.map((o) => o.key));
       const cur = new Map(rows.map((r) => [docKeyOf(r), r.body]));
-      for (const o of ops) if (cur.get(o.key) !== o.expect) throw new PmConflictError();
+      const def = PM_COLLS.find((c) => c.name === coll)!;
+      for (const o of ops) {
+        if (o.kind !== 'insert') { if (cur.get(o.key) !== o.expect) changed = true; continue; }
+        if (!cur.has(o.key)) continue;
+        if (def.name === 'pmProjects') project = o.row!.id;
+        else if (def.numbered) number = def.name;
+        else exists = true;
+      }
     }));
+    // 남이 고친 것이 있으면 그것부터 (번호만 다시 받으면 남이 고친 것을 모른 채 덮을 수 있음)
+    if (changed || exists) throw new PmConflictError();
+    if (project) throw new PmProjectTakenError(project);
+    if (number) throw new PmNumberTakenError(number);
   }
 
-  /** 순서대로 쓰기 — 5개씩 · 429 는 기다렸다 남은 것부터 (같은 저장에서 3번) · 끊기면 PmPartialError */
+  /**
+   * 순서대로 쓰기 — 5개씩. 429 는 기다렸다 남은 것부터: 한 자리에서 10 → 20 → 40초(머리말 시각이 있으면 그 시각),
+   * 쓰기가 한 건이라도 나아가면 처음부터 다시 셈, 한 자리에서 합쳐 65초 넘게 막히면 그때 끊김 (F1).
+   * 끊기면 PmPartialError — 단 맨 앞 단계(번호 문서 · 사업 문서)에서 겹침이면 같은 묶음에 먼저 써진 새 문서를 지우고 다시 하기로 (F2).
+   */
   async function write(p: PmPlan) {
     let done = 0;
-    let waits = 0;
     const total = p.writes;
-    const tell = () => { if (total > PROGRESS_FROM) progress?.({ done, total }); };
+    const tell = (waitMs?: number) => { if (total > PROGRESS_FROM || waitMs) progress?.(waitMs ? { done, total, waitMs } : { done, total }); };
+    const sleep = db.wait ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
     tell();
     const first = p.phases[0];
+    /** 이 자리에서 기다린 횟수 · 합 (쓰기가 나아가면 0) */
+    let waits = 0;
+    let stuck = 0;
     for (const phase of p.phases) {
       for (const group of phase) {
         const pending = [...group];
+        const wrote: Op[] = [];
         while (pending.length) {
           const batch = pending.splice(0, PARALLEL);
           const res = await Promise.allSettled(batch.map((o) => one(o)));
-          let limited: PmRateLimitError | null = null;
-          const again: Op[] = [];
-          for (const [j, r] of res.entries()) {
-            if (r.status === 'fulfilled') { done++; continue; }
-            const e = r.reason;
-            if (e instanceof PmRateLimitError) { limited = e; again.push(batch[j]); continue; }
-            if (e instanceof PmExistsError) {
-              const def = PM_COLLS.find((c) => c.name === batch[j].coll)!;
-              // 맨 앞 단계(①)에서 겹침 = 번호 다시 받기 / 사업키 겹침 (N2) — 더 쓰지 않음
-              if (phase === first && def.numbered) throw new PmNumberTakenError(def.name);
-              if (phase === first && def.name === 'pmProjects') throw new PmProjectTakenError(batch[j].row!.id);
-              throw done ? new PmPartialError(e) : new PmConflictError();
+          // 먼저 다 센 뒤 던짐 — 같은 묶음 뒤쪽이 써졌는데 '저장하지 못했습니다'로 나오지 않게
+          const fails: Array<{ e: unknown; o: Op }> = [];
+          res.forEach((r, j) => { if (r.status === 'fulfilled') { done++; wrote.push(batch[j]); } else fails.push({ e: r.reason, o: batch[j] }); });
+          if (fails.length < batch.length) { waits = 0; stuck = 0; }
+          const hard = fails.find((f) => !(f.e instanceof PmRateLimitError));
+          if (hard) {
+            const def = PM_COLLS.find((c) => c.name === hard.o.coll)!;
+            if (hard.e instanceof PmExistsError) {
+              // 맨 앞 단계(①)에서 겹침 = 번호 다시 받기 / 사업키 겹침 (N2) — 같은 묶음에 먼저 써진 것은 되돌리고 더 쓰지 않음
+              if (phase === first && (def.numbered || def.name === 'pmProjects') && (await undo(wrote))) {
+                done -= wrote.length;
+                if (!done) throw def.numbered ? new PmNumberTakenError(def.name) : new PmProjectTakenError(hard.o.row!.id);
+              }
+              throw done ? new PmPartialError(hard.e) : new PmConflictError();
             }
-            throw done ? new PmPartialError(e) : e;
+            throw done ? new PmPartialError(hard.e) : hard.e;
           }
           tell();
-          if (limited) {
-            if (++waits > RATE_RETRY) throw done ? new PmPartialError(limited) : limited;
-            await (db.wait ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms))))(limited.resetMs ?? RATE_WAIT_MS);
-            pending.unshift(...again);
+          if (fails.length) {
+            const lim = fails[0].e as PmRateLimitError;
+            if (stuck > RATE_GIVE_UP_MS) throw done ? new PmPartialError(lim) : lim;
+            const ms = lim.resetMs ?? RATE_WAIT_MS * 2 ** waits;
+            waits++;
+            stuck += ms;
+            tell(ms);
+            await sleep(ms);
+            pending.unshift(...fails.map((f) => f.o));
           }
         }
       }
     }
+  }
+  /** 방금 이 저장이 새로 만든 문서 지우기 (번호 겹침 되돌리기) — 다 지웠으면 true */
+  async function undo(ops: readonly Op[]): Promise<boolean> {
+    const r = await Promise.allSettled(ops.map(async (o) => { await db.coll(o.coll).remove(o.key); known.get(o.coll)!.delete(o.key); }));
+    return r.every((x) => x.status === 'fulfilled');
   }
   async function one(o: Op) {
     const c = db.coll(o.coll);

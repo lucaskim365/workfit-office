@@ -16,7 +16,7 @@ import { weekStart } from '@/domain/pm/site';
 import type { PmAiMeas, PmKpiDef, PmKpiMeas } from '@/domain/pm/kpi';
 import { nextCrId } from '@/domain/pm/cr';
 import { nextIssueId } from '@/domain/pm/issue';
-import { ORG_FIELD, baseTplTasks, deriveMaster, makeTasks, stdTplTasks, type Master } from '@/domain/pm/master';
+import { ORG_FIELD, baseTplTasks, deriveMaster, makeTasks, projectNo, stdTplTasks, type Master } from '@/domain/pm/master';
 import { codeDelBlock, nextCodeIn as nextCode, orgUse, stdOf } from '@/domain/pm/masterLink';
 import type { PmDb } from './pmDb';
 import { createPmSync, PmConflictError, PmNumberTakenError, PmPartialError, PmProjectTakenError, type PmProgress } from './pmSync';
@@ -45,6 +45,8 @@ export interface PmSnapshot {
   sourceVersion: string;
   /** 업무 목록 엑셀 갱신일 (데모 base) — 사업 '갱신 n일 전'의 바탕 */
   baseDate: string;
+  /** 지금까지 쓴 가장 큰 사업 번호 (결정 (가) 11/26 팀장, 데모와 다름) — 사업을 지워도 그 번호를 다시 안 씀. 사업 삭제 때 갱신 */
+  lastProjectNo: number;
   // ── 3단계 (사업 현황) ──
   /** 사업계획서 내장 데이터 (사업 ID → 계획서) */
   plans: Record<string, PmPlan>;
@@ -141,7 +143,7 @@ const MSG = {
 /** DB 모드 처음 상태 — 계획서 내장 데이터 · 기본 설정만 (처음 값(내장 데이터)은 메모리 모드 전용, 5.7.4) */
 function emptyState(): PmSnapshot {
   return {
-    projects: [], tasks: [], functions: [], subtasks: [], baselines: [], logs: [], done: [], tickets: [], sourceVersion: '', baseDate: '',
+    projects: [], tasks: [], functions: [], subtasks: [], baselines: [], logs: [], done: [], tickets: [], sourceVersion: '', baseDate: '', lastProjectNo: 0,
     plans: seedPlans(), planFunctions: seedPlanFunctions(), gov: [], planChecks: [], govLinks: [], agreements: [], msOk: [], issues: [], actions: [],
     settings: { loadMax: LOAD_MAX_DEFAULT, carryFrom: '' }, weekChecks: [], later: [], updReq: [], planDays: [], planReps: [], pdfDrafts: [],
     kpiDefs: [], kpiMeas: [], aiMeas: [], seen: [], favs: [], docs: [], crs: [], meetings: [], reports: [],
@@ -185,7 +187,7 @@ function seedState(today: string): PmSnapshot {
     .map((p) => ({ p, ts: tasks.filter((t) => t.projectId === p.id) }))
     .filter((x) => x.ts.length)
     .map(({ p, ts }) => makeBaseline(p.id, ts, label, today, ''));
-  return { projects, tasks, functions, subtasks, baselines, logs: [], done: [], tickets: [], sourceVersion: SEED_VERSION,
+  return { projects, tasks, functions, subtasks, baselines, logs: [], done: [], tickets: [], sourceVersion: SEED_VERSION, lastProjectNo: 0,
     baseDate: SEED_BASE_DATE, plans: seedPlans(), planFunctions: seedPlanFunctions(),
     gov: [], planChecks: [], govLinks: [], agreements: [], msOk: [], issues: [], actions: [],
     settings: { loadMax: LOAD_MAX_DEFAULT, carryFrom: '' },
@@ -763,6 +765,12 @@ export function createPmStore(today = todayStr(), opts: PmStoreOpts = {}) {
       state.msOk = state.msOk.filter((x) => !gone.has(x.id));
       state.tlinks = state.tlinks.filter((x) => !gone.has(x.id));
       state.tickets = state.tickets.filter((x) => x.projectId !== id);
+      // 결정 (가) 11/26 팀장: 성과지표 3종 · 진행률 갱신 요청도 지우고, 사업 번호는 다시 안 씀 (업무계획 줄 · 나중에 할 일은 데모 그대로 남김)
+      state.kpiDefs = state.kpiDefs.filter((x) => x.projectId !== id);
+      state.kpiMeas = state.kpiMeas.filter((x) => x.projectId !== id);
+      state.aiMeas = state.aiMeas.filter((x) => x.projectId !== id);
+      state.updReq = state.updReq.filter((x) => x.projectId !== id);
+      state.lastProjectNo = Math.max(state.lastProjectNo, projectNo(id), ...state.projects.map((p) => projectNo(p.id)));
       state.issues = state.issues.filter((x) => x.projectId !== id);
       state.crs = state.crs.filter((x) => x.projectId !== id);
       state.actions = state.actions.filter((x) => x.projectId !== id);
@@ -1112,6 +1120,11 @@ export function createPmStore(today = todayStr(), opts: PmStoreOpts = {}) {
   /** 계산 전에 DB 전체를 다시 읽는 저장 (K3) — 여러 컬렉션을 지우거나 옮김 */
   const K3: Partial<Record<CoreKey, (a: unknown[]) => boolean>> = {
     removeProject: () => true, removeStd: () => true, removeCode: () => true, removeMeeting: () => true,
+    // F3: 딸린 것을 같이 지우거나 '쓰는 중이면 막음' 검사가 있는 지우기 — 옛 화면이면 남이 새로 단 것을 모르고 지우거나 검사가 틀림 (표 = 설계 5.7.2)
+    removeContract: () => true, removeKpiDef: () => true, removeSubtask: () => true, removeOrg: () => true,
+    // 사업 등록 · 수정은 기준정보(기업 · 사업구분)를 이름으로 더함 (syncMaster) — 옛 화면이면 남이 방금 넣은 기업을 모르고 같은 이름을 또 만듦
+    addProject: () => true,
+    updateProject: (a) => { const n = a[0] as PmProject; const o = state.projects.find((x) => x.id === n?.id); return !o || (['company', 'supplier', 'org', 'biz'] as const).some((f) => (o[f] || '') !== (n[f] || '')); },
     updateTask: (a) => (a[1] as PmTask)?.id !== a[0],
     saveCode: (a) => { const c = a[0] as PmCode; const o = state.codes.find((x) => x.id === c?.id); return !!o && o.name !== c.name; },
   };

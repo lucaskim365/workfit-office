@@ -171,9 +171,14 @@ export function alignPre(p: PmProject, tasks: readonly PmTask[], done: (t: PmTas
 export const prePast = (p: PmProject, tasks: readonly PmTask[], done: (t: PmTask) => boolean, today: string) =>
   tasks.filter((t) => t.projectId === p.id && isPre(t) && !done(t) && !!t.end && t.end < today);
 
-/** 다음 사업키 (nextKey) — P + (가장 큰 번호 + 1) */
-export const nextProjectKey = (projects: readonly PmProject[], tasks: readonly PmTask[]) =>
-  `P${Math.max(0, ...projects.map((p) => keyNum(p.id)), ...tasks.map((t) => keyNum(t.projectId))) + 1}`;
+/** 사업키 번호 (P14 → 14) */
+export const projectNo = keyNum;
+/**
+ * 다음 사업키 (nextKey) — P + (가장 큰 번호 + 1). `used` = 지운 사업까지 지금까지 쓴 가장 큰 번호 (결정 (가) 11/26, 데모와 다름 —
+ * 지운 사업 번호를 다시 주지 않아 남겨 둔 변경 이력 · 업무계획 줄이 새 사업에 섞이지 않게). 사업키 칸에 옛 번호를 직접 치면 막지 않음 (설계 5.7.2).
+ */
+export const nextProjectKey = (projects: readonly PmProject[], tasks: readonly PmTask[], used = 0) =>
+  `P${Math.max(0, used, ...projects.map((p) => keyNum(p.id)), ...tasks.map((t) => keyNum(t.projectId))) + 1}`;
 
 /** 사업 입력 확인 (siteForm validate) */
 export function projectCheck(v: { id: string; company: string; biz: string; start: string; end: string; bizRegNo: string; contactEmail: string; budget: number | null; subsidy: number | null }, isNew: boolean, exists: (id: string) => boolean): [string, string] | null {

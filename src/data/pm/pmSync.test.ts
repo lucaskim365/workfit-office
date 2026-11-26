@@ -2,12 +2,17 @@ import assert from 'node:assert/strict';
 import test, { mock } from 'node:test';
 import { liveOf } from '@/domain/pm/rules';
 import { pmProjectSchema, type PmTask } from '@/domain/pm/schema';
-import { makeTaskTicket, taskTicketIndex } from '@/domain/pm/ticket';
+import { makeSubTicket, makeTaskTicket, taskTicketIndex } from '@/domain/pm/ticket';
 import { fillMyungsung } from '@/domain/pm/quoteDemo';
 import { pickToLine, quoteDraft } from '@/domain/pm/quote';
 import { createPmStore, latestSnapshot, type PmStore } from './pm.store';
 import { createFakePmDb, type FakePmDb } from './pmDb.fake';
-import { docKeyOf, PM_COLLS, recsOf, snapshotRows } from './pmDb';
+import { docKeyOf, PM_COLLS, PmRateLimitError, recsOf, snapshotRows, type PmDb } from './pmDb';
+import type { PmProgress } from './pmSync';
+import { pmPaySchema } from '@/domain/pm/quote';
+import { nextProjectKey, projectNo } from '@/domain/pm/master';
+import { orgUse } from '@/domain/pm/masterLink';
+import { pmOrgSchema } from '@/domain/pm/schema';
 import { reread, seededDb, snapDiff } from './pmTestStores';
 
 /** 7-2 저장 계층 테스트 ⓑ~ⓖ · N1~N3 · 스위치 가드 · 처음 열 때 점검 (설계 5.7.2~5.7.4) — 가짜 DB 만, 개발 DB 안 씀 */
@@ -302,4 +307,174 @@ test('id 무작위: 같은 순간(시계 멈춤) 다른 저장소에서 만든 i
   for (let i = 0; i < 20; i++) { ids.add((await a.addAction({ text: 'x', whoId: '', due: '', projectId: 'P2', meetingId: '' }, 'u1')).id); ids.add((await b.addAction({ text: 'x', whoId: '', due: '', projectId: 'P2', meetingId: '' }, 'u1')).id); }
   assert.equal(ids.size, 40);
   assert.match([...ids][0], /^A[0-9a-z]+[0-9a-z]{4}$/);
+});
+
+// ── 11/26 팀장 검수 ① 고침 (F1 · F2 · F3 · 사소 · 결정 (가)) ─────────────────────────
+
+/** 팀장 장치: 가짜 DB 를 '분당 limit 건, 60초 지나야 다시 열림'으로 감쌈 (시계는 기다릴 때만 감) */
+function limited(inner: FakePmDb, limit: number) {
+  let clock = 0, winStart = 0, used = 0;
+  const waits: number[] = [];
+  const gate = () => { if (clock - winStart >= 60000) { winStart = clock; used = 0; } if (used >= limit) throw new PmRateLimitError(); used++; };
+  const db: PmDb = {
+    coll(n) {
+      const c = inner.coll(n);
+      return { list: () => c.list(), get: (k) => c.get(k), insert: async (r) => { gate(); return c.insert(r); }, save: async (r) => { gate(); return c.save(r); }, remove: async (k) => { gate(); return c.remove(k); } };
+    },
+    async wait(ms) { waits.push(ms); clock += ms; },
+  };
+  return { db, waits };
+}
+const openOn = async (db: PmDb) => { const s = createPmStore(TODAY, { db }); await s.refresh(); return s; };
+const P20 = (company = '㈜가회사') => pmProjectSchema.parse({ id: 'P20', company, biz: '부처협업형(산업보안)', start: '2027-01-04', end: '2027-09-30' });
+
+test('F1 쓰기 제한 분당 60: 부처협업형 사업 등록(쓰기 77) · 신광 삭제가 한 번에 끝남 · 기다리는 동안 진행 표시', async () => {
+  const inner = seededDb(TODAY);
+  const { db, waits } = limited(inner, 60);
+  const s = await openOn(db);
+  const seen: PmProgress[] = [];
+  s.onProgress((x) => seen.push(x));
+  assert.equal(await s.addProject(P20(), 'std', false, 'u1'), 73);
+  let x = await reread(inner, TODAY);
+  assert.equal(x.tasks.filter((t) => t.projectId === 'P20').length, 73);
+  // 막힌 자리에서 10 → 20 → 40초 (합 70초 > 60초 창)
+  assert.deepEqual(waits, [10_000, 20_000, 40_000]);
+  assert.ok(seen.some((v) => v.waitMs === 10_000) && seen.some((v) => v.waitMs === 40_000), '기다리는 중 알림');
+  assert.deepEqual(seen.at(-1), { done: 77, total: 77 });
+  await s.removeProject('P2', 'u1');
+  x = await reread(inner, TODAY);
+  assert.deepEqual([x.projects.some((v) => v.id === 'P2'), x.tasks.some((t) => t.projectId === 'P2'), x.pays.some((v) => v.projectId === 'P2')], [false, false, false]);
+  await sameAsDb(s, inner);
+  // 분당 120 도
+  const inner2 = seededDb(TODAY);
+  const s2 = await openOn(limited(inner2, 120).db);
+  await s2.removeProject('P2', 'u1');
+  assert.ok(!(await reread(inner2, TODAY)).projects.some((v) => v.id === 'P2'));
+});
+
+test('F1 쓰기 제한이 안 풀리면 한 자리에서 합쳐 65초 넘게 기다린 뒤 끊김 (일부만 저장)', async () => {
+  const inner = seededDb(TODAY);
+  const waits: number[] = [];
+  let used = 0;
+  const gate = () => { if (++used > 10) throw new PmRateLimitError(); };
+  const db: PmDb = {
+    coll(n) {
+      const c = inner.coll(n);
+      return { list: () => c.list(), get: (k) => c.get(k), insert: async (r) => { gate(); return c.insert(r); }, save: async (r) => { gate(); return c.save(r); }, remove: async (k) => { gate(); return c.remove(k); } };
+    },
+    async wait(ms) { waits.push(ms); },
+  };
+  const s = await openOn(db);
+  await assert.rejects(s.addProject(P20(), 'std', false, 'u1'), /일부만 저장됐습니다/);
+  assert.deepEqual(waits, [10_000, 20_000, 40_000]);
+});
+
+test('F2 (R1) B 가 P2-0001 을 먼저 발행 → 옛 화면의 A 가 3건 발행: 쓰기 전 확인에서 걸려 다시 읽고 3건 모두 새 번호', async () => {
+  const db = seededDb(TODAY);
+  const A = await open(db);
+  const B = await open(db);
+  const ts = (await A.snapshot()).tasks.filter((t) => t.projectId === 'P2').slice(0, 4);
+  const [b] = await B.issueTickets([ticketFor(ts[0])]);
+  assert.equal(b.no, 'P2-0001');
+  const a = await A.issueTickets(ts.slice(1).map(ticketFor));
+  assert.deepEqual(a.map((v) => v.no), ['P2-0002', 'P2-0003', 'P2-0004']);
+  const x = await reread(db, TODAY);
+  assert.deepEqual(x.tickets.map((v) => v.no).sort(), ['P2-0001', 'P2-0002', 'P2-0003', 'P2-0004']);
+  assert.equal(x.tickets.find((v) => v.no === 'P2-0001')!.taskId, ts[0].id, 'B 것 그대로');
+  await sameAsDb(A, db);
+});
+
+test('F2 동시에 발행(쓰기 전 확인을 둘 다 통과) — 진 쪽은 같은 묶음에 먼저 써진 티켓을 되돌리고 새 번호로: 4건 · 반쪽 없음', async () => {
+  const db = seededDb(TODAY);
+  const A = await open(db);
+  const B = await open(db);
+  const ts = (await A.snapshot()).tasks.filter((t) => t.projectId === 'P2').slice(0, 4);
+  db.setWriteDelay(3);
+  const [a, b] = await Promise.all([A.issueTickets(ts.slice(1).map(ticketFor)), B.issueTickets([ticketFor(ts[0])])]);
+  const x = await reread(db, TODAY);
+  assert.deepEqual(x.tickets.map((v) => v.no).sort(), ['P2-0001', 'P2-0002', 'P2-0003', 'P2-0004']);
+  assert.deepEqual([...a, ...b].map((v) => v.no).sort(), ['P2-0001', 'P2-0002', 'P2-0003', 'P2-0004']);
+  assert.equal(new Set(x.tickets.map((v) => v.taskId)).size, 4, '업무마다 1건');
+});
+
+test('F2 번호 없는 새 문서가 이미 있으면(남이 먼저 만듦) 아무것도 안 쓰고 충돌 안내', async () => {
+  const db = seededDb(TODAY);
+  const A = await open(db);
+  const B = await open(db);
+  const t = await taskOf(A, 'P3');
+  await B.approveMilestone(t.id, 'u3', 'u3');
+  const w0 = db.stats.writes;
+  await assert.rejects(A.approveMilestone(t.id, 'u3', 'u3'), /다른 사람이 먼저 고쳤습니다/);
+  assert.equal(db.stats.writes, w0);
+});
+
+test('F3 (R5) B 가 계약 C1 에 대금 추가 → 옛 화면의 A 가 계약 삭제: 계산 전 다시 읽어 B 대금도 지움 (주인 없는 대금 안 남음)', async () => {
+  const db = seededDb(TODAY);
+  const A = await open(db);
+  const B = await open(db);
+  const pay = pmPaySchema.parse({ id: 'tmp', projectId: 'P2', cid: 'C1', name: 'B 가 넣은 대금', rate: 0, amt: 1_000_000 });
+  const bp = await B.savePay({ ...pay, id: '' });
+  await A.removeContract('C1');
+  const x = await reread(db, TODAY);
+  assert.ok(!x.contracts.some((c) => c.id === 'C1'));
+  assert.ok(!x.pays.some((v) => v.cid === 'C1' || v.id === bp.id), '주인 없는 대금 0');
+});
+
+test('F3 옛 화면 검사: B 가 세부 작업에 티켓 발행 → 옛 화면 A 의 세부 작업 삭제는 다시 읽고 막힘 / B 가 새 사업에 기업을 씀 → A 의 기업 삭제 막힘', async () => {
+  const db = seededDb(TODAY);
+  const A = await open(db);
+  const B = await open(db);
+  const sub = A.peek().snap.subtasks[0];
+  const t = A.peek().snap.tasks.find((v) => v.id === sub.taskId)!;
+  const tk = makeSubTicket('P0-0000', t, sub, { today: TODAY, me: 'u1', approverOf: () => 'u3', nameOf });
+  await B.issueTickets([tk]);
+  await assert.rejects(A.removeSubtask(sub.id), /진행 중이라 지울 수 없습니다/);
+  assert.ok((await reread(db, TODAY)).subtasks.some((v) => v.id === sub.id));
+  // A 가 보기에 안 쓰는 기업 → 그 사이 B 가 새 사업에 그 기업을 씀
+  await A.saveOrg(pmOrgSchema.parse({ id: 'oNew', type: '도입기업', name: '㈜새기업' }));
+  const org = A.peek().snap.orgs.find((o) => o.name === '㈜새기업')!;
+  assert.equal(orgUse(org, A.peek().snap.projects).length, 0);
+  await B.addProject(P20(org.name), '', false, 'u2');
+  // 옛 화면 B 의 사업 등록도 계산 전 다시 읽음 → 같은 이름 기업을 또 만들지 않음 (중복 금지)
+  assert.deepEqual((await reread(db, TODAY)).orgs.filter((o) => o.name === '㈜새기업').map((o) => o.id), ['oNew']);
+  await assert.rejects(A.removeOrg(org.id), /쓰는 중이라 지울 수 없습니다/);
+});
+
+test('사소: 같은 묶음 앞 것이 실패하고 뒤 것이 써지면 "일부만 저장됐습니다" (저장하지 못했습니다 아님)', async () => {
+  const db = seededDb(TODAY);
+  const s = await open(db);
+  const ts = (await s.snapshot()).tasks.filter((t) => t.projectId === 'P2').slice(0, 3);
+  db.failAt(1); // 티켓 3건이 한 묶음 — 첫째만 실패
+  await assert.rejects(s.issueTickets(ts.map(ticketFor)), /일부만 저장됐습니다/);
+  await sameAsDb(s, db);
+});
+
+test('사소: 쪽 나눠 읽는 사이 같은 문서가 두 번 와도 한 번만 넣음 → 다음 저장이 "같은 id 기록이 2건"으로 안 막힘', async () => {
+  const inner = seededDb(TODAY);
+  const db: PmDb = {
+    coll(n) {
+      const c = inner.coll(n);
+      return n === 'pmTasks' ? { ...c, list: async () => { const r = await c.list(); return [...r.slice(0, 150), ...r.slice(100)]; } } : c;
+    },
+  };
+  const s = await openOn(db);
+  assert.equal(s.peek().snap.tasks.length, 338);
+  const t = await taskOf(s);
+  await s.updateTask(t.id, { ...t, name: '두 번 온 뒤 저장' }, 'u1', nameOf);
+});
+
+test('결정 (가) 사업 번호를 다시 안 씀: 마지막 사업을 지워도 다음 사업키는 그 다음 번호 · 성과지표 3종 · 진행률 갱신 요청도 지움', async () => {
+  for (const mode of ['memory', 'db'] as const) {
+    const db = seededDb(TODAY);
+    const s = mode === 'db' ? await open(db) : createPmStore(TODAY);
+    const s0 = await s.snapshot();
+    const k = [...s0.projects].sort((a, b) => projectNo(b.id) - projectNo(a.id))[0].id;
+    await s.saveKpiDef({ projectId: k, f: '', name: '지표', unit: '%', dir: 'up', base: 0, target: 10, w: 0, period: '', method: '' });
+    await s.sendUpdRequest('u9', k, 'u1');
+    await s.removeProject(k, 'u1');
+    const x = mode === 'db' ? await reread(db, TODAY) : await s.snapshot();
+    assert.equal(nextProjectKey(x.projects, x.tasks, x.lastProjectNo), `P${projectNo(k) + 1}`, mode);
+    assert.equal(nextProjectKey(x.projects, x.tasks), k, `${mode}: 데모 방식이면 같은 번호`);
+    assert.deepEqual([x.kpiDefs.some((d) => d.projectId === k), x.updReq.some((r) => r.projectId === k)], [false, false], mode);
+  }
 });
