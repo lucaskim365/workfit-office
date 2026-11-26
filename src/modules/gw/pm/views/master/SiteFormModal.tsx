@@ -94,7 +94,7 @@ export function SiteFormModal({ s, presetTpl, d, people, mut, smut, money, short
     const n = await mut.addProject.mutateAsync({ p: next, tpl: tplId, keepPeople });
     if (n) {
       // 새로 만든 업무 (등록 직후 스냅숏엔 아직 없음 → 저장소에서 다시 읽음)
-      const { pmStore } = await import('@/data/pm/pm.store');
+      const { pmStore } = await import('@/data/pm/pmStoreInstance');
       const ts = (await pmStore().snapshot()).tasks.filter((t) => t.projectId === next.id);
       if (next.annDue || next.evalDate) { const items = alignPre(next, ts, (t) => t.status === '완료'); if (items.length) await mut.setTaskDates.mutateAsync({ items, note: '협약 이전 일정을 공고 마감 · 선정평가일에 맞춤' }); }
       const past = prePast(next, (await pmStore().snapshot()).tasks, (t) => t.status === '완료', today);

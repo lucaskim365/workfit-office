@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createPmStore } from './pm.store';
+import { type PmStore } from './pm.store';
+import { eachMode } from './pmTestStores';
 import { defaultMoneyCfg } from '@/domain/pm/money';
 import { kosaH, laborOf, man, manW, noPayC, ovPct, payAmt, payGuess, plOf, plYear, siteChip, siteHead, type PlCtx } from '@/domain/pm/pl';
 
@@ -13,8 +14,8 @@ import { kosaH, laborOf, man, manW, noPayC, ovPct, payAmt, payGuess, plOf, plYea
  */
 const TODAY = '2026-11-25';
 
-async function scenario() {
-  const s = createPmStore(TODAY);
+async function scenario(mk: (today: string) => PmStore) {
+  const s = mk(TODAY);
   let snap = await s.snapshot();
   const sk = snap.projects.find((p) => /신광/.test(p.company))!.id;
   const hk = snap.projects.find((p) => /효광/.test(p.company) && /제조\s*AI/i.test(p.biz))!.id;
@@ -31,8 +32,8 @@ async function scenario() {
   return { s, snap, X, sk, hk };
 }
 
-test('사업별 수익: 왼쪽 목록 · 매출 − 원가 = 이익 · 대금 표 (데모 pMoneySite 와 같음)', async () => {
-  const { X, sk, hk, snap } = await scenario();
+eachMode('사업별 수익: 왼쪽 목록 · 매출 − 원가 = 이익 · 대금 표 (데모 pMoneySite 와 같음)', async (mk) => {
+  const { X, sk, hk, snap } = await scenario(mk);
   const P = plOf(X, sk);
   assert.deepEqual({ rev: P.rev, base: P.base, chg: P.chg, est: P.est }, { rev: 614020000, base: 334050000, chg: 1800000, est: { rev: 614020000, buy: 334050000 } });
   // 왼쪽 목록: '신광 6.14억원 45.3%' · '효광(AI) 3.82억원 60.7%' · 나머지 '견적 없음 -'
@@ -60,8 +61,8 @@ test('사업별 수익: 왼쪽 목록 · 매출 − 원가 = 이익 · 대금 �
   assert.equal(ovPct(X, 'P3'), null);
 });
 
-test('재원 탭: 신광 확정 19,440 · 효광(AI) 계획서 19,400 (데모 fundOf 화면과 같음)', async () => {
-  const { s, sk, hk } = await scenario();
+eachMode('재원 탭: 신광 확정 19,440 · 효광(AI) 계획서 19,400 (데모 fundOf 화면과 같음)', async (mk) => {
+  const { s, sk, hk } = await scenario(mk);
   const F = s.fundOf(sk, TODAY);
   assert.deepEqual([F.build, F.man, F.cloud, F.total, F.self].map(man), ['39,282', '0', '540', '39,822', '19,842']);
   assert.deepEqual(F.rows.map((r) => [r.name, man(r.calc), man(r.use), r.fix != null, r.fromPlan]), [['정부', '19,911', '19,440', true, false]]);
@@ -70,8 +71,8 @@ test('재원 탭: 신광 확정 19,440 · 효광(AI) 계획서 19,400 (데모 fu
   assert.deepEqual(Fh.rows.map((r) => [man(r.calc), man(r.use), r.fromPlan]), [['19,998', '19,400', true]]);
 });
 
-test('월별 · 연간 손익 2026 · 2027 (데모 pMoneyPL 화면과 같음)', async () => {
-  const { X } = await scenario();
+eachMode('월별 · 연간 손익 2026 · 2027 (데모 pMoneyPL 화면과 같음)', async (mk) => {
+  const { X } = await scenario(mk);
   const P = plYear(X, '2026');
   const row = (r: { rev: number; plan: number; buy: number; lab: number; p: number; oh: number; net: number }) => [r.rev, r.plan, r.buy, r.lab, r.p, r.oh, r.net].map((v) => (v ? man(v) : '-')).join(' | ');
   assert.deepEqual(P.R.map((r) => `${+r.m.slice(5)}월 | ${row(r)}`), [
@@ -110,8 +111,8 @@ test('인건비 (반영 켜면): 업무계획 시간 × KOSA 월 단가 ÷ 209h 
   assert.equal(kosaH(defaultMoneyCfg()), 0);
 });
 
-test('저장: 대금 · 원가 변경 추가 · 수정 · 삭제 · 간접비 비우면 지움 · 재원 수정 · 사업 지우면 원가 변경도', async () => {
-  const s = createPmStore(TODAY);
+eachMode('저장: 대금 · 원가 변경 추가 · 수정 · 삭제 · 간접비 비우면 지움 · 재원 수정 · 사업 지우면 원가 변경도', async (mk) => {
+  const s = mk(TODAY);
   const p = await s.savePay({ id: '', projectId: 'P2', cid: 'C1', name: '중도금 20%', rate: 20, amt: null, due: '', inv: '', paid: '' });
   assert.match(p.id, /^D/);
   await s.savePay({ ...p, inv: '2026-11-20' });

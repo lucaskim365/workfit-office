@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
-import test, { mock } from 'node:test';
+import { mock } from 'node:test';
 import { liveOf } from '@/domain/pm/rules';
 import { makeSubTicket, makeTaskTicket, taskTicketIndex } from '@/domain/pm/ticket';
-import { createPmStore } from './pm.store';
+import { type PmStore } from './pm.store';
+import { eachMode } from './pmTestStores';
 import { itemCheck, itemDraft, itemFromDraft, ruleCheck, ruleDraft, ruleFromDraft } from '@/domain/pm/money';
 
 /** 2단계 저장소 — 티켓 번호·발행 잠금·세부 작업 연동·업무 수정 반영 (메모리, 사람은 가짜 ID u1·u3) */
@@ -11,16 +12,16 @@ const TODAY = '2026-11-25';
 mock.timers.enable({ apis: ['Date'], now: new Date(2026, 10, 25, 12) });
 const nameOf = (id: string) => id;
 
-async function setup() {
-  const s = createPmStore(TODAY);
+async function setup(mk: (today: string) => PmStore) {
+  const s = mk(TODAY);
   const snap = await s.snapshot();
   const t = snap.tasks.find((x) => x.projectId === 'P2')!;
   const ctx = { today: TODAY, me: 'u1', approverOf: () => 'u3', nameOf, live: liveOf(t) };
   return { s, t, ctx };
 }
 
-test('발행: 번호 P2-0001부터, 같은 업무 두 번 발행 막힘, 취소하면 다시 발행', async () => {
-  const { s, t, ctx } = await setup();
+eachMode('발행: 번호 P2-0001부터, 같은 업무 두 번 발행 막힘, 취소하면 다시 발행', async (mk) => {
+  const { s, t, ctx } = await setup(mk);
   const make = () => makeTaskTicket('P0-0000', { task: t, assigneeId: 'u1', prio: '보통', due: '2026-12-01' }, { reviewerId: '', approverId: '', memo: '' }, ctx);
   const [a] = await s.issueTickets([make()]);
   assert.equal(a.no, 'P2-0001');
@@ -32,8 +33,8 @@ test('발행: 번호 P2-0001부터, 같은 업무 두 번 발행 막힘, 취소�
   assert.equal(taskTicketIndex(snap.tickets).get(t.id)?.no, 'P2-0002');
 });
 
-test('세부 작업 티켓: 완료하면 세부 작업 완료, 진행 중이면 세부 작업 못 지움', async () => {
-  const { s, t, ctx } = await setup();
+eachMode('세부 작업 티켓: 완료하면 세부 작업 완료, 진행 중이면 세부 작업 못 지움', async (mk) => {
+  const { s, t, ctx } = await setup(mk);
   const sub = await s.addSubtask(t.id, 'API 연결', 'u1', '', 'u1', TODAY);
   const [x] = await s.issueTickets([makeSubTicket('P0-0000', t, sub, ctx)]);
   await assert.rejects(s.removeSubtask(sub.id), /진행 중이라 지울 수 없습니다/);
@@ -52,8 +53,8 @@ test('세부 작업 티켓: 완료하면 세부 작업 완료, 진행 중이면 
   await s.removeSubtask(sub.id); // 완료된 티켓이면 지울 수 있음
 });
 
-test('세부 작업 완료 체크: 완료한 날 · 사람 = 체크한 사람 (담당과 달라도), 풀면 비움 (데모 subDone · planDone ddBy)', async () => {
-  const { s, t } = await setup();
+eachMode('세부 작업 완료 체크: 완료한 날 · 사람 = 체크한 사람 (담당과 달라도), 풀면 비움 (데모 subDone · planDone ddBy)', async (mk) => {
+  const { s, t } = await setup(mk);
   const sub = await s.addSubtask(t.id, '남이 맡은 일', 'u3', '', 'u3', TODAY);
   assert.equal(sub.doneBy, '');
   await s.updateSubtask(sub.id, { done: true }, 'u1', TODAY);
@@ -67,8 +68,8 @@ test('세부 작업 완료 체크: 완료한 날 · 사람 = 체크한 사람 (�
   assert.deepEqual([x.done, x.doneDate, x.doneBy], [false, '', '']);
 });
 
-test('업무를 고치면 티켓도 따라가고 변경 이력에 "티켓 반영"', async () => {
-  const { s, t, ctx } = await setup();
+eachMode('업무를 고치면 티켓도 따라가고 변경 이력에 "티켓 반영"', async (mk) => {
+  const { s, t, ctx } = await setup(mk);
   await s.issueTickets([makeTaskTicket('P0-0000', { task: t, assigneeId: 'u1', prio: '보통', due: '2026-12-01' }, { reviewerId: '', approverId: '', memo: '' }, ctx)]);
   await s.updateTask(t.id, { ...t, name: `${t.name} (수정)` }, 'u1', nameOf, TODAY);
   const snap = await s.snapshot();
@@ -76,8 +77,8 @@ test('업무를 고치면 티켓도 따라가고 변경 이력에 "티켓 반영
   assert.match(snap.logs.at(-1)!.text, /티켓 P2-0001 반영/);
 });
 
-test('사업별 화면 저장: 점검 보완 → 후속 기한 · 지적 사항, 협약 연장 승인 → 종료일 1번만 바뀜, 일정 고치기 이력', async () => {
-  const s = createPmStore(TODAY);
+eachMode('사업별 화면 저장: 점검 보완 → 후속 기한 · 지적 사항, 협약 연장 승인 → 종료일 1번만 바뀜, 일정 고치기 이력', async (mk) => {
+  const s = mk(TODAY);
   await s.setGovResult('P2', 'g_mid', { v: '보완', date: TODAY, memo: ' 공문 ', fix: '2026-12-10', items: [{ id: '', text: '실데이터 미입력', whoId: 'u1' }, { id: 'x', text: '  ', whoId: 'u1' }] }, 'u3');
   let snap = await s.snapshot();
   const r = snap.gov.find((x) => x.id === 'P2|g_mid')!;
@@ -110,8 +111,8 @@ test('사업별 화면 저장: 점검 보완 → 후속 기한 · 지적 사항,
   assert.deepEqual(snap.govLinks.map((x) => x.id), ['P2|g_mid']);
 });
 
-test('내 업무(3-5): 진행률 기록이 진행 중 티켓에도 · 나중에 할 일 · 변동 없음 · 마일스톤 승인', async () => {
-  const { s, t, ctx } = await setup();
+eachMode('내 업무(3-5): 진행률 기록이 진행 중 티켓에도 · 나중에 할 일 · 변동 없음 · 마일스톤 승인', async (mk) => {
+  const { s, t, ctx } = await setup(mk);
   await s.issueTickets([makeTaskTicket('P0-0000', { task: t, assigneeId: 'u1', prio: '보통', due: '2026-12-01' }, { reviewerId: '', approverId: '', memo: '' }, ctx)]);
   await s.setProgress(t.id, 40, '내 업무에서 기록', 'u1', TODAY);
   let snap = await s.snapshot();
@@ -131,8 +132,8 @@ test('내 업무(3-5): 진행률 기록이 진행 중 티켓에도 · 나중에 
   assert.match(snap.logs.at(-1)!.text, /마일스톤 승인 — u3 부장/);
 });
 
-test('업무계획(3-6): 그날 저장 · 반복 업무가 고친 앞날에도 · 남에게 배정한 세부 작업이 그 사람 저장된 날에 · 번호 바뀌면 따라감 · 임시저장 30일', async () => {
-  const { s, t } = await setup();
+eachMode('업무계획(3-6): 그날 저장 · 반복 업무가 고친 앞날에도 · 남에게 배정한 세부 작업이 그 사람 저장된 날에 · 번호 바뀌면 따라감 · 임시저장 30일', async (mk) => {
+  const { s, t } = await setup(mk);
   await s.setPlanDay('u1', '2026-11-26', [{ taskId: t.id, auto: true }, { text: '현장 미팅', hours: 2 }]);
   await s.setPlanDay('u1', '2026-11-24', [{ text: '지난 날' }]);
   let snap = await s.snapshot();
@@ -158,8 +159,8 @@ test('업무계획(3-6): 그날 저장 · 반복 업무가 고친 앞날에도 �
   assert.equal((await s.snapshot()).settings.carryFrom, '2026-11-26', '처음 한 번만');
 });
 
-test('3-7 저장: 즐겨찾기 켜고 끄기 · 알림 확인 · 지표 지우면 실측 기록도 지움', async () => {
-  const s = createPmStore('2026-11-25');
+eachMode('3-7 저장: 즐겨찾기 켜고 끄기 · 알림 확인 · 지표 지우면 실측 기록도 지움', async (mk) => {
+  const s = mk('2026-11-25');
   assert.equal(await s.toggleFav('me', { v: 'dash/site', k: 'P2' }), true);
   await s.toggleFav('me', { v: 'task/wbs', k: '' });
   assert.equal(await s.toggleFav('me', { v: 'dash/site', k: 'P2' }), false);
@@ -179,8 +180,8 @@ test('3-7 저장: 즐겨찾기 켜고 끄기 · 알림 확인 · 지표 지우�
   assert.deepEqual([snap.kpiDefs.length, snap.kpiMeas.map((x) => x.kid)], [0, ['P0']]);
 });
 
-test('4단계 산출물 저장: 상태 고르기 · 파일 올리면 제출완료 · 상태를 바꿔도 파일 이름은 그대로 · 업무 번호 바뀌면 따라감', async () => {
-  const s = createPmStore('2026-11-25');
+eachMode('4단계 산출물 저장: 상태 고르기 · 파일 올리면 제출완료 · 상태를 바꿔도 파일 이름은 그대로 · 업무 번호 바뀌면 따라감', async (mk) => {
+  const s = mk('2026-11-25');
   const t = (await s.snapshot()).tasks.find((x) => x.projectId === 'P2')!;
   await s.setDoc(t.id, '작성중', 'me');
   assert.deepEqual((await s.snapshot()).docs, [{ id: t.id, projectId: 'P2', st: '작성중', file: '', date: '2026-11-25', by: 'me' }]);
@@ -192,8 +193,8 @@ test('4단계 산출물 저장: 상태 고르기 · 파일 올리면 제출완�
   await assert.rejects(s.setDoc('없음', '작성중', 'me'));
 });
 
-test('4단계 CR 저장: 접수 → 검토중 · 번호 · 수정 · 검토(의견 필수, 한 번만) · 업무 잇기 · 업무 번호 따라감', async () => {
-  const s = createPmStore('2026-11-25');
+eachMode('4단계 CR 저장: 접수 → 검토중 · 번호 · 수정 · 검토(의견 필수, 한 번만) · 업무 잇기 · 업무 번호 따라감', async (mk) => {
+  const s = mk('2026-11-25');
   const base = { projectId: 'P2', cat: '기능 추가', title: '바코드 라벨 추가', desc: '', req: '도입기업 담당자', date: '2026-11-24', prio: '보통', days: 5, cost: 100 };
   const a = await s.addCr(base, 'u1');
   const b = await s.addCr({ ...base, title: '두 번째' }, 'u1');
@@ -212,8 +213,8 @@ test('4단계 CR 저장: 접수 → 검토중 · 번호 · 수정 · 검토(의�
   assert.deepEqual((await s.snapshot()).crs.map((x) => x.id), ['CR-001']);
 });
 
-test('5단계 이슈 저장: 등록(긴급이면 보고됨) · 수정 · 윗선 보고(긴급 · 대응중) · 연관 업무 번호 따라감 · 삭제', async () => {
-  const s = createPmStore('2026-11-25');
+eachMode('5단계 이슈 저장: 등록(긴급이면 보고됨) · 수정 · 윗선 보고(긴급 · 대응중) · 연관 업무 번호 따라감 · 삭제', async (mk) => {
+  const s = mk('2026-11-25');
   const t = (await s.snapshot()).tasks.find((x) => x.projectId === 'P2')!;
   const base = { projectId: 'P2', title: 'PLC 통신 끊김', cat: '설비 통신 장애', sev: '보통' as const, status: '열림', ownerId: 'u2', watchIds: ['u3'], date: '2026-11-24', equip: '', taskId: t.id, desc: '', action: '' };
   const a = await s.addIssue(base, 'u1');
@@ -229,8 +230,8 @@ test('5단계 이슈 저장: 등록(긴급이면 보고됨) · 수정 · 윗선 
   assert.deepEqual(L.map((i) => i.id), ['I-001']);
 });
 
-test('5단계 회의록 · 액션 저장: 회의 사업을 바꾸면 그 회의 액션도 · 완료 켜면 날짜 · 회의 지우면 액션은 남고 출처만 지움', async () => {
-  const s = createPmStore('2026-11-25');
+eachMode('5단계 회의록 · 액션 저장: 회의 사업을 바꾸면 그 회의 액션도 · 완료 켜면 날짜 · 회의 지우면 액션은 남고 출처만 지움', async (mk) => {
+  const s = mk('2026-11-25');
   const id = await s.addMeeting({ projectId: 'P2', type: '주간 회의', title: '주간 회의', date: '2026-11-24', place: '', attIds: ['u1'], ext: '', content: '진척 공유', decision: '' }, 'u1');
   const a = await s.addAction({ text: 'I/O 리스트 요청', whoId: 'u2', due: '2026-12-01', projectId: 'P2', meetingId: id }, 'u1');
   assert.deepEqual([a.by, a.at, a.done], ['u1', '2026-11-25', false]);
@@ -248,8 +249,8 @@ test('5단계 회의록 · 액션 저장: 회의 사업을 바꾸면 그 회의 
   assert.equal((await s.snapshot()).actions.length, 0);
 });
 
-test('5단계 주간 보고 저장: 특이사항 · 협조 요청은 주마다 따로 고쳐도 서로 안 지움 · 진행률 갱신 요청은 사람마다 마지막 1건', async () => {
-  const s = createPmStore('2026-11-25');
+eachMode('5단계 주간 보고 저장: 특이사항 · 협조 요청은 주마다 따로 고쳐도 서로 안 지움 · 진행률 갱신 요청은 사람마다 마지막 1건', async (mk) => {
+  const s = mk('2026-11-25');
   await s.setReport('P2', '2026-11-23', { note: '시연 완료' }, 'pm');
   await s.setReport('P2', '2026-11-23', { req: 'BOM 엑셀' }, 'pm2');
   await s.setReport('P2', '2026-11-16', { note: '지난주' }, 'pm');
@@ -260,9 +261,9 @@ test('5단계 주간 보고 저장: 특이사항 · 협조 요청은 주마다 �
   assert.deepEqual((await s.snapshot()).updReq, [{ id: 'u1', date: '2026-11-25', by: 'pm2', projectId: 'P3' }]);
 });
 
-test('6단계 사업 등록 · 수정 · 삭제: 표준 업무 자동 생성(부처협업형 73건) · 기준선 · 새 기업 이름은 기준정보에', async () => {
+eachMode('6단계 사업 등록 · 수정 · 삭제: 표준 업무 자동 생성(부처협업형 73건) · 기준선 · 새 기업 이름은 기준정보에', async (mk) => {
   const { pmProjectSchema } = await import('@/domain/pm/schema');
-  const s = createPmStore('2026-11-25');
+  const s = mk('2026-11-25');
   const p = pmProjectSchema.parse({ id: 'P14', company: '㈜새회사', biz: '부처협업형(산업보안)', supplier: '워크핏 주식회사', start: '2027-01-04', end: '2027-09-30', pmName: '박명규 부장' });
   assert.equal(await s.addProject(p, 'std', false, 'pm'), 73);
   let snap = await s.snapshot();
@@ -279,8 +280,8 @@ test('6단계 사업 등록 · 수정 · 삭제: 표준 업무 자동 생성(부
   assert.deepEqual([snap.projects.some((x) => x.id === 'P14'), snap.tasks.some((t) => t.projectId === 'P14')], [false, false]);
 });
 
-test('6-2 기준정보 고치기: 단계명 바꾸면 업무도 · 사업구분 바꾸면 사업 · 단계 · 표준도 · 기업 이름 바꾸면 사업도 · 쓰는 중이면 못 지움 · 표준 업무 → 사업 업무(연결)', async () => {
-  const s = createPmStore('2026-11-25');
+eachMode('6-2 기준정보 고치기: 단계명 바꾸면 업무도 · 사업구분 바꾸면 사업 · 단계 · 표준도 · 기업 이름 바꾸면 사업도 · 쓰는 중이면 못 지움 · 표준 업무 → 사업 업무(연결)', async (mk) => {
+  const s = mk('2026-11-25');
   let snap = await s.snapshot();
   const st = snap.codes.find((c) => c.group === 'stage' && c.biz === '부처협업형(산업보안)' && c.name === '01 자재관리')!;
   const n1 = await s.saveCode({ ...st, name: '01 자재' }, 'pm');
@@ -308,8 +309,8 @@ test('6-2 기준정보 고치기: 단계명 바꾸면 업무도 · 사업구분 
   assert.ok(!(await s.snapshot()).tlinks.some((l) => l.stdId === std.id), '표준을 지우면 연결도');
 });
 
-test('6-4 저장: 단가 · 계산 기준 · 지원 기준 추가/수정/삭제 · 품목 추가/수정/삭제 (처음 값 = 데모 13줄 · 89개)', async () => {
-  const s = createPmStore(TODAY);
+eachMode('6-4 저장: 단가 · 계산 기준 · 지원 기준 추가/수정/삭제 · 품목 추가/수정/삭제 (처음 값 = 데모 13줄 · 89개)', async (mk) => {
+  const s = mk(TODAY);
   let snap = await s.snapshot();
   assert.deepEqual([snap.fundRules.length, snap.items.length, snap.moneyCfg.cloudMonthly, snap.moneyCfg.kosaMonthly, snap.moneyCfg.laborOn], [13, 89, 150000, 7754124, false]);
   await s.saveMoneyCfg({ ...snap.moneyCfg, cloudMonthly: 350000, laborOn: true });
@@ -331,8 +332,8 @@ test('6-4 저장: 단가 · 계산 기준 · 지원 기준 추가/수정/삭제 
   assert.ok(!snap.items.some((x) => x.id === 'P89'));
 });
 
-test('6-4 검수: 창에서 새로 추가 (id 없음) → 저장소가 id 를 붙여 저장 · 다시 고치기 · 지우기', async () => {
-  const s = createPmStore(TODAY);
+eachMode('6-4 검수: 창에서 새로 추가 (id 없음) → 저장소가 id 를 붙여 저장 · 다시 고치기 · 지우기', async (mk) => {
+  const s = mk(TODAY);
   const rd = { ...ruleDraft(null, 2026), region: '경남', biz: '새 기준', doR: '30', doC: '3600', capLocal: '0' };
   assert.equal(ruleCheck(rd), null);
   const r = await s.saveFundRule(ruleFromDraft(rd, ''));
@@ -354,10 +355,10 @@ test('6-4 검수: 창에서 새로 추가 (id 없음) → 저장소가 id 를 �
   assert.deepEqual([snap.fundRules.length, snap.items.length], [13, 89]);
 });
 
-test('6-5 견적: 새로 저장(대금 단계 · 재원 · 지난 견적) · 고치기 · 직접 쓴 줄 등록 · 삭제(대금 같이) · 사업 삭제 때 같이', async () => {
+eachMode('6-5 견적: 새로 저장(대금 단계 · 재원 · 지난 견적) · 고치기 · 직접 쓴 줄 등록 · 삭제(대금 같이) · 사업 삭제 때 같이', async (mk) => {
   const { quoteDraft, pickToLine, qIt } = await import('@/domain/pm/quote');
   const { fillMyungsung } = await import('@/domain/pm/quoteDemo');
-  const s = createPmStore(TODAY);
+  const s = mk(TODAY);
   let snap = await s.snapshot();
   // 처음 값: 신광 C1 · C2, 효광(AI) C3, 대금 4
   assert.deepEqual(snap.contracts.map((c) => c.id), ['C1', 'C2', 'C3']);

@@ -3,7 +3,8 @@ import { useSearchParams } from 'react-router-dom';
 import { GwHead, GwSideNav, GwSplit } from '@/modules/gw/_gw';
 import { shortName } from '@/domain/pm/rules';
 import type { AlertGo } from '@/domain/pm/alerts';
-import { usePmDerived, usePmMutations, usePmSiteMutations } from '@/features/pm/usePm';
+import { usePmDerived, usePmMutations, usePmSiteMutations, usePmSnapshot } from '@/features/pm/usePm';
+import { pmStore } from '@/data/pm/pmStoreInstance';
 import { resolvePmRoute, visibleMenus } from './menu';
 import { usePmAccess } from '@/features/pm/usePmAccess';
 import { EmptyHint } from './views/wbs/parts';
@@ -85,6 +86,9 @@ export default function PmScreen() {
   const access = usePmAccess();
   const menus = visibleMenus(access.money);
   const d = usePmDerived(people.nameOf);
+  // DB 모드만 (7-2): 저장소를 못 읽으면(스위치 가드 · 컬렉션 없음) 그 글 · 처음 열 때 점검 안내는 pm.manage 에게. 메모리 모드는 둘 다 없음
+  const snapQ = usePmSnapshot();
+  const notices = d && access.manage ? pmStore().notices() : [];
   const mut = usePmMutations(people.me, people.nameOf);
   const smut = usePmSiteMutations(people.me);
   const shortOf = (id: string) => { const p = d?.snap.projects.find((x) => x.id === id); return p ? shortName(p, d!.snap.projects) : id; };
@@ -152,6 +156,8 @@ export default function PmScreen() {
                   {NO_TITLE.has(route.view) && <FavStar />}
                 </div>
               )}
+              {snapQ.isError && <div className="mb-4 rounded border border-red-300 bg-red-50 px-3 py-2 text-[13px] text-red-700">{(snapQ.error as Error)?.message || 'PM 저장소를 읽지 못했습니다'}</div>}
+              {notices.map((n) => <div key={n} className="mb-2 rounded border border-amber-300 bg-amber-50 px-3 py-1.5 text-[12.5px] text-amber-800">{n}</div>)}
               {blocked
                 ? <EmptyHint title={access.loading ? '권한을 확인하는 중입니다' : '금액이 나오는 화면이라 프로젝트 관리(PMS) 관리 권한이 있어야 볼 수 있습니다'} hint={access.loading ? undefined : '권한은 관리자 콘솔 › 권한 › 역할 관리에서 최고 관리자가 지정합니다.'} />
                 : (() => { const V = VIEWS[route.view]; return V ? <V key={nav} /> : <PmPlaceholder viewId={route.view} />; })()}

@@ -1,7 +1,7 @@
 import { useEffect, useMemo } from 'react';
 import { nextWorkday, planCtx, type PlanCtx } from '@/domain/pm/plan';
-import type { PmDerived } from './usePm';
-import { pmStore } from '@/data/pm/pm.store';
+import { applyPmSnapshot, type PmDerived } from './usePm';
+import { pmStore } from '@/data/pm/pmStoreInstance';
 import { useQueryClient } from '@tanstack/react-query';
 
 /**
@@ -23,7 +23,7 @@ export function usePmPlanCtx(d: PmDerived | null): PlanCtx | null {
   const today = d?.today;
   // 어제 남은 일 자동 넘기기는 이 기능이 처음 열린 다음 근무일부터 (S.carryFrom — 근무 중에 목록이 바뀌지 않게)
   useEffect(() => {
-    if (today && cf === '') void pmStore().ensureCarryFrom(nextWorkday(today)).then(() => qc.invalidateQueries({ queryKey: ['pm'] }));
+    if (today && cf === '') void pmStore().ensureCarryFrom(nextWorkday(today)).then(() => applyPmSnapshot(qc), () => applyPmSnapshot(qc));
   }, [cf, today, qc]);
   return useMemo(() => (d ? planCtxOf(d) : null), [d]);
 }

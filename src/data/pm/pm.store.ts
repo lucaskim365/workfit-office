@@ -18,11 +18,15 @@ import { nextCrId } from '@/domain/pm/cr';
 import { nextIssueId } from '@/domain/pm/issue';
 import { ORG_FIELD, baseTplTasks, deriveMaster, makeTasks, stdTplTasks, type Master } from '@/domain/pm/master';
 import { codeDelBlock, nextCodeIn as nextCode, orgUse, stdOf } from '@/domain/pm/masterLink';
+import type { PmDb } from './pmDb';
+import { createPmSync, PmConflictError, PmNumberTakenError, PmPartialError, PmProjectTakenError, type PmProgress } from './pmSync';
 
 
 /**
- * PM 저장소 — 1단계는 **메모리 전용** (§5.1: `pm*` 컬렉션이 아직 없어 `VITE_DB_DRIVER=appwrite` 여도 메모리).
- * 새로 고침하면 데모 내장 데이터로 돌아간다. 7단계(허락 후)에 컬렉션별 `createCrudBackend` 로 바꾼다.
+ * PM 저장소 — 저장 함수 90개(`core`)가 메모리 `state` 위에서 계산한다.
+ * - 메모리 모드(기본): 새로 고침하면 데모 내장 데이터로 돌아간다.
+ * - DB 모드(`opts.db`, 7-2): 같은 계산을 사본 위에서 하고, 저장 계층(`pmSync`)이 바뀐 문서만 pm* 컬렉션에 쓴 뒤 바꿔 끼운다 (설계 5.7.2).
+ *   화면이 쓰는 하나는 `pmStoreInstance.ts` 가 `VITE_PM_DRIVER` 로 고른다 (5.7.4).
  *
  * 격리 (§3.2.1): 이 파일은 `pm*` 데이터만 가진다. 다른 그룹웨어 repo를 부르지 않는다.
  */
@@ -112,7 +116,39 @@ export interface PmSnapshot {
 
 const clone = <T>(v: T): T => structuredClone(v);
 let seq = 0;
-const nid = (p: string) => `${p}${Date.now().toString(36)}${(++seq).toString(36)}`;
+/** 새 id — 시각 + 순번 + 무작위 4글자 (두 사람이 같은 순간에 만들어도 안 겹치게, 5.7.2) */
+const defaultNid = (p: string) => `${p}${Date.now().toString(36)}${(++seq).toString(36)}${Math.random().toString(36).slice(2, 6).padEnd(4, '0')}`;
+
+export interface PmStoreOpts {
+  /** DB 모드 (설계 5.7.2) — 없으면 메모리 */
+  db?: PmDb;
+  /** 켜면 안 되는 상태 (스위치 가드 5.7.4) — 모든 읽기 · 저장이 이 글로 멈춤 */
+  blocked?: string;
+  /** 테스트: id 만들기를 정해진 순서로 */
+  nid?: (p: string) => string;
+}
+/** 저장 함수가 아닌 것 (테스트 ⓐ 가 '한 번도 안 부른 저장 함수'를 셀 때 뺌) */
+export const PM_READ_METHODS = ['snapshot', 'refresh', 'peek', 'gen', 'notices', 'onProgress', 'fundOf'] as const;
+
+const MSG = {
+  partial: '저장 중 연결이 끊겨 일부만 저장됐습니다. 화면은 저장된 상태로 다시 읽었습니다. 확인 후 다시 저장해 주세요',
+  failed: '저장하지 못했습니다 (DB 연결 오류). 확인 후 다시 저장해 주세요',
+  empty: 'PM 저장소가 비어 있어 저장할 수 없습니다 (데이터 옮기기 전)',
+  number: '번호가 겹쳐 3번 다시 했지만 저장하지 못했습니다. 잠시 뒤 다시 저장해 주세요',
+  project: (id: string) => `사업키 ${id} 는 다른 사람이 방금 먼저 등록했습니다. 다시 읽었으니 다른 사업키로 등록해 주세요`,
+};
+
+/** DB 모드 처음 상태 — 계획서 내장 데이터 · 기본 설정만 (처음 값(내장 데이터)은 메모리 모드 전용, 5.7.4) */
+function emptyState(): PmSnapshot {
+  return {
+    projects: [], tasks: [], functions: [], subtasks: [], baselines: [], logs: [], done: [], tickets: [], sourceVersion: '', baseDate: '',
+    plans: seedPlans(), planFunctions: seedPlanFunctions(), gov: [], planChecks: [], govLinks: [], agreements: [], msOk: [], issues: [], actions: [],
+    settings: { loadMax: LOAD_MAX_DEFAULT, carryFrom: '' }, weekChecks: [], later: [], updReq: [], planDays: [], planReps: [], pdfDrafts: [],
+    kpiDefs: [], kpiMeas: [], aiMeas: [], seen: [], favs: [], docs: [], crs: [], meetings: [], reports: [],
+    orgs: [], codes: [], stdTasks: [], templates: [], tlinks: [], moneyCfg: defaultMoneyCfg(), fundRules: [], items: [],
+    contracts: [], funds: [], pays: [], costs: [], oh: [],
+  };
+}
 
 /** 칸 이름 (변경 이력용) */
 const FIELD_LABEL: Partial<Record<keyof PmTask, string>> = {
@@ -136,7 +172,8 @@ export function diffText(a: PmTask, b: PmTask, nameOf: (id: string) => string = 
   return out.join(', ');
 }
 
-export function createPmStore(today = todayStr()) {
+/** 메모리 모드 처음 상태 — 데모 내장 데이터 (7-5 에서 DB 처음 값으로도 넣음) */
+function seedState(today: string): PmSnapshot {
   const projects = seedProjects();
   const tasks = seedTasks();
   const functions = seedFunctions();
@@ -148,7 +185,7 @@ export function createPmStore(today = todayStr()) {
     .map((p) => ({ p, ts: tasks.filter((t) => t.projectId === p.id) }))
     .filter((x) => x.ts.length)
     .map(({ p, ts }) => makeBaseline(p.id, ts, label, today, ''));
-  const state: PmSnapshot = { projects, tasks, functions, subtasks, baselines, logs: [], done: [], tickets: [], sourceVersion: SEED_VERSION,
+  return { projects, tasks, functions, subtasks, baselines, logs: [], done: [], tickets: [], sourceVersion: SEED_VERSION,
     baseDate: SEED_BASE_DATE, plans: seedPlans(), planFunctions: seedPlanFunctions(),
     gov: [], planChecks: [], govLinks: [], agreements: [], msOk: [], issues: [], actions: [],
     settings: { loadMax: LOAD_MAX_DEFAULT, carryFrom: '' },
@@ -165,6 +202,17 @@ export function createPmStore(today = todayStr()) {
     ...seedMoney(projects),
     costs: [], oh: [],
   };
+}
+
+export function createPmStore(today = todayStr(), opts: PmStoreOpts = {}) {
+  const dbMode = !!(opts.db || opts.blocked);
+  const nid = opts.nid ?? defaultNid;
+  /** 지금 상태. DB 모드 저장은 사본 위에서 계산한 뒤 다 쓰면 바꿔 끼움 (그래서 let) */
+  let state: PmSnapshot = dbMode ? emptyState() : seedState(today);
+  /** 끊긴 번호 바꾸기 (새 번호 → 옛 번호, DB 모드만) — 같은 새 번호로 다시 저장하면 이어서 마침 (5.7.2) */
+  let rekeyMarks = new Map<string, string>();
+  /** 이번 저장에서 바꾼 업무 번호 [옛, 새] — 저장 계층이 새 업무에 rekeyFrom 표시를 붙임 */
+  let rekeyed: Array<[string, string]> = [];
   /** 사업비 계산에 쓰는 값 (fundOf) */
   const fundCtx = (day: string): FundCtx => ({ projects: state.projects, plans: state.plans, rules: state.fundRules, cfg: state.moneyCfg, contracts: state.contracts, funds: state.funds, today: day });
 
@@ -176,7 +224,7 @@ export function createPmStore(today = todayStr()) {
     stdSeeded = true;
     Object.assign(state, m);
   };
-  syncMaster();
+  if (!dbMode) syncMaster();
 
   const log = (projectId: string, code: string, kind: PmChangeLog['kind'], text: string, by: string, day: string) => {
     state.logs.push({ id: nid('lg'), projectId, code, kind, text, date: day, by });
@@ -189,6 +237,14 @@ export function createPmStore(today = todayStr()) {
   /** 번호가 바뀌면 그 번호로 저장한 것도 따라가게 (rekey) */
   const rekey = (oldId: string, newId: string) => {
     if (oldId === newId) return;
+    if (dbMode) rekeyed.push([oldId, newId]);
+    // 새 번호로 이미 있는 표시 · 세부 기능은 버리고 옛 것을 옮김 — 끊긴 번호 바꾸기를 이어 할 때 먼저 옮겨 둔 사본 (5.7.2),
+    // 그 밖엔 지워진 업무가 남긴 것이라 새 업무에 붙으면 안 됨
+    state.functions = state.functions.filter((f) => f.id !== newId);
+    state.done = state.done.filter((d) => d.id !== newId);
+    state.docs = state.docs.filter((d) => d.id !== newId);
+    state.msOk = state.msOk.filter((m) => m.id !== newId);
+    state.tlinks = state.tlinks.filter((l) => l.id !== newId);
     for (const s of state.subtasks) if (s.taskId === oldId) s.taskId = newId;
     for (const f of state.functions) if (f.id === oldId) f.id = newId;
     for (const d of state.done) if (d.id === oldId) d.id = newId;
@@ -238,24 +294,38 @@ export function createPmStore(today = todayStr()) {
     else if (done === false) { s.done = false; s.doneDate = ''; s.doneBy = ''; }
   };
 
-  return {
-    async snapshot(): Promise<PmSnapshot> {
-      return clone(state);
-    },
+  /** 새 업무 순서 값 = 지금 가장 큰 값 + 1 (업무를 지운 뒤에도 끝에 붙게 — DB 는 order 로 다시 정렬, 5.7.1) */
+  const nextOrder = () => state.tasks.reduce((a, t) => Math.max(a, t.order), -1) + 1;
 
-    /** 업무 추가 (wbsNew·wbsCopy) — 같은 사업·단계의 마지막 뒤에 넣음 */
+  const core = {
+    /** 업무 추가 (wbsNew·wbsCopy) — 같은 사업·단계의 마지막 뒤에 넣음. 순서 값은 앞뒤 업무 사이 (그 업무 1건만 씀, 5.7.1) */
     async addTask(t: PmTask, by: string, day = todayStr()): Promise<PmTask> {
       if (state.tasks.some((x) => x.id === t.id)) throw new Error(`이미 ${t.code} 번호가 있습니다`);
       let at = -1;
       state.tasks.forEach((x, i) => { if (x.projectId === t.projectId && (x.group || x.stage) === (t.group || t.stage)) at = i; });
       if (at < 0) state.tasks.forEach((x, i) => { if (x.projectId === t.projectId) at = i; });
-      state.tasks.splice(at < 0 ? state.tasks.length : at + 1, 0, clone(t));
+      const pos = at < 0 ? state.tasks.length : at + 1;
+      const between = () => {
+        const a = state.tasks[pos - 1]?.order;
+        const b = state.tasks[pos]?.order;
+        return a == null ? (b == null ? 0 : b - 1) : b == null ? a + 1 : (a + b) / 2;
+      };
+      let order = between();
+      // 사이 값이 더 안 나뉘면(같은 자리에 수십 번 끼움) 순서를 0, 1, 2 … 로 다시 매김 — 드묾, 그때만 여러 건 씀
+      if (pos > 0 && pos < state.tasks.length && !(state.tasks[pos - 1].order < order && order < state.tasks[pos].order)) {
+        state.tasks.forEach((x, i) => { x.order = i; });
+        order = between();
+      }
+      const nt = { ...clone(t), order };
+      state.tasks.splice(pos, 0, nt);
       log(t.projectId, t.code, '추가', t.name, by, day);
-      return clone(t);
+      return clone(nt);
     },
 
     /** 업무 수정 (wbsEdit) — 바뀐 칸을 변경 이력에 */
     async updateTask(id: string, next: PmTask, by: string, nameOf?: (id: string) => string, day = todayStr()): Promise<PmTask> {
+      // 끊긴 번호 바꾸기를 같은 새 번호로 다시 저장 = 이어서 마침 ('이미 쓰는 번호' 막음 건너뜀, 먼저 만든 새 번호 업무는 이 저장으로 바꿈 — 5.7.2)
+      if (next.id !== id && rekeyMarks.get(next.id) === id) state.tasks = state.tasks.filter((x) => x.id !== next.id);
       const i = findTask(id);
       const old = state.tasks[i];
       if (next.id !== id && state.tasks.some((x) => x.id === next.id)) throw new Error(`이미 ${next.code} 번호가 있습니다`);
@@ -657,7 +727,7 @@ export function createPmStore(today = todayStr()) {
       const t = tpl === 'std' ? null : state.templates.find((x) => x.id === tpl);
       const src = tpl === 'std' ? stdTplTasks(state, p.biz) : t ? baseTplTasks(state.projects.find((x) => x.id === t.baseId), state.tasks) : [];
       if (!src.length) return 0;
-      const ts = makeTasks(p, src, keepPeople, state.tasks.length);
+      const ts = makeTasks(p, src, keepPeople, nextOrder());
       state.tasks.push(...ts);
       log(p.id, '-', '추가', `템플릿 '${tpl === 'std' ? '기준정보 표준 TASK' : t!.name}' 적용 — TASK ${ts.length}건`, by, day);
       state.baselines = [...state.baselines.filter((b) => b.id !== p.id), makeBaseline(p.id, ts, '최초 계획 (템플릿 적용)', day, by)];
@@ -686,6 +756,13 @@ export function createPmStore(today = todayStr()) {
       state.projects = state.projects.filter((x) => x.id !== id);
       state.tasks = state.tasks.filter((t) => t.projectId !== id);
       state.subtasks = state.subtasks.filter((x) => !gone.has(x.taskId));
+      // N1 (11/26 팀장, 데모와 다름): 업무 번호에 걸린 세부 기능 · 완료 기록 · 마일스톤 승인 · 표준 연결과 취소된 티켓도 —
+      // 같은 사업키로 다시 등록하면 같은 업무 번호가 생겨 옛 기록이 새 업무에 붙음 (데모 siteDel 은 S.fn · S.tickets 를 남김)
+      state.functions = state.functions.filter((x) => !gone.has(x.id));
+      state.done = state.done.filter((x) => !gone.has(x.id));
+      state.msOk = state.msOk.filter((x) => !gone.has(x.id));
+      state.tlinks = state.tlinks.filter((x) => !gone.has(x.id));
+      state.tickets = state.tickets.filter((x) => x.projectId !== id);
       state.issues = state.issues.filter((x) => x.projectId !== id);
       state.crs = state.crs.filter((x) => x.projectId !== id);
       state.actions = state.actions.filter((x) => x.projectId !== id);
@@ -722,7 +799,7 @@ export function createPmStore(today = todayStr()) {
         let code = r.code || x.code || nextCode(state.tasks, projectId, x.stage) || String(state.tasks.filter((t) => t.projectId === projectId).length + 1);
         const has = (w: string) => state.tasks.some((t) => t.projectId === projectId && t.code === w);
         if (has(code)) { let i = 2; while (has(`${code}#${i}`)) i++; code = `${code}#${i}`; }
-        const t = pmTaskSchema.parse({ id: `${projectId}|${code}`, projectId, stage: x.stage, code, name: x.name, output: x.output, pmName: p.pmName, start, end, milestone: x.milestone, status: '계획', order: state.tasks.length });
+        const t = pmTaskSchema.parse({ id: `${projectId}|${code}`, projectId, stage: x.stage, code, name: x.name, output: x.output, pmName: p.pmName, start, end, milestone: x.milestone, status: '계획', order: nextOrder() });
         state.tasks.push(t);
         state.tlinks.push({ id: t.id, stdId: x.id });
         if (rows.length === 1) log(projectId, code, '추가', `표준 세부 TASK 추가 — ${x.name}`, by, day);
@@ -921,8 +998,6 @@ export function createPmStore(today = todayStr()) {
       if (amt != null || memo.trim()) state.oh.push(pmOhSchema.parse({ id: m, amt, memo: memo.trim(), by, at: day }));
       state.moneyCfg = pmMoneyCfgSchema.parse({ ...state.moneyCfg, ohDefault: def });
     },
-    /** 사업비 구성 (fundOf) — 테스트 · 화면 확인용 */
-    fundOf(k: string, day = todayStr()) { return fundOf(fundCtx(day), k); },
 
     // ── 5단계: 주간 진행률 · 보고서 ──────────────────────
     /** 금주 특이사항 · 협조 요청 저장 (wcNote · wcReq · rptNote · rptReq) — 주마다 */
@@ -980,10 +1055,118 @@ export function createPmStore(today = todayStr()) {
       log(projectId, '', '기준선', `기준선 재설정 — ${label} (업무 ${ts.length}건)`, by, day);
     },
   };
+
+  type Core = typeof core;
+  type CoreKey = keyof Core;
+  let generation = 0;
+  let notices: string[] = [];
+  const reads = {
+    /** 사업비 구성 (fundOf) — 테스트 · 화면 확인용 */
+    fundOf(k: string, day = todayStr()) { return fundOf(fundCtx(day), k); },
+    /** 지금 상태 (다시 읽지 않음) + 세대 번호 */
+    peek(): { snap: PmSnapshot; gen: number } { return { snap: clone(state), gen: generation }; },
+    /** 저장 · 다시 읽기마다 +1 — 화면이 받은 읽기 결과가 이보다 옛것이면 버림 (K2) */
+    gen: () => generation,
+    /** 처음 열 때 점검 안내 (DB 모드, pm.manage 에게) */
+    notices: () => [...notices],
+  };
+
+  if (!dbMode) {
+    return {
+      ...core,
+      ...reads,
+      async snapshot(): Promise<PmSnapshot> { return clone(state); },
+      /** 메모리 모드는 다시 읽을 곳이 없음 = 지금 상태 */
+      async refresh() { return reads.peek(); },
+      onProgress(_fn: ((p: PmProgress) => void) | null) { /* 메모리는 바로 끝남 */ },
+    };
+  }
+
+  // ── DB 모드: 저장 계층 (5.7.2 · 5.7.3) ──────────────────
+  const sync = opts.db ? createPmSync(opts.db) : null;
+  let loaded = false;
+  let needReload = false;
+  let empty = false;
+  /** 저장 · 다시 읽기는 한 줄로 (K2) — 둘째 저장은 첫째가 다 쓰고 상태를 바꾼 뒤에 계산 */
+  let tail: Promise<unknown> = Promise.resolve();
+  const line = <T>(fn: () => Promise<T>): Promise<T> => {
+    const p = tail.then(fn, fn);
+    tail = p.catch(() => undefined);
+    return p;
+  };
+  const reload = async () => {
+    if (!sync) throw new Error(opts.blocked);
+    const r = await sync.load(emptyState());
+    state = r.snap;
+    rekeyMarks = r.rekeyMarks;
+    notices = r.notices;
+    empty = r.empty;
+    stdSeeded = true;
+    loaded = true;
+    needReload = false;
+    generation++;
+  };
+  /** 실패 뒤 다시 읽기 — 이것도 안 되면 다음 저장 전에 다시 읽게 표시만 */
+  const reloadAfterFail = async () => { try { await reload(); } catch { needReload = true; } };
+  const ensure = async () => { if (!loaded || needReload) await reload(); };
+  /** 계산 전에 DB 전체를 다시 읽는 저장 (K3) — 여러 컬렉션을 지우거나 옮김 */
+  const K3: Partial<Record<CoreKey, (a: unknown[]) => boolean>> = {
+    removeProject: () => true, removeStd: () => true, removeCode: () => true, removeMeeting: () => true,
+    updateTask: (a) => (a[1] as PmTask)?.id !== a[0],
+    saveCode: (a) => { const c = a[0] as PmCode; const o = state.codes.find((x) => x.id === c?.id); return !!o && o.name !== c.name; },
+  };
+
+  const run = (name: CoreKey, args: unknown[]) => line(async () => {
+    await ensure();
+    if (empty) throw new Error(MSG.empty);
+    for (let attempt = 1; ; attempt++) {
+      if (K3[name]?.(args)) await reload();
+      const prev = state;
+      const draft = clone(prev);
+      state = draft;
+      rekeyed = [];
+      let res: unknown;
+      try {
+        res = await (core[name] as (...a: unknown[]) => Promise<unknown>)(...args);
+      } finally {
+        state = prev;
+      }
+      const p = sync!.plan(draft, rekeyed);
+      if (p.writes) {
+        try {
+          await sync!.check(p);
+          await sync!.write(p);
+        } catch (e) {
+          if (e instanceof PmNumberTakenError && attempt < 3) { await reloadAfterFail(); continue; }
+          await reloadAfterFail();
+          if (e instanceof PmNumberTakenError) throw new Error(MSG.number);
+          if (e instanceof PmProjectTakenError) throw new Error(MSG.project(e.id));
+          if (e instanceof PmConflictError) throw e;
+          if (e instanceof PmPartialError) throw new Error(MSG.partial);
+          throw new Error(`${MSG.failed} — ${(e as Error)?.message ?? e}`);
+        }
+      }
+      state = draft;
+      generation++;
+      return res;
+    }
+  });
+  const wrapped = Object.fromEntries((Object.keys(core) as CoreKey[]).map((k) => [k, (...a: unknown[]) => run(k, a)])) as unknown as Core;
+  return {
+    ...wrapped,
+    ...reads,
+    async snapshot(): Promise<PmSnapshot> { return line(async () => { await ensure(); return clone(state); }); },
+    /** DB 전체 다시 읽기 (같은 줄에서 — 저장 사이에만) → 상태 + 세대 */
+    async refresh() { return line(async () => { await reload(); return reads.peek(); }); },
+    /** 쓰기가 20건 넘는 저장의 진행 (저장 중 n / 전체) — 화면 표시는 7-6 */
+    onProgress(fn: ((p: PmProgress) => void) | null) { sync?.onProgress(fn); },
+  };
 }
 
 export type PmStore = ReturnType<typeof createPmStore>;
 
-let store: PmStore | null = null;
-/** 화면이 쓰는 저장소 하나 (처음 부를 때 만든다) */
-export const pmStore = () => (store ??= createPmStore());
+/** 화면 훅이 쓰는 읽기 — 늦게 도착한 옛 읽기 결과는 버리고 지금 상태로 (K2 b) */
+export async function latestSnapshot(s: PmStore): Promise<PmSnapshot> {
+  const r = await s.refresh();
+  return r.gen < s.gen() ? s.peek().snap : r.snap;
+}

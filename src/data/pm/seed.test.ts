@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { liveOf, mdAvg, mdAvgRaw, mdSum, groupsOf, projectCard, filterTasks, PM_FILTER_DEFAULT, tabCounts, doneInfoOf, type Live, type FilterCtx } from '@/domain/pm/rules';
 import type { PmTask } from '@/domain/pm/schema';
-import { createPmStore } from './pm.store';
+import { eachMode } from './pmTestStores';
 import { seedProjects, seedTasks, seedFunctions, seedSubtasks } from './seed';
 
 /**
@@ -69,15 +69,15 @@ test('세부 작업 미리 넣기 = FP 신규·변경만, 담당 비움', () => 
   assert.equal(subs.filter((s) => s.taskId === 'P2|01-01').length, fn.items.filter((i) => i.kind !== '재사용').length);
 });
 
-test('저장소: 켜질 때 기준선 "최초 계획"을 만든다 → 일정 변동 0건', async () => {
-  const s = createPmStore(TODAY);
+eachMode('저장소: 켜질 때 기준선 "최초 계획"을 만든다 → 일정 변동 0건', async (mk) => {
+  const s = mk(TODAY);
   const snap = await s.snapshot();
   assert.equal(snap.baselines.length, 6);
   assert.ok(snap.baselines.every((b) => b.label.startsWith('최초 계획') && b.date === TODAY));
 });
 
-test('저장소: 진행률 100 → 완료 기록, 완료 취소 → 이전 %', async () => {
-  const s = createPmStore(TODAY);
+eachMode('저장소: 진행률 100 → 완료 기록, 완료 취소 → 이전 %', async (mk) => {
+  const s = mk(TODAY);
   const id = 'P2|01-01';
   await s.setProgress(id, 40, '테스트', 'u1', TODAY);
   await s.setProgress(id, 100, 'TASK 완료 처리', 'u1', TODAY);
@@ -92,8 +92,8 @@ test('저장소: 진행률 100 → 완료 기록, 완료 취소 → 이전 %', a
   assert.equal(snap.logs.length, 3);
 });
 
-test('저장소: 번호를 바꾸면 세부 작업·기준선도 따라감', async () => {
-  const s = createPmStore(TODAY);
+eachMode('저장소: 번호를 바꾸면 세부 작업·기준선도 따라감', async (mk) => {
+  const s = mk(TODAY);
   const snap = await s.snapshot();
   const t = snap.tasks.find((x) => x.id === 'P2|01-01')!;
   await s.updateTask(t.id, { ...t, id: 'P2|01-99', code: '01-99' }, 'u1');

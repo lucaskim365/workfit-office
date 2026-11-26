@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { pmStore, type PmSnapshot } from '@/data/pm/pm.store';
+import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
+import { latestSnapshot, type PmSnapshot } from '@/data/pm/pm.store';
+import { pmStore } from '@/data/pm/pmStoreInstance';
 import { doneInfoOf, liveOf, todayStr, type FilterCtx, type Live } from '@/domain/pm/rules';
 import type { PmAgreementChange, PmDoc, PmPlanItem, PmProject, PmSubtask, PmTask, PmTaskDone, PmTaskFunctions } from '@/domain/pm/schema';
 import { isDrop, lastUpdate, siteBrief, siteCtxOf, siteStage, type SiteBrief, type SiteCtx, type SiteInputs, type SiteStage } from '@/domain/pm/site';
@@ -9,12 +10,19 @@ import { docOf, type DocState } from '@/domain/pm/doc';
 
 /**
  * PM 화면 훅. 저장소 전체를 한 번에 읽는다 (업무 338건 — 작음).
- * 저장 후 다시 읽기 (TanStack Query invalidate).
+ * 다시 읽기 (설계 5.7.3 ②, K1): 마지막으로 읽은 지 30초가 지난 뒤 이 훅을 쓰는 화면이 새로 붙을 때 (그룹웨어 기본과 같음).
+ * 저장 성공 · 실패 때는 다시 읽지 않고 저장소가 가진 상태를 바로 넣음 (요청 0 — 실패 · 충돌이면 저장소가 이미 DB 를 다시 읽어 둠).
  */
 const KEY = ['pm'] as const;
+const SNAP_KEY = [...KEY, 'snapshot'] as const;
 
 export function usePmSnapshot() {
-  return useQuery({ queryKey: [...KEY, 'snapshot'], queryFn: () => pmStore().snapshot(), staleTime: Infinity });
+  return useQuery({ queryKey: SNAP_KEY, queryFn: () => latestSnapshot(pmStore()), staleTime: 30_000 });
+}
+
+/** 저장 뒤 화면에 저장소 상태를 넣음 — 읽은 시각은 그대로라 30초 세기가 이어짐 */
+export function applyPmSnapshot(qc: QueryClient) {
+  qc.setQueryData(SNAP_KEY, pmStore().peek().snap, { updatedAt: qc.getQueryState(SNAP_KEY)?.dataUpdatedAt });
 }
 
 /** 화면에서 여러 번 쓰는 파생값 — 업무별 상태·실적(티켓 반영), 완료 기록, 세부 작업 묶음, 티켓 색인 */
@@ -73,16 +81,16 @@ export function usePmDerived(nameOf?: (id: string) => string): PmDerived | null 
   }, [snap, nameOf]);
 }
 
-function useInvalidate() {
+function useApply() {
   const qc = useQueryClient();
-  return () => qc.invalidateQueries({ queryKey: KEY });
+  return () => applyPmSnapshot(qc);
 }
 
 export function usePmMutations(me: string, nameOf?: (id: string) => string) {
-  const done = useInvalidate();
+  const done = useApply();
   const s = pmStore();
   const nm = nameOf ?? ((x: string) => x);
-  const m = <A, R = unknown>(fn: (a: A) => Promise<R>) => useMutation({ mutationFn: fn, onSuccess: done });
+  const m = <A, R = unknown>(fn: (a: A) => Promise<R>) => useMutation({ mutationFn: fn, onSuccess: done, onError: done });
   return {
     addTask: m((t: PmTask) => s.addTask(t, me)),
     updateTask: m(({ id, next }: { id: string; next: PmTask }) => s.updateTask(id, next, me, nameOf)),
@@ -188,9 +196,9 @@ export function usePmSites(d: PmDerived | null): { rows: PmSiteRow[]; all: PmSit
 }
 
 export function usePmSiteMutations(me: string) {
-  const done = useInvalidate();
+  const done = useApply();
   const s = pmStore();
-  const m = <A, R = unknown>(fn: (a: A) => Promise<R>) => useMutation({ mutationFn: fn, onSuccess: done });
+  const m = <A, R = unknown>(fn: (a: A) => Promise<R>) => useMutation({ mutationFn: fn, onSuccess: done, onError: done });
   return {
     checkDeadlines: m(({ items, date, bulk }: { items: Array<{ projectId: string; kind: 'gov' | 'plan'; id: string }>; date: string; bulk: boolean }) => s.checkDeadlines(items, date, me, bulk)),
     uncheckDeadline: m(({ projectId, kind, id }: { projectId: string; kind: 'gov' | 'plan'; id: string }) => s.uncheckDeadline(projectId, kind, id)),
