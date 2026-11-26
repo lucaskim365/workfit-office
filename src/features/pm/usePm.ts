@@ -18,7 +18,10 @@ const KEY = ['pm'] as const;
 const SNAP_KEY = [...KEY, 'snapshot'] as const;
 
 export function usePmSnapshot() {
-  return useQuery({ queryKey: SNAP_KEY, queryFn: () => latestSnapshot(pmStore()), staleTime: 30_000 });
+  // 네트워크가 끊겼다 다시 붙을 때 저절로 다시 읽지 않음 (7-6 N4): 수정 창을 연 채 다시 읽으면 저장 계층이 '마지막으로 아는 내용'을
+  // 남이 고친 값으로 바꿔, 옛 값으로 채워진 창의 저장이 ①(내용 비교)에 안 걸리고 남의 변경을 덮음 (시험: B 진행률 60 → A 창 저장으로 50).
+  // 창이 열려 있는 동안 다른 다시 읽기 길(화면이 새로 붙음 · 다른 저장 실패)은 창이 화면을 덮어 생기지 않음.
+  return useQuery({ queryKey: SNAP_KEY, queryFn: () => latestSnapshot(pmStore()), staleTime: 30_000, refetchOnReconnect: false });
 }
 
 /** 저장 뒤 화면에 저장소 상태를 넣음 — 읽은 시각은 그대로라 30초 세기가 이어짐 */
