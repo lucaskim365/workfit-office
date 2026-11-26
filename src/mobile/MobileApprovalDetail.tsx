@@ -55,8 +55,8 @@ export default function MobileApprovalDetail() {
   const { user } = useAuth();
   const me = user!.id;
   // 문서를 열면 읽음으로 기록(안읽음 표시 해제) — 알림으로 바로 들어온 경우 포함
-  useMarkApprovalReadOnOpen(me, id);
   const doc = useApprovalDoc(id);
+  useMarkApprovalReadOnOpen(me, id, doc);
   useAutoMarkPostRead(doc?.id ?? '', me);
   // 후열(공람)로 전달받은 사람은 문서를 열람할 수 있다. 보안 필드는 그대로 가린다(웹 ApprovalDocumentView와 같은 규칙).
   const postReadQuery = useDocPostReads(doc?.id ?? '');
