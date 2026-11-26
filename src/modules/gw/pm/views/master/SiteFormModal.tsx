@@ -7,6 +7,7 @@ import { INDUSTRIES, alignPre, nextProjectKey, prePast, projectCheck } from '@/d
 import { pmProjectSchema, type PmProject } from '@/domain/pm/schema';
 import type { PmDerived, usePmMutations, usePmSiteMutations } from '@/features/pm/usePm';
 import type { usePmPeople } from '../../usePmPeople';
+import { usePmPartialLock } from '@/features/pm/pmSaveBus';
 
 /**
  * 사업 등록 · 정보 수정 (데모 siteForm 2919) — 데모 칸 그대로 (새 칸 없음).
@@ -50,6 +51,7 @@ export function SiteFormModal({ s, presetTpl, d, people, mut, smut, money, short
 }) {
   const { snap } = d;
   const isNew = !s;
+  const lock = usePmPartialLock() && isNew;
   const today = todayStr();
   const [v, setV] = useState<V>(() => {
     if (s) return { ...s, budget: man(s.budget), subsidy: man(s.subsidy), warrantyM: s.warrantyM == null ? '' : String(s.warrantyM), lines: [...s.lines], equip: [...s.equip], tpl: '', keepPeople: false };
@@ -121,9 +123,9 @@ export function SiteFormModal({ s, presetTpl, d, people, mut, smut, money, short
       footer={(
         <div className="flex w-full items-center gap-2">
           {!isNew && <Button variant="secondary" onClick={() => void del()}>삭제</Button>}
-          <span className="flex-1 text-right text-[12px] font-bold text-danger" role="alert">{err?.[0]}</span>
+          <span className="flex-1 text-right text-[12px] font-bold text-danger" role="alert">{lock ? '사업 등록이 중간에 끊겼습니다. 이 창을 닫고 사업 화면에서 [삭제]로 지운 뒤 다시 등록해 주세요' : err?.[0]}</span>
           <Button variant="secondary" onClick={onClose}>취소</Button>
-          <Button onClick={() => void save()}>{isNew ? '등록' : '저장'}</Button>
+          <Button disabled={lock} onClick={() => void save()}>{isNew ? '등록' : '저장'}</Button>
         </div>
       )}>
       <p className="mb-3 rounded-lg bg-panel-alt px-3 py-2 text-[12px] text-ink2">

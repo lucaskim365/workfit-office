@@ -11,6 +11,7 @@ import { EmptyHint } from './views/wbs/parts';
 import { usePmPeople } from './usePmPeople';
 import { PmScreenTabs, PmViewSwitch } from './ui/PmTabs';
 import { FavBox, FavStar, PmBell, PmSearch, PmShellProvider, type Fav } from './ui/PmShell';
+import { PmSaveLayer } from './ui/PmSaveLayer';
 import { PmPlaceholder } from './views/PmPlaceholder';
 import { WbsListView } from './views/wbs/WbsListView';
 import { GanttView } from './views/wbs/GanttView';
@@ -166,6 +167,7 @@ export default function PmScreen() {
         </GwSplit>
       </div>
       {modals.node}
+      <PmSaveLayer />
     </PmShellProvider>
   );
 }

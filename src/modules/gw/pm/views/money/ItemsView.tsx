@@ -10,6 +10,7 @@ import { usePmDerived, usePmMutations } from '@/features/pm/usePm';
 import { usePmPeople } from '../../usePmPeople';
 import { EmptyHint, Tag } from '../wbs/parts';
 import { ScreenHead } from '../dash/parts';
+import { PARTIAL_LOCK_MSG, usePmPartialLock } from '@/features/pm/pmSaveBus';
 
 /**
  * 기준정보 › 품목 · 단가 (money/items, 데모 pMoneyItems 4980 · ciList 4992 · ciForm 5009) — 6-4.
@@ -94,6 +95,7 @@ export function ItemsView() {
 /** 품목 추가 · 수정 창 (ciForm) — 금액은 원, 지난 견적 표 */
 function ItemModal({ it, onSave, onRemove, onClose }: { it: PmItem | null; onSave: (x: PmItem) => Promise<void>; onRemove: (x: PmItem) => Promise<void>; onClose: () => void }) {
   const isNew = !it;
+  const lock = usePmPartialLock() && isNew;
   const [v, setV] = useState<ItemDraft>(() => itemDraft(it));
   const [err, setErr] = useState<[string, string] | null>(null);
   const set = <K extends keyof ItemDraft>(k: K, x: ItemDraft[K]) => setV((p) => ({ ...p, [k]: x }));
@@ -114,9 +116,9 @@ function ItemModal({ it, onSave, onRemove, onClose }: { it: PmItem | null; onSav
       footer={(
         <div className="flex w-full items-center gap-2">
           {!isNew && <Button variant="secondary" onClick={() => void del()}>삭제</Button>}
-          <span className="flex-1 text-right text-[12px] font-bold text-danger" role="alert">{err?.[0] ?? ''}</span>
+          <span className="flex-1 text-right text-[12px] font-bold text-danger" role="alert">{lock ? PARTIAL_LOCK_MSG : err?.[0] ?? ''}</span>
           <Button variant="secondary" onClick={onClose}>취소</Button>
-          <Button onClick={() => void save()}>저장</Button>
+          <Button disabled={lock} onClick={() => void save()}>저장</Button>
         </div>
       )}>
       <p className="mb-2 text-[12px] text-ink2">{isNew

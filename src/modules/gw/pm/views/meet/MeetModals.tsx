@@ -5,6 +5,7 @@ import { addDays } from '@/domain/pm/rules';
 import { actCheck, meetCheck } from '@/domain/pm/meet';
 import { PM_MEET_TYPES, type PmAction, type PmMeeting, type PmProject } from '@/domain/pm/schema';
 import type { PmPerson } from '../../usePmPeople';
+import { PARTIAL_LOCK_MSG, usePmPartialLock } from '@/features/pm/pmSaveBus';
 
 /**
  * 회의록 작성 · 수정 (mtForm 3317) · 액션 아이템 추가 · 수정 (actForm 3342) — 데모 칸 그대로 (새 칸 없음).
@@ -21,12 +22,12 @@ function F({ label, req, full, bad, help, children }: { label: string; req?: boo
     </label>
   );
 }
-const Foot = ({ err, onDel, onClose, onSave, saveLabel }: { err: string; onDel?: () => void; onClose: () => void; onSave: () => void; saveLabel: string }) => (
+const Foot = ({ err, onDel, onClose, onSave, saveLabel, lock }: { err: string; onDel?: () => void; onClose: () => void; onSave: () => void; saveLabel: string; lock?: boolean }) => (
   <div className="flex w-full items-center gap-2">
     {onDel && <Button variant="secondary" onClick={onDel}>삭제</Button>}
-    <span className="flex-1 text-right text-[12px] font-bold text-danger" role="alert">{err}</span>
+    <span className="flex-1 text-right text-[12px] font-bold text-danger" role="alert">{lock ? PARTIAL_LOCK_MSG : err}</span>
     <Button variant="secondary" onClick={onClose}>취소</Button>
-    <Button onClick={onSave}>{saveLabel}</Button>
+    <Button disabled={lock} onClick={onSave}>{saveLabel}</Button>
   </div>
 );
 const SiteSelect = ({ value, onChange, projects, shortOf, none }: { value: string; onChange: (v: string) => void; projects: readonly PmProject[]; shortOf: (id: string) => string; none: string }) => (
@@ -54,6 +55,7 @@ export function MeetFormModal({ m, defSite, me, today, projects, people, shortOf
   onClose: () => void;
 }) {
   const isNew = !m;
+  const lock = usePmPartialLock() && isNew;
   const [v, setV] = useState<MeetInput>(() => (m ? { ...m } : { projectId: defSite, type: '주간 회의', title: '', date: today, place: '', attIds: [me], ext: '', content: '', decision: '' }));
   const [addAct, setAddAct] = useState(true);
   const [err, setErr] = useState<[string, string] | null>(null);
@@ -71,7 +73,7 @@ export function MeetFormModal({ m, defSite, me, today, projects, people, shortOf
   const tog = (id: string) => set('attIds', v.attIds.includes(id) ? v.attIds.filter((x) => x !== id) : [...v.attIds, id]);
   return (
     <Modal open onClose={onClose} width={720} title={isNew ? '회의록 작성' : '회의록 수정'}
-      footer={<Foot err={err?.[0] ?? ''} onDel={isNew ? undefined : () => void del()} onClose={onClose} onSave={() => void save()} saveLabel="저장" />}>
+      footer={<Foot err={err?.[0] ?? ''} onDel={isNew ? undefined : () => void del()} onClose={onClose} onSave={() => void save()} saveLabel="저장" lock={lock} />}>
       <div className="grid gap-3 sm:grid-cols-2">
         <F label="사업"><SiteSelect value={v.projectId} onChange={(x) => set('projectId', x)} projects={projects} shortOf={shortOf} none="공통 (사업 무관)" /></F>
         <F label="회의 구분">
@@ -119,6 +121,7 @@ export function ActFormModal({ a, mt, defSite, me, today, projects, meetings, pe
   onClose: () => void;
 }) {
   const isNew = !a;
+  const lock = usePmPartialLock() && isNew;
   const src = a ? meetings.find((x) => x.id === a.meetingId) ?? null : mt;
   const [v, setV] = useState<ActInput & { done: boolean }>(() => (a ? { ...a } : { text: '', whoId: me, due: addDays(today, 7), projectId: mt ? mt.projectId : defSite, meetingId: mt?.id ?? '', done: false }));
   const [more, setMore] = useState(!!mt);
@@ -135,7 +138,7 @@ export function ActFormModal({ a, mt, defSite, me, today, projects, meetings, pe
   const bad = (f: string) => err?.[1] === f;
   return (
     <Modal open onClose={onClose} width={640} title={isNew ? '액션 아이템 추가' : '액션 아이템 수정'}
-      footer={<Foot err={err?.[0] ?? ''} onDel={isNew ? undefined : () => void onRemove()} onClose={onClose} onSave={() => void save()} saveLabel="저장" />}>
+      footer={<Foot err={err?.[0] ?? ''} onDel={isNew ? undefined : () => void onRemove()} onClose={onClose} onSave={() => void save()} saveLabel="저장" lock={lock} />}>
       {src && <p className="mb-3 rounded-lg bg-panel-alt px-3 py-2 text-[12px] text-ink2">회의: <b>{src.title}</b> ({src.date})</p>}
       <div className="grid gap-3 sm:grid-cols-2">
         <F label="할 일" req full bad={bad('text')}><input className={inp} value={v.text} placeholder="예: 설비업체에 I/O 리스트 요청" onChange={(e) => set('text', e.target.value)} /></F>

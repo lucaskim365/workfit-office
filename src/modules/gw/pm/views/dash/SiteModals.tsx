@@ -6,6 +6,7 @@ import { isDone, leftText, monthDay } from '@/domain/pm/rules';
 import { PM_AGR_STATES, type PmAgreementChange, type PmFixItem, type PmGovRecord } from '@/domain/pm/schema';
 import type { PmPerson } from '../../usePmPeople';
 import { EmptyHint, Tag } from '../wbs/parts';
+import { PARTIAL_LOCK_MSG, usePmPartialLock } from '@/features/pm/pmSaveBus';
 
 /**
  * 사업별 화면 팝업 — 점검 결과 기록(govResModal) · 지적 사항(govItemsModal) · 필수 TASK 연결(govLinkModal) ·
@@ -57,6 +58,8 @@ export function GovResultModal({ c, g, short, people, me, onSave, onRemove, onCl
   const [items, setItems] = useState<Array<{ id: string; text: string; whoId: string; st?: PmFixItem['st'] }>>(r?.items.map((x) => ({ id: x.id, text: x.text, whoId: x.whoId, st: x.st })) ?? []);
   const [err, setErr] = useState('');
   const isFix = !!F && v === '보완';
+  // 새 지적 사항(id 없음)이 든 저장이 끊긴 뒤 다시 저장하면 같은 지적 사항이 또 생김 (결정 (나))
+  const lock = usePmPartialLock() && items.some((x) => !x.id);
   const save = async () => {
     if (!v) { setErr('판정을 고르세요'); return; }
     if (isFix && !fix) { setErr('↑ 통보 공문에 적힌 보완 기한을 넣어야 저장됩니다'); return; }
@@ -69,10 +72,10 @@ export function GovResultModal({ c, g, short, people, me, onSave, onRemove, onCl
       footer={(
         <>
           {r?.v && <Button variant="secondary" onClick={() => void del()}>기록 지우기</Button>}
-          {err && <span className="text-[11.5px] font-bold text-danger">{err}</span>}
+          {(err || lock) && <span className="text-[11.5px] font-bold text-danger" role="alert">{lock ? PARTIAL_LOCK_MSG : err}</span>}
           <span className="flex-1" />
           <Button variant="secondary" onClick={onClose}>취소</Button>
-          <Button onClick={() => void save()}>저장</Button>
+          <Button disabled={lock} onClick={() => void save()}>저장</Button>
         </>
       )}>
       <div className="space-y-3 text-[12.5px]">

@@ -140,6 +140,16 @@ const MSG = {
   project: (id: string) => `사업키 ${id} 는 다른 사람이 방금 먼저 등록했습니다. 다시 읽었으니 다른 사업키로 등록해 주세요`,
 };
 
+/**
+ * DB 모드 저장 실패 (충돌 · 일부만 저장 · 연결 오류 · 번호 · 사업키 · 빈 저장소) — 화면이 공통 안내를 띄우는 표시 (7-6).
+ * 메모리 모드의 입력 검사 오류(이미 쓰는 번호 등)는 이 종류가 아님 → 화면 동작 그대로.
+ */
+export class PmDbSaveError extends Error {
+  constructor(msg: string, public readonly partial = false) { super(msg); this.name = 'PmDbSaveError'; }
+}
+export const isPmDbSaveError = (e: unknown): e is Error => e instanceof PmDbSaveError || e instanceof PmConflictError;
+export const isPmPartialSave = (e: unknown) => e instanceof PmDbSaveError && e.partial;
+
 /** DB 모드 처음 상태 — 계획서 내장 데이터 · 기본 설정만 (처음 값(내장 데이터)은 메모리 모드 전용, 5.7.4) */
 function emptyState(): PmSnapshot {
   return {
@@ -1133,7 +1143,7 @@ export function createPmStore(today = todayStr(), opts: PmStoreOpts = {}) {
 
   const run = (name: CoreKey, args: unknown[]) => line(async () => {
     await ensure();
-    if (empty) throw new Error(MSG.empty);
+    if (empty) throw new PmDbSaveError(MSG.empty);
     for (let attempt = 1; ; attempt++) {
       if (K3[name]?.(args)) await reload();
       const prev = state;
@@ -1154,11 +1164,11 @@ export function createPmStore(today = todayStr(), opts: PmStoreOpts = {}) {
         } catch (e) {
           if (e instanceof PmNumberTakenError && attempt < 3) { await reloadAfterFail(); continue; }
           await reloadAfterFail();
-          if (e instanceof PmNumberTakenError) throw new Error(MSG.number);
-          if (e instanceof PmProjectTakenError) throw new Error(MSG.project(e.id));
+          if (e instanceof PmNumberTakenError) throw new PmDbSaveError(MSG.number);
+          if (e instanceof PmProjectTakenError) throw new PmDbSaveError(MSG.project(e.id));
           if (e instanceof PmConflictError) throw e;
-          if (e instanceof PmPartialError) throw new Error(MSG.partial);
-          throw new Error(`${MSG.failed} — ${(e as Error)?.message ?? e}`);
+          if (e instanceof PmPartialError) throw new PmDbSaveError(MSG.partial, true);
+          throw new PmDbSaveError(`${MSG.failed} — ${(e as Error)?.message ?? e}`);
         }
       }
       state = draft;

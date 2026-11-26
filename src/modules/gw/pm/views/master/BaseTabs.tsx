@@ -9,6 +9,7 @@ import type { PmDerived, usePmMutations } from '@/features/pm/usePm';
 import type { usePmPeople } from '../../usePmPeople';
 import { EmptyHint, ProjectTag, Tag } from '../wbs/parts';
 import { hasV, MissBar } from './BaseView';
+import { PARTIAL_LOCK_MSG, usePmPartialLock } from '@/features/pm/pmSaveBus';
 
 /**
  * 기준정보 › 사업 · 인력 · 코드의 나머지 탭 (데모 baseLink 3815 · baseGen 3882 · baseOrgs 3740 · baseUsers 3749 · baseCodes 3768 · baseStdTasks 3947)
@@ -34,12 +35,12 @@ function F({ label, req, full, bad, help, children }: { label: string; req?: boo
     </label>
   );
 }
-const Foot = ({ err, onDel, onClose, onSave }: { err: string; onDel?: () => void; onClose: () => void; onSave: () => void }) => (
+const Foot = ({ err, onDel, onClose, onSave, lock }: { err: string; onDel?: () => void; onClose: () => void; onSave: () => void; lock?: boolean }) => (
   <div className="flex w-full items-center gap-2">
     {onDel && <Button variant="secondary" onClick={onDel}>삭제</Button>}
-    <span className="flex-1 text-right text-[12px] font-bold text-danger" role="alert">{err}</span>
+    <span className="flex-1 text-right text-[12px] font-bold text-danger" role="alert">{lock ? PARTIAL_LOCK_MSG : err}</span>
     <Button variant="secondary" onClick={onClose}>취소</Button>
-    <Button onClick={onSave}>저장</Button>
+    <Button disabled={lock} onClick={onSave}>저장</Button>
   </div>
 );
 const SiteBtns = ({ d, cur, onPick, shortOf }: { d: PmDerived; cur: string; onPick: (k: string) => void; shortOf: (id: string) => string }) => (
@@ -321,6 +322,7 @@ export function OrgTab({ d, mut, manage, shortOf, say, q, editing, setEditing }:
 
 function OrgFormModal({ o, defType, d, shortOf, onSave, onRemove, onClose }: { o: PmOrg | null; defType: PmOrg['type']; d: PmDerived; shortOf: (id: string) => string; onSave: (o: PmOrg) => Promise<void>; onRemove: (o: PmOrg) => Promise<void>; onClose: () => void }) {
   const isNew = !o;
+  const lock = usePmPartialLock() && isNew;
   const used = o ? orgUse(o, d.snap.projects) : [];
   const [v, setV] = useState<PmOrg>(() => o ?? { id: '', type: defType, name: '', bizRegNo: '', ceo: '', region: '', contact: '', phone: '', email: '', note: '', auto: false });
   const [err, setErr] = useState<[string, string] | null>(null);
@@ -339,7 +341,7 @@ function OrgFormModal({ o, defType, d, shortOf, onSave, onRemove, onClose }: { o
   };
   const bad = (f: string) => err?.[1] === f;
   return (
-    <Modal open onClose={onClose} width={680} title={isNew ? '기업 · 기관 등록' : `기업 · 기관 수정 — ${o.name}`} footer={<Foot err={err?.[0] ?? ''} onDel={isNew ? undefined : () => void del()} onClose={onClose} onSave={() => void save()} />}>
+    <Modal open onClose={onClose} width={680} title={isNew ? '기업 · 기관 등록' : `기업 · 기관 수정 — ${o.name}`} footer={<Foot lock={lock} err={err?.[0] ?? ''} onDel={isNew ? undefined : () => void del()} onClose={onClose} onSave={() => void save()} />}>
       {!isNew && used.length > 0 && <p className="mb-3 rounded-lg bg-panel-alt px-3 py-2 text-[12px] text-ink2">사업 {used.length}개({used.map((p) => shortOf(p.id)).join(', ')})의 {o.type} 칸에 쓰입니다. 이름을 바꾸면 그 사업들도 함께 바뀝니다.</p>}
       <div className="grid gap-3 sm:grid-cols-2">
         <F label="구분" req bad={bad('type')}><select className={inp} value={v.type} onChange={(e) => set('type', e.target.value as PmOrg['type'])}>{PM_ORG_TYPES.map((t) => <option key={t}>{t}</option>)}</select></F>
@@ -528,6 +530,7 @@ function CodeFormModal({ g, c, defBiz, d, onSave, onRemove, onClose }: { g: PmCo
 function StdFormModal({ t, biz, stage, d, onSave, onRemove, onClose }: { t: PmStdTask | null; biz: string; stage: string; d: PmDerived; onSave: (x: PmStdTask) => Promise<void>; onRemove: (x: PmStdTask) => Promise<void>; onClose: () => void }) {
   const { snap } = d;
   const isNew = !t;
+  const lock = usePmPartialLock() && isNew;
   const used = t ? stdUse(t, snap.tasks, snap.projects) : [];
   const [v, setV] = useState<PmStdTask & { offS: string; durS: string }>(() => ({ ...(t ?? { id: '', biz, stage, ord: 0, code: '', name: '', output: '', off: 0, dur: 5, milestone: false, from: '' }), offS: String(t?.off ?? 0), durS: String(t?.dur ?? 5) }));
   const [err, setErr] = useState<[string, string] | null>(null);
@@ -544,7 +547,7 @@ function StdFormModal({ t, biz, stage, d, onSave, onRemove, onClose }: { t: PmSt
   const bad = (f: string) => err?.[1] === f;
   return (
     <Modal open onClose={onClose} width={640} title={isNew ? `세부 업무 추가 — ${biz}` : `세부 업무 수정 — ${t.name}`}
-      footer={<Foot err={err?.[0] ?? ''} onDel={isNew ? undefined : () => { if (t && confirm(`세부 업무 '${t.name}'을(를) 표준 목록에서 지울까요? (진행 중인 사업 업무 목록은 그대로)`)) void onRemove(t); }} onClose={onClose} onSave={() => void save()} />}>
+      footer={<Foot lock={lock} err={err?.[0] ?? ''} onDel={isNew ? undefined : () => { if (t && confirm(`세부 업무 '${t.name}'을(를) 표준 목록에서 지울까요? (진행 중인 사업 업무 목록은 그대로)`)) void onRemove(t); }} onClose={onClose} onSave={() => void save()} />}>
       <p className="mb-3 rounded-lg bg-panel-alt px-3 py-2 text-[12px] text-ink2">새 사업을 등록할 때 쓰는 표준 목록입니다. 여기서 고쳐도 이미 진행 중인 사업의 업무 목록은 바뀌지 않습니다.{used.length ? ` (같은 이름 업무가 사업 ${new Set(used.map((x) => x.projectId)).size}개 업무 목록에 있음)` : ''}</p>
       <div className="grid gap-3 sm:grid-cols-2">
         <F label="단계" req><select className={inp} value={v.stage} onChange={(e) => set('stage', e.target.value)}>{[...new Set([...stageOpts, v.stage])].map((x) => <option key={x}>{x}</option>)}</select></F>

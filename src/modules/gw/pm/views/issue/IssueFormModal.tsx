@@ -6,6 +6,7 @@ import { ISSUE_CATS, ISSUE_FORM_SEVS, ISSUE_STATES, issueCheck } from '@/domain/
 import type { PmIssue } from '@/domain/pm/schema';
 import type { PmDerived, usePmMutations } from '@/features/pm/usePm';
 import type { usePmPeople } from '../../usePmPeople';
+import { PARTIAL_LOCK_MSG, usePmPartialLock } from '@/features/pm/pmSaveBus';
 
 /**
  * 이슈 등록 · 수정 창 (데모 issueForm 3182) — 데모 칸 그대로 (새 칸 없음).
@@ -39,6 +40,7 @@ export function IssueFormModal({ issue, site, d, people, mut, shortOf, onDone, o
 }) {
   const projects = [...d.snap.projects].sort((a, b) => Number(a.id.replace(/\D/g, '')) - Number(b.id.replace(/\D/g, '')));
   const isNew = !issue;
+  const lock = usePmPartialLock() && isNew;
   const [v, setV] = useState<V>(() => (issue ? { ...issue } : {
     projectId: site || projects.find((p) => d.snap.tasks.some((t) => t.projectId === p.id))?.id || projects[0]?.id || '',
     cat: '설비 통신 장애', title: '', equip: '', taskId: '', sev: '보통', ownerId: people.me, date: d.today, watchIds: [], status: '열림', desc: '', action: '',
@@ -69,9 +71,9 @@ export function IssueFormModal({ issue, site, d, people, mut, shortOf, onDone, o
       footer={(
         <div className="flex w-full items-center gap-2">
           {!isNew && <Button variant="secondary" onClick={() => void del()}>삭제</Button>}
-          <span className="flex-1 text-right text-[12px] font-bold text-danger" role="alert">{err?.[0]}</span>
+          <span className="flex-1 text-right text-[12px] font-bold text-danger" role="alert">{lock ? PARTIAL_LOCK_MSG : err?.[0]}</span>
           <Button variant="secondary" onClick={onClose}>취소</Button>
-          <Button onClick={() => void save()}>{isNew ? '등록' : '저장'}</Button>
+          <Button disabled={lock} onClick={() => void save()}>{isNew ? '등록' : '저장'}</Button>
         </div>
       )}>
       {isNew && <p className="mb-3 rounded-lg bg-panel-alt px-3 py-2 text-[12px] text-ink2">심각도 <b>긴급</b>으로 등록하면 PM과 담당자에게 바로 보고(에스컬레이션)됩니다.</p>}

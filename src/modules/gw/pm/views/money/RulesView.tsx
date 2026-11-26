@@ -6,6 +6,7 @@ import { usePmDerived, usePmMutations } from '@/features/pm/usePm';
 import { usePmPeople } from '../../usePmPeople';
 import { EmptyHint, Tag } from '../wbs/parts';
 import { ScreenHead } from '../dash/parts';
+import { PARTIAL_LOCK_MSG, usePmPartialLock } from '@/features/pm/pmSaveBus';
 
 /**
  * 기준정보 › 지원 기준 · 단가 (money/rules, 데모 pMoneyRules 4631 · mnCfgForm 4690 · mnRuleForm 4697) — 6-4.
@@ -24,12 +25,12 @@ export function F({ label, req, full, bad, children }: { label: string; req?: bo
     </label>
   );
 }
-export const Foot = ({ err, onDel, onClose, onSave }: { err: string; onDel?: () => void; onClose: () => void; onSave: () => void }) => (
+export const Foot = ({ err, onDel, onClose, onSave, lock }: { err: string; onDel?: () => void; onClose: () => void; onSave: () => void; lock?: boolean }) => (
   <div className="flex w-full items-center gap-2">
     {onDel && <Button variant="secondary" onClick={onDel}>삭제</Button>}
-    <span className="flex-1 text-right text-[12px] font-bold text-danger" role="alert">{err}</span>
+    <span className="flex-1 text-right text-[12px] font-bold text-danger" role="alert">{lock ? PARTIAL_LOCK_MSG : err}</span>
     <Button variant="secondary" onClick={onClose}>취소</Button>
-    <Button onClick={onSave}>저장</Button>
+    <Button disabled={lock} onClick={onSave}>저장</Button>
   </div>
 );
 const Check = () => <Tag tone="warn" title="확인 필요">확인 필요</Tag>;
@@ -127,6 +128,7 @@ export function CfgModal({ c, onSave, onClose }: { c: PmMoneyCfg; onSave: (c: Pm
 /** 지원 기준 추가 · 수정 창 (mnRuleForm) — 비율 %, 상한 만원 */
 function RuleModal({ r, year, onSave, onRemove, onClose }: { r: PmFundRule | null; year: number; onSave: (r: PmFundRule) => Promise<void>; onRemove: (id: string) => Promise<void>; onClose: () => void }) {
   const isNew = !r;
+  const lock = usePmPartialLock() && isNew;
   const [v, setV] = useState<RuleDraft>(() => ruleDraft(r, year));
   const [err, setErr] = useState<[string, string] | null>(null);
   const set = <K extends keyof RuleDraft>(k: K, x: RuleDraft[K]) => setV((p) => ({ ...p, [k]: x }));
@@ -146,7 +148,7 @@ function RuleModal({ r, year, onSave, onRemove, onClose }: { r: PmFundRule | nul
     <F label={label} bad={bad(k)}><input type="number" min={0} max={max} className={inp} value={v[k] as string} onChange={(e) => set(k, e.target.value)} /></F>
   );
   return (
-    <Modal open onClose={onClose} width={720} title={isNew ? '지원 기준 추가' : '지원 기준 수정'} footer={<Foot err={err?.[0] ?? ''} onDel={isNew ? undefined : () => void del()} onClose={onClose} onSave={() => void save()} />}>
+    <Modal open onClose={onClose} width={720} title={isNew ? '지원 기준 추가' : '지원 기준 수정'} footer={<Foot lock={lock} err={err?.[0] ?? ''} onDel={isNew ? undefined : () => void del()} onClose={onClose} onSave={() => void save()} />}>
       <p className="mb-3 text-[12px] text-ink2">비율은 총사업비 대비 %, 상한은 <b>만원</b>. 모르는 칸은 비워 두면 '확인 필요'로 보입니다.</p>
       <div className="grid gap-3 sm:grid-cols-2">
         <F label="연도" req bad={bad('year')}><input type="number" min={2020} className={inp} value={v.year} onChange={(e) => set('year', e.target.value)} /></F>

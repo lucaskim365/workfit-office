@@ -4,6 +4,7 @@ import { FUND_SRC, ruleText, type PmFundRule, type PmMoneyCfg } from '@/domain/p
 import { pmFundSchema, type FundKey, type FundOf, type PmContract, type PmFund, type PmPay } from '@/domain/pm/quote';
 import { COST_CATS, costCheck, manToWon, payCheck, wonToMan, type PmCost, type PmOh } from '@/domain/pm/pl';
 import { F, Foot, inp } from './RulesView';
+import { usePmPartialLock } from '@/features/pm/pmSaveBus';
 
 /**
  * 사업별 수익 · 손익 입력 창 (데모 mnFundForm 4658 · mnPayForm 4668 · mnCostForm 4679 · mnOhForm 4620) — 6-6.
@@ -60,6 +61,7 @@ export function FundModal({ short, F: FO, rules, cfg, onSave, onClose }: { short
 
 /** 대금 단계 추가 · 수정 (mnPayForm) — 금액을 비우면 계약 매출 × 비율 */
 export function PayModal({ p, projectId, cs, onSave, onRemove, onClose }: { p: PmPay | null; projectId: string; cs: readonly PmContract[]; onSave: (p: PmPay) => Promise<void>; onRemove: (id: string) => Promise<void>; onClose: () => void }) {
+  const lock = usePmPartialLock() && !p;
   const [v, setV] = useState({ cid: p?.cid ?? cs[0]?.id ?? '', name: p?.name ?? '', rate: p && p.rate ? String(p.rate) : '', amt: wonToMan(p?.amt), due: p?.due ?? '', inv: p?.inv ?? '', paid: p?.paid ?? '' });
   const [err, setErr] = useState<Err>(null);
   const set = <K extends keyof typeof v>(k: K, x: string) => setV((o) => ({ ...o, [k]: x }));
@@ -71,7 +73,7 @@ export function PayModal({ p, projectId, cs, onSave, onRemove, onClose }: { p: P
   };
   const bad = (k: string) => err?.[1] === k;
   return (
-    <Modal open onClose={onClose} width={600} title={p ? '대금 단계 수정' : '대금 단계 추가'} footer={<Foot err={err?.[0] ?? ''} onDel={p ? () => void onRemove(p.id) : undefined} onClose={onClose} onSave={() => void save()} />}>
+    <Modal open onClose={onClose} width={600} title={p ? '대금 단계 수정' : '대금 단계 추가'} footer={<Foot lock={lock} err={err?.[0] ?? ''} onDel={p ? () => void onRemove(p.id) : undefined} onClose={onClose} onSave={() => void save()} />}>
       <p className="mb-3 text-[12px] text-ink2">금액을 비우면 계약 매출 × 비율로 계산합니다. 세금계산서 발행일 · 입금일을 넣으면 월별 손익에 매출로 잡힙니다.</p>
       <div className="grid gap-3 sm:grid-cols-2">
         <F label="계약" bad={bad('cid')}><select className={inp} value={v.cid} onChange={(e) => set('cid', e.target.value)}>{cs.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></F>
@@ -88,6 +90,7 @@ export function PayModal({ p, projectId, cs, onSave, onRemove, onClose }: { p: P
 
 /** 원가 변경 등록 · 수정 (mnCostForm) — 최종 견적서 매입과 달라진 금액만, 늘면 + 줄면 − */
 export function CostModal({ c, projectId, short, today, onSave, onRemove, onClose }: { c: PmCost | null; projectId: string; short: string; today: string; onSave: (c: PmCost) => Promise<void>; onRemove: (id: string) => Promise<void>; onClose: () => void }) {
+  const lock = usePmPartialLock() && !c;
   const [v, setV] = useState({ date: c?.date ?? today, cat: c?.cat ?? COST_CATS[0], amt: c ? String(c.amt / 10000) : '', vendor: c?.vendor ?? '', desc: c?.desc ?? '' });
   const [err, setErr] = useState<Err>(null);
   const set = <K extends keyof typeof v>(k: K, x: string) => setV((o) => ({ ...o, [k]: x }));
@@ -99,7 +102,7 @@ export function CostModal({ c, projectId, short, today, onSave, onRemove, onClos
   };
   const bad = (k: string) => err?.[1] === k;
   return (
-    <Modal open onClose={onClose} width={600} title={c ? '원가 변경 수정' : `원가 변경 등록 — ${short}`} footer={<Foot err={err?.[0] ?? ''} onDel={c ? () => void onRemove(c.id) : undefined} onClose={onClose} onSave={() => void save()} />}>
+    <Modal open onClose={onClose} width={600} title={c ? '원가 변경 수정' : `원가 변경 등록 — ${short}`} footer={<Foot lock={lock} err={err?.[0] ?? ''} onDel={c ? () => void onRemove(c.id) : undefined} onClose={onClose} onSave={() => void save()} />}>
       <p className="mb-3 text-[12px] text-ink2">최종 견적서 매입과 달라진 금액만 넣습니다. 늘면 +, 줄면 − (예: 장비 추가 +300, 수량 축소 −120).</p>
       <div className="grid gap-3 sm:grid-cols-2">
         <F label="날짜" req bad={bad('date')}><input type="date" className={inp} value={v.date} onChange={(e) => set('date', e.target.value)} /></F>

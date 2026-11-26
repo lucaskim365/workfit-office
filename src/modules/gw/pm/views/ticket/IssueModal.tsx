@@ -9,6 +9,7 @@ import type { PmDerived, usePmMutations } from '@/features/pm/usePm';
 import type { usePmPeople } from '../../usePmPeople';
 import { ProjectTag, Tag } from '../wbs/parts';
 import { TypeTag } from './parts';
+import { PARTIAL_LOCK_MSG, usePmPartialLock } from '@/features/pm/pmSaveBus';
 
 type People = ReturnType<typeof usePmPeople>;
 const sel = 'rounded border border-border-hi bg-panel px-1.5 py-1 text-[12px]';
@@ -44,6 +45,8 @@ export function IssueModal({ ids, d, people, mut, shortOf, onClose, onIssued }: 
   const [made, setMade] = useState<PmTicket[] | null>(null);
   const [, setParams] = useSearchParams();
   const approverOf = (t: PmTask) => people.idByName(t.pmName);
+  // 끊긴 발행 뒤 같은 창에서 다시 발행하면 티켓이 또 생김 (결정 (나))
+  const lock = usePmPartialLock();
 
   if (made) return <IssuedModal made={made} people={people} onClose={onClose} onGo={() => { onClose(); setParams({ v: 'task/ticket' }); }} />;
   if (!list.length) {
@@ -92,10 +95,11 @@ export function IssueModal({ ids, d, people, mut, shortOf, onClose, onIssued }: 
           <span className="text-[11px] text-ink3">발행 후 담당자가 '접수'하면 작업이 시작됩니다</span>
           <span className="flex-1" />
           <Button onClick={onClose}>취소</Button>
-          <Button variant="primary" onClick={submit} disabled={mut.issueTickets.isPending}>🎫 {list.length}건 발행</Button>
+          <Button variant="primary" onClick={submit} disabled={mut.issueTickets.isPending || lock}>🎫 {list.length}건 발행</Button>
         </div>
       }
     >
+      {lock && <div className="mb-3 rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-[12px] font-bold text-danger" role="alert">{PARTIAL_LOCK_MSG}</div>}
       {err.length > 0 && <div className="mb-3 rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-[12px] text-danger">{err.map((x) => <div key={x}>{x}</div>)}</div>}
       <p className="mb-2 rounded-lg bg-panel-alt px-3 py-2 text-[11.5px] leading-relaxed text-ink2">
         업무 1건당 티켓 1건이 발행됩니다. 담당자는 <b>업무의 첫 담당</b>, 마감일은 업무 종료일, 우선순위는 마일스톤(◆)은 높음 · 종료일 지남은 긴급으로 정해집니다.

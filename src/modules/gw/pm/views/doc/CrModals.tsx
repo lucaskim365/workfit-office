@@ -4,6 +4,7 @@ import { Button } from '@/shared/ui/Button';
 import { dday } from '@/domain/pm/site';
 import { crConflict } from '@/domain/pm/cr';
 import { PM_CR_CATS, PM_CR_PRIOS, type PmChangeRequest, type PmProject, type PmTask } from '@/domain/pm/schema';
+import { PARTIAL_LOCK_MSG, usePmPartialLock } from '@/features/pm/pmSaveBus';
 
 /**
  * 요구사항(CR) 창 — 접수 · 수정 (crForm 3044) · 검토 · 승인 (crReview 3076). 데모 칸 그대로 (새 칸 없음).
@@ -34,6 +35,7 @@ export function CrFormModal({ c, projects, shortOf, defSite, today, onSave, onRe
   onClose: () => void;
 }) {
   const isNew = !c;
+  const lock = usePmPartialLock() && isNew;
   const [v, setV] = useState<Record<keyof CrInput, string>>(() => ({
     projectId: c?.projectId ?? defSite, cat: c?.cat ?? '기능 추가', title: c?.title ?? '', desc: c?.desc ?? '', req: c?.req ?? '',
     date: c?.date ?? today, prio: c?.prio ?? '보통', days: String(c?.days ?? 0), cost: String(c?.cost ?? 0),
@@ -61,9 +63,9 @@ export function CrFormModal({ c, projects, shortOf, defSite, today, onSave, onRe
       footer={(
         <div className="flex w-full items-center gap-2">
           {!isNew && <Button variant="secondary" onClick={() => void del()}>삭제</Button>}
-          <span className="flex-1 text-right text-[12px] font-bold text-danger" role="alert">{err?.msg}</span>
+          <span className="flex-1 text-right text-[12px] font-bold text-danger" role="alert">{lock ? PARTIAL_LOCK_MSG : err?.msg}</span>
           <Button variant="secondary" onClick={onClose}>취소</Button>
-          <Button onClick={() => void save()}>{isNew ? '접수' : '저장'}</Button>
+          <Button disabled={lock} onClick={() => void save()}>{isNew ? '접수' : '저장'}</Button>
         </div>
       )}>
       {isNew && <p className="mb-3 rounded-lg bg-panel-alt px-3 py-2 text-[12px] text-ink2">접수하면 <b>검토중</b> 상태로 등록되고, PM이 일정 · 비용 영향도를 검토해 승인 / 반려합니다. 승인하면 업무 목록에 업무로 추가할 수 있습니다.</p>}

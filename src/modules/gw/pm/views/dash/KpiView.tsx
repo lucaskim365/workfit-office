@@ -10,6 +10,7 @@ import {
 } from '@/domain/pm/kpi';
 import type { PmProject } from '@/domain/pm/schema';
 import { usePmDerived, usePmSiteMutations } from '@/features/pm/usePm';
+import { PARTIAL_LOCK_MSG, usePmPartialLock } from '@/features/pm/pmSaveBus';
 import { usePmPeople } from '../../usePmPeople';
 import { EmptyHint, ProjectTag, Tag } from '../wbs/parts';
 import { CardHead, ScreenHead } from './parts';
@@ -276,13 +277,13 @@ function Field({ label, children, full }: { label: string; children: ReactNode; 
     </label>
   );
 }
-function Foot({ err, onRemove, onClose, onSave }: { err: string; onRemove?: () => void; onClose: () => void; onSave: () => void }) {
+function Foot({ err, onRemove, onClose, onSave, lock }: { err: string; onRemove?: () => void; onClose: () => void; onSave: () => void; lock?: boolean }) {
   return (
     <div className="flex w-full items-center gap-2">
       {onRemove && <Button size="sm" variant="danger" onClick={onRemove}>삭제</Button>}
-      <span className="flex-1 text-[11.5px] text-danger">{err}</span>
+      {lock ? <span className="flex-1 text-[11.5px] font-bold text-danger" role="alert">{PARTIAL_LOCK_MSG}</span> : <span className="flex-1 text-[11.5px] text-danger">{err}</span>}
       <Button size="sm" variant="secondary" onClick={onClose}>취소</Button>
-      <Button size="sm" variant="primary" onClick={onSave}>저장</Button>
+      <Button size="sm" variant="primary" disabled={lock} onClick={onSave}>저장</Button>
     </div>
   );
 }
@@ -299,6 +300,7 @@ function MeasModal({ ds, m, kid, short, today, onSave, onRemove, onClose }: {
   const [val, setVal] = useState(m ? String(m.val) : '');
   const [memo, setMemo] = useState(m?.memo ?? '');
   const [err, setErr] = useState('');
+  const lock = usePmPartialLock() && !m;
   const save = () => {
     if (!k) return setErr('성과지표를 골라 주세요');
     if (!date) return setErr('측정일을 넣어 주세요');
@@ -306,7 +308,7 @@ function MeasModal({ ds, m, kid, short, today, onSave, onRemove, onClose }: {
     void onSave({ kid: k, date, val: +val, memo: memo.trim() });
   };
   return (
-    <Modal open onClose={onClose} width={560} title={`성과지표 실측 ${m ? '수정' : '기록'} — ${short}`} footer={<Foot err={err} onRemove={onRemove} onClose={onClose} onSave={save} />}>
+    <Modal open onClose={onClose} width={560} title={`성과지표 실측 ${m ? '수정' : '기록'} — ${short}`} footer={<Foot err={err} onRemove={onRemove} onClose={onClose} onSave={save} lock={lock} />}>
       <p className="mb-3 text-[12px] text-ink2">MES 집계값이나 현장 측정값을 기록합니다. 계획서의 기준 기간 · 산식과 같은 방식으로 측정해야 최종평가에서 인정됩니다.</p>
       <div className="grid grid-cols-2 gap-3">
         <Field label="성과지표 *" full>
@@ -335,6 +337,7 @@ function DefModal({ x, short, onSave, onRemove, onClose }: {
     base: x ? String(x.base) : '', target: x ? String(x.target) : '', w: x ? String(x.w) : '0.5', period: x?.period ?? '', method: x?.method ?? '',
   });
   const [err, setErr] = useState('');
+  const lock = usePmPartialLock() && !x;
   const set = (k: keyof typeof v) => (e: { target: { value: string } }) => setV((o) => ({ ...o, [k]: e.target.value }));
   const save = () => {
     if (!v.name.trim()) return setErr('성과지표명을 넣어 주세요');
@@ -346,7 +349,7 @@ function DefModal({ x, short, onSave, onRemove, onClose }: {
     void onSave({ f: v.f, name: v.name.trim(), unit: v.unit.trim(), dir: v.dir as 'up' | 'down', base: +v.base, target: +v.target, w, period: v.period.trim(), method: v.method.trim() });
   };
   return (
-    <Modal open onClose={onClose} width={560} title={`성과지표 ${x ? '수정' : '직접 등록'} — ${short}`} footer={<Foot err={err} onRemove={onRemove} onClose={onClose} onSave={save} />}>
+    <Modal open onClose={onClose} width={560} title={`성과지표 ${x ? '수정' : '직접 등록'} — ${short}`} footer={<Foot err={err} onRemove={onRemove} onClose={onClose} onSave={save} lock={lock} />}>
       <p className="mb-3 text-[12px] text-ink2">사업계획서를 받기 전이거나 계획서에 없는 지표를 관리할 때 씁니다. 계획서 지표는 계획서 데이터에서 자동으로 나옵니다.</p>
       <div className="grid grid-cols-2 gap-3">
         <Field label="분야">
@@ -380,6 +383,7 @@ function AiModal({ x, today, onSave, onClose }: {
   const [ok, setOk] = useState<'충족' | '미충족'>('충족');
   const [memo, setMemo] = useState('');
   const [err, setErr] = useState('');
+  const lock = usePmPartialLock();
   const chk = x.op === 'chk';
   const save = () => {
     if (!date) return setErr('측정일을 넣어 주세요');
@@ -387,7 +391,7 @@ function AiModal({ x, today, onSave, onClose }: {
     void onSave({ date, val: chk ? null : +val, ok: chk ? ok : '', memo: memo.trim() });
   };
   return (
-    <Modal open onClose={onClose} width={520} title={`AI 성능 측정 기록 — ${x.n.length > 30 ? `${x.n.slice(0, 30)}…` : x.n}`} footer={<Foot err={err} onClose={onClose} onSave={save} />}>
+    <Modal open onClose={onClose} width={520} title={`AI 성능 측정 기록 — ${x.n.length > 30 ? `${x.n.slice(0, 30)}…` : x.n}`} footer={<Foot err={err} onClose={onClose} onSave={save} lock={lock} />}>
       <p className="mb-3 text-[12px] text-ink2">목표 <b>{x.tt}</b> · 검증 방법: {x.m}</p>
       <div className="grid grid-cols-2 gap-3">
         <Field label="측정일 *"><input type="date" className={inp} value={date} onChange={(e) => setDate(e.target.value)} /></Field>

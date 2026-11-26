@@ -7,6 +7,7 @@ import type { PmAgreementChange, PmDoc, PmPlanItem, PmProject, PmSubtask, PmTask
 import { isDrop, lastUpdate, siteBrief, siteCtxOf, siteStage, type SiteBrief, type SiteCtx, type SiteInputs, type SiteStage } from '@/domain/pm/site';
 import { taskTicketIndex, ticketDoneInfo, type PmTicket } from '@/domain/pm/ticket';
 import { docOf, type DocState } from '@/domain/pm/doc';
+import { reportPmSaveError } from './pmSaveBus';
 
 /**
  * PM 화면 훅. 저장소 전체를 한 번에 읽는다 (업무 338건 — 작음).
@@ -90,7 +91,7 @@ export function usePmMutations(me: string, nameOf?: (id: string) => string) {
   const done = useApply();
   const s = pmStore();
   const nm = nameOf ?? ((x: string) => x);
-  const m = <A, R = unknown>(fn: (a: A) => Promise<R>) => useMutation({ mutationFn: fn, onSuccess: done, onError: done });
+  const m = <A, R = unknown>(fn: (a: A) => Promise<R>) => useMutation({ mutationFn: fn, onSuccess: done, onError: (e) => { reportPmSaveError(e); done(); } });
   return {
     addTask: m((t: PmTask) => s.addTask(t, me)),
     updateTask: m(({ id, next }: { id: string; next: PmTask }) => s.updateTask(id, next, me, nameOf)),
@@ -198,7 +199,7 @@ export function usePmSites(d: PmDerived | null): { rows: PmSiteRow[]; all: PmSit
 export function usePmSiteMutations(me: string) {
   const done = useApply();
   const s = pmStore();
-  const m = <A, R = unknown>(fn: (a: A) => Promise<R>) => useMutation({ mutationFn: fn, onSuccess: done, onError: done });
+  const m = <A, R = unknown>(fn: (a: A) => Promise<R>) => useMutation({ mutationFn: fn, onSuccess: done, onError: (e) => { reportPmSaveError(e); done(); } });
   return {
     checkDeadlines: m(({ items, date, bulk }: { items: Array<{ projectId: string; kind: 'gov' | 'plan'; id: string }>; date: string; bulk: boolean }) => s.checkDeadlines(items, date, me, bulk)),
     uncheckDeadline: m(({ projectId, kind, id }: { projectId: string; kind: 'gov' | 'plan'; id: string }) => s.uncheckDeadline(projectId, kind, id)),

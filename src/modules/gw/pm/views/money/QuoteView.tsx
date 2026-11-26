@@ -14,6 +14,7 @@ import { usePmPeople } from '../../usePmPeople';
 import { EmptyHint, Tag } from '../wbs/parts';
 import { ScreenHead } from '../dash/parts';
 import { QuotePickModal } from './QuotePickModal';
+import { PARTIAL_LOCK_MSG, usePmPartialLock } from '@/features/pm/pmSaveBus';
 
 /**
  * 사업 · 손익 › 사업별 수익 › 견적 작성 (데모 pQuote 4746 · qRefresh 4781 · qInput 4812 · qSave 4825 · qExport 5070) — 6-5.
@@ -61,6 +62,8 @@ function QuoteEditor({ snap, today, projectId, cid, onBack }: { snap: PmSnapshot
   const [msg, setMsg] = useState('');
   const [pick, setPick] = useState<QtSec | null>(null);
   const [busy, setBusy] = useState(false);
+  // 새 견적 저장이 끊긴 뒤(계약 문서는 이미 씀) 같은 화면에서 다시 저장하면 계약이 2건 (결정 (나), 5.7.11)
+  const lock = usePmPartialLock() && !cid;
   const ctx: FundCtx = useMemo(() => ({ projects: snap.projects, plans: snap.plans, rules: snap.fundRules, cfg: snap.moneyCfg, contracts: snap.contracts, funds: snap.funds, today }), [snap, today]);
 
   const upd = (fn: (x: QuoteDraft) => QuoteDraft) => { setE(fn); setDirty(true); setErr(''); };
@@ -151,8 +154,9 @@ function QuoteEditor({ snap, today, projectId, cid, onBack }: { snap: PmSnapshot
         <Button variant="secondary" onClick={back}>사업별 수익으로</Button>
         {import.meta.env.DEV && <Button variant="secondary" onClick={fillTest} title="개발 서버 전용 — 명성ENG 견적서(2026-11-06) 값을 그대로 채움. 내보낸 엑셀을 원본과 비교해 볼 수 있음">테스트 값 채우기</Button>}
         <Button variant="secondary" disabled={busy} onClick={() => void exportXlsx()} title="회사 견적서 양식(명성ENG 11/6 기준)으로 내려받기 — 화면에 보이는 값 그대로">엑셀로 내보내기</Button>
-        <Button disabled={busy} onClick={() => void save()}>저장</Button>
+        <Button disabled={busy || lock} onClick={() => void save()}>저장</Button>
       </ScreenHead>
+      {lock && <div role="alert" className="rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-[12px] font-bold text-danger">{PARTIAL_LOCK_MSG}</div>}
       {(err || msg) && <div role={err ? 'alert' : 'status'} className={`rounded-lg border px-3 py-2 text-[12px] font-bold ${err ? 'border-danger/30 bg-danger/10 text-danger' : 'border-ok/30 bg-ok/10 text-ok'}`}>{err || msg}</div>}
 
       <section className={card}>
