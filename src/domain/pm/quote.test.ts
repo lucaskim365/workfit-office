@@ -97,6 +97,19 @@ test('품목에서 고르기 · 직접 쓴 줄 등록 · 지난 견적 쌓기 ·
   assert.deepEqual([after.hist[0].cid, after.price, after.cost], ['CX', 999000, 500000]);
   qHist(items, c, '한일', TODAY);
   assert.equal(after.hist.length, before + 1, '같은 견적을 다시 저장하면 지난 견적 줄은 하나');
+  // 7-1: 매입단가 '확인 필요'(null) 품목 → 견적 줄 매입 0 → 목록 매입은 '확인 필요' 그대로, 지난 견적 줄 매입 '-'(null), 공급단가는 바뀜
+  const unk = items.find((x) => !x.pass && x.cost == null)!;
+  const uLine = pickToLine(unk, unk.sec, 2);
+  assert.equal(uLine.cost, 0, '확인 필요 품목을 고르면 줄 매입은 0 (데모 그대로)');
+  const cu: PmContract = { ...c, id: 'CU', q: { ...c.q!, date: '2026-12-02', items: [{ ...uLine, price: 3100000 }] } };
+  qHist(items, cu, '한일', TODAY);
+  const u1 = items.find((x) => x.id === unk.id)!;
+  assert.deepEqual([u1.price, u1.cost, u1.hist[0].cid, u1.hist[0].cost, u1.hist[0].price], [3100000, null, 'CU', null, 3100000]);
+  // 매입을 넣어 저장하면 그 값으로 (확인 필요 풀림) → 그 뒤 0 으로 저장하면 0 (아는 값이 있을 때는 데모 그대로)
+  qHist(items, { ...cu, q: { ...cu.q!, items: [{ ...uLine, price: 3100000, cost: 2500000 }] } }, '한일', TODAY);
+  assert.deepEqual([u1.cost, u1.hist[0].cost, u1.hist.filter((h) => h.cid === 'CU').length], [2500000, 2500000, 1]);
+  qHist(items, { ...cu, q: { ...cu.q!, items: [{ ...uLine, price: 3100000, cost: 0 }] } }, '한일', TODAY);
+  assert.deepEqual([u1.cost, u1.hist[0].cost], [0, 0]);
   assert.deepEqual(paysFromTerms('현금결제 조건 / 선급금 50%, 잔금 50%'), [{ name: '선급금 50%', rate: 50 }, { name: '잔금 50%', rate: 50 }]);
   assert.deepEqual(paysFromTerms('현금결제 조건'), []);
   assert.deepEqual(quoteCheck({ ...open('P4'), name: ' ' }), ['계약 이름을 넣어 주세요', 'name']);

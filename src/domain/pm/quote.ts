@@ -307,7 +307,12 @@ export const lineToItem = (it: PmQuoteItem, id: string, src: string, date: strin
   cost: it.pass ? null : Math.round(qNum(it.cost)) || null, pass: it.pass, vendor: '', grp: '', vary: false, note: it.note,
   hist: [{ src, date, price: Math.round(qNum(it.price)), cost: it.pass ? null : Math.round(qNum(it.cost)) || null, qty: qNum(it.qty), cid: '' }],
 });
-/** 견적 저장 때: 고른 품목의 지난 견적에 이 견적을 남기고, 가장 최근이면 기본 단가도 이 값 (데모 qHist — 기본 = 가장 최근 견적 단가) */
+/**
+ * 견적 저장 때: 고른 품목의 지난 견적에 이 견적을 남기고, 가장 최근이면 기본 단가도 이 값 (데모 qHist — 기본 = 가장 최근 견적 단가).
+ * 데모와 다름 (7-1, 설계 5.7.0 · 6.1 — 11/25 사용자 결정): 매입단가 '확인 필요'(null) 품목을 고르면 견적 줄 매입이 0 으로 들어감 →
+ * 그 줄 매입이 0 이면 목록 매입단가를 0 으로 바꾸지 않고('확인 필요' 그대로 · 이익률 100% 로 안 보이게), 지난 견적 줄 매입도 0 대신 '-'(null).
+ * 공급단가 · 지난 견적 쌓기는 그대로.
+ */
 export function qHist(items: PmItem[], c: PmContract, src: string, today: string) {
   if (!c.q) return;
   const date = c.q.date || today;
@@ -315,10 +320,12 @@ export function qHist(items: PmItem[], c: PmContract, src: string, today: string
     if (!it.pid) continue;
     const ci = items.find((x) => x.id === it.pid);
     if (!ci) continue;
+    const cost = Math.round(qNum(it.cost));
+    const unknown = !it.pass && !cost && ci.cost == null;
     ci.hist = ci.hist.filter((h) => h.cid !== c.id);
-    ci.hist.push({ cid: c.id, src, date, price: Math.round(qNum(it.price)), cost: it.pass ? null : Math.round(qNum(it.cost)), qty: qNum(it.qty) });
+    ci.hist.push({ cid: c.id, src, date, price: Math.round(qNum(it.price)), cost: it.pass || unknown ? null : cost, qty: qNum(it.qty) });
     ci.hist.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
-    if (ci.hist[0].cid === c.id) { ci.price = Math.round(qNum(it.price)); if (!it.pass) ci.cost = Math.round(qNum(it.cost)); }
+    if (ci.hist[0].cid === c.id) { ci.price = Math.round(qNum(it.price)); if (!it.pass && !unknown) ci.cost = cost; }
   }
 }
 /** 새 견적의 지불조건(선급금 50%, 잔금 50% 등) → 대금 단계 이름 · 비율 */
