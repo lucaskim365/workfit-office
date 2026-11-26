@@ -23,6 +23,17 @@ const PROJECT = 'ZZK5';
 const PER_DAY = 30;
 
 const isCode = (e: unknown, code: number) => (e as { code?: number })?.code === code;
+/** 서버 5xx(게이트웨이 시간 초과 등)는 3초 쉬고 다시 — 5번까지 (14:37 첫 실행이 1,374건째 504 로 멈춤). 만들기가 실제로 됐으면 다시 할 때 409 → 건너뜀 */
+async function retry5xx<T>(fn: () => Promise<T>): Promise<T> {
+  for (let k = 1; ; k++) {
+    try { return await fn(); } catch (e) {
+      const c = (e as { code?: number })?.code ?? 0;
+      if (c < 500 || k >= 5) throw e;
+      console.log(`  (서버 ${c} — 3초 뒤 다시 ${k}/5)`);
+      await new Promise((r) => setTimeout(r, 3000));
+    }
+  }
+}
 const isTest = (d: { $id: string; id?: unknown; projectId?: unknown; kind?: unknown }) =>
   typeof d.id === 'string' && d.id.startsWith(PREFIX) && d.projectId === PROJECT && d.$id === safeDocId(docKeyOf({ kind: String(d.kind ?? ''), id: d.id }));
 
@@ -62,7 +73,7 @@ async function main() {
     for (let i = 0; i < rows.length; i += 5) {
       assertPmColl(LOG_COLL);
       await Promise.all(rows.slice(i, i + 5).map(async (r) => {
-        try { await dbs.createDocument(db.database, LOG_COLL, safeDocId(docKeyOf(r)), { ...r }); made++; } catch (e) { if (isCode(e, 409)) skip++; else throw e; }
+        try { await retry5xx(() => dbs.createDocument(db.database, LOG_COLL, safeDocId(docKeyOf(r)), { ...r })); made++; } catch (e) { if (isCode(e, 409)) skip++; else throw e; }
       }));
       if ((i + 5) % 1000 === 0) console.log(`  … ${i + 5} / ${rows.length}`);
     }
@@ -87,7 +98,7 @@ async function main() {
   let gone = 0;
   for (let i = 0; i < found.length; i += 5) {
     assertPmColl(LOG_COLL);
-    await Promise.all(found.slice(i, i + 5).map(async (id) => { try { await dbs.deleteDocument(db.database, LOG_COLL, id); gone++; } catch (e) { if (!isCode(e, 404)) throw e; } }));
+    await Promise.all(found.slice(i, i + 5).map(async (id) => { try { await retry5xx(() => dbs.deleteDocument(db.database, LOG_COLL, id)); gone++; } catch (e) { if (!isCode(e, 404)) throw e; } }));
     if ((i + 5) % 1000 === 0) console.log(`  … ${i + 5} / ${found.length}`);
   }
   const total1 = (await dbs.listDocuments(db.database, LOG_COLL, [Query.limit(1)])).total;
