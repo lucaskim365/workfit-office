@@ -14,6 +14,7 @@
  * '인덱스 빠짐' 말고 다른 차이가 하나라도 있으면 아무것도 안 쓰고 멈춤. 쓰기는 두 가지뿐:
  *   (a) 없는 컬렉션 = 공용 스크립트 `--only=<없는 것만> --new-only` (따로 프로세스)
  *   (b) 빠진 인덱스 = 여기서 createIndex — 'not yet available' 일 때만 5초 × 12번 다시, 다른 오류는 바로 멈춤
+ * 처리 중(processing)인 속성 · 인덱스는 차이가 아니라 기다릴 것 — 처음 읽을 때 · (a) 뒤 5초 간격 최대 2분 다시 읽고 대조 (F4).
  * 수정 · 삭제 호출 없음. 끝나면 다시 읽어 23 · 속성 140 · 인덱스 25 · 전부 available 인지 찍음.
  */
 import { spawnSync } from 'node:child_process';
@@ -24,6 +25,8 @@ import { assertPmColl, devDb, fail, PM_COLL_NAMES, stampNow, type DevDb } from '
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const INDEX_RETRY = 12;
 const INDEX_WAIT_MS = 5_000;
+/** 처리 중 기다리기 5초 × 24 = 2분 (F4) */
+const SETTLE_TRIES = 24;
 
 /** 읽기만: 컬렉션 전부 (속성 · 인덱스 포함) */
 async function readColls(dbs: Databases, db: DevDb): Promise<PmCollGot[]> {
@@ -53,11 +56,22 @@ function printTotals(label: string, got: PmCollGot[]) {
   return { pm: pm.length, attrs: attrs.length, idx: idx.length, notAvail };
 }
 
+/** 읽고 대조 — '처리 중'(기다릴 것)이 있으면 5초 간격 최대 2분 다시 읽은 뒤 대조 (F4). 2분 넘으면 멈춤 */
+async function settled(dbs: Databases, db: DevDb, want: ReturnType<typeof pmSchemaWant>, label: string) {
+  for (let t = 0; ; t++) {
+    const got = await readColls(dbs, db);
+    const p = resumePlan(want, got.filter((g) => PM_COLL_NAMES.includes(g.$id)));
+    if (!p.waiting.length) return { got, p };
+    if (t >= SETTLE_TRIES) fail(`${label}: 2분 기다림 넘음 — 아직 처리 중 ${p.waiting.join(', ')} (멈춤)`);
+    console.log(`  … ${label}: 처리 중 ${p.waiting.length}개 (${p.waiting.join(', ')}) — ${INDEX_WAIT_MS / 1000}초 뒤 다시 읽음 (${t + 1}/${SETTLE_TRIES})`);
+    await sleep(INDEX_WAIT_MS);
+  }
+}
+
 async function resume(dbs: Databases, db: DevDb, dryRun: boolean) {
   const want = pmSchemaWant();
-  const before = await readColls(dbs, db);
+  const { got: before, p } = await settled(dbs, db, want, '처음 읽기');
   printTotals('지금', before);
-  const p = resumePlan(want, before.filter((g) => PM_COLL_NAMES.includes(g.$id)));
   console.log(`  있는 것 ${p.existing.length} · 차이 ${p.diffs.length} · 만들 컬렉션 ${p.createColls.length}${p.createColls.length ? ` (${p.createColls.join(', ')})` : ''} · 속성 ${p.attrs} · 인덱스 ${p.indexCount}`);
   for (const i of p.createIndexes) console.log(`  + 빠진 인덱스 ${i.coll}.${i.key} [${i.attributes.join(', ')}]`);
   if (p.diffs.length) { for (const d of p.diffs) console.log(`  ✗ 차이 ${d}`); fail(`'인덱스 빠짐' 말고 다른 차이 ${p.diffs.length}개 — 아무것도 쓰지 않고 멈춤`); }
@@ -75,8 +89,7 @@ async function resume(dbs: Databases, db: DevDb, dryRun: boolean) {
     console.log(`  (a) 공용 스크립트 끝 (exit ${code})`);
   }
   // 다시 읽고 다시 대조 — (a) 가 남긴 것까지
-  const mid = await readColls(dbs, db);
-  const q = resumePlan(want, mid.filter((g) => PM_COLL_NAMES.includes(g.$id)));
+  const { p: q } = await settled(dbs, db, want, '(a) 뒤');
   if (q.diffs.length) { for (const d of q.diffs) console.log(`  ✗ 차이 ${d}`); fail(`(a) 뒤 차이 ${q.diffs.length}개 — 더 쓰지 않고 멈춤 (--resume 을 다시 돌리기 전에 보고)`); }
   if (q.createColls.length) fail(`(a) 뒤에도 없는 컬렉션: ${q.createColls.join(', ')} — 멈춤`);
 
@@ -96,15 +109,18 @@ async function resume(dbs: Databases, db: DevDb, dryRun: boolean) {
       }
     }
   }
-  // 인덱스까지 available 이 될 때까지 (최대 2분) — 읽기만
+  // 인덱스까지 available 이 될 때까지 (최대 2분) — 읽기만. 숫자 합 + 대조(차이 0 · 만들 컬렉션 0 · 채울 인덱스 0 · 처리 중 0) 둘 다
   const want3 = pmSchemaTotals(want);
   for (let t = 0; ; t++) {
     const now = await readColls(dbs, db);
     const s = printTotals(t ? '다시 읽음' : '끝난 뒤', now);
-    if (!s.notAvail || t >= 24) {
-      const ok = s.pm === want3.colls && s.attrs === want3.attrs && s.idx === want3.indexes && !s.notAvail;
-      console.log(ok ? `  ✓ 맞음 — PM ${want3.colls} · 속성 ${want3.attrs} · 인덱스 ${want3.indexes} · 전부 available` : `  ✗ 다름 — 맞아야 할 숫자 ${JSON.stringify(want3)}`);
-      if (!ok) process.exitCode = 1;
+    const e = resumePlan(want, now.filter((g) => PM_COLL_NAMES.includes(g.$id)));
+    if (!e.waiting.length || t >= SETTLE_TRIES) {
+      const sumOk = s.pm === want3.colls && s.attrs === want3.attrs && s.idx === want3.indexes && !s.notAvail;
+      const planOk = !e.diffs.length && !e.createColls.length && !e.createIndexes.length && !e.waiting.length;
+      console.log(`  대조: 차이 ${e.diffs.length} · 만들 컬렉션 ${e.createColls.length} · 채울 인덱스 ${e.createIndexes.length} · 처리 중 ${e.waiting.length}`);
+      console.log(sumOk && planOk ? `  ✓ 맞음 — PM ${want3.colls} · 속성 ${want3.attrs} · 인덱스 ${want3.indexes} · 전부 available` : `  ✗ 다름 — 맞아야 할 숫자 ${JSON.stringify(want3)}${e.diffs.length ? ` · 차이 ${e.diffs.join(' / ')}` : ''}`);
+      if (!(sumOk && planOk)) process.exitCode = 1;
       return;
     }
     await sleep(INDEX_WAIT_MS);

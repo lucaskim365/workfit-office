@@ -47,6 +47,8 @@ export interface PmResumePlan {
   existing: string[];
   /** '인덱스 빠짐' 말고 다른 차이 — 하나라도 있으면 아무것도 안 씀 */
   diffs: string[];
+  /** 아직 처리 중(processing)인 속성 · 인덱스 — 차이가 아니라 기다릴 것 (F4). failed · stuck 등은 diffs */
+  waiting: string[];
   /** 새로 만들 컬렉션 (공용 스크립트 --only=… --new-only) */
   createColls: string[];
   /** 있는 컬렉션에 빠진 인덱스 (감싸개가 createIndex) */
@@ -60,6 +62,7 @@ const same = (a: readonly string[], b: readonly string[]) => a.length === b.leng
 
 export function resumePlan(want: readonly PmCollWant[], got: readonly PmCollGot[]): PmResumePlan {
   const diffs: string[] = [];
+  const waiting: string[] = [];
   const createIndexes: PmResumePlan['createIndexes'] = [];
   const byId = new Map(got.map((g) => [g.$id, g]));
   const existing = want.filter((w) => byId.has(w.id)).map((w) => w.id);
@@ -78,7 +81,8 @@ export function resumePlan(want: readonly PmCollWant[], got: readonly PmCollGot[
       if (a.size != null && x.size !== a.size) d(`속성 ${a.key} 크기 ${x.size} ≠ ${a.size}`);
       if (!!x.required !== a.required) d(`속성 ${a.key} 필수 ${x.required} ≠ ${a.required}`);
       if (x.array) d(`속성 ${a.key} 가 배열`);
-      if (x.status !== 'available') d(`속성 ${a.key} 상태 ${x.status}`);
+      if (x.status === 'processing') waiting.push(`${id}: 속성 ${a.key}`);
+      else if (x.status !== 'available') d(`속성 ${a.key} 상태 ${x.status}`);
     }
     for (const x of g.attributes) if (!w.attributes.some((a) => a.key === x.key)) d(`정의에 없는 속성 ${x.key}`);
     for (const i of w.indexes) {
@@ -86,13 +90,14 @@ export function resumePlan(want: readonly PmCollWant[], got: readonly PmCollGot[
       if (!x) { createIndexes.push({ coll: id, ...i }); continue; }
       if (x.type !== i.type) d(`인덱스 ${i.key} 종류 ${x.type} ≠ ${i.type}`);
       if (!same(x.attributes, i.attributes) || x.attributes.join() !== i.attributes.join()) d(`인덱스 ${i.key} 칸 [${x.attributes.join(', ')}] ≠ [${i.attributes.join(', ')}]`);
-      if (x.status !== 'available') d(`인덱스 ${i.key} 상태 ${x.status}`);
+      if (x.status === 'processing') waiting.push(`${id}: 인덱스 ${i.key}`);
+      else if (x.status !== 'available') d(`인덱스 ${i.key} 상태 ${x.status}`);
     }
     for (const x of g.indexes) if (!w.indexes.some((i) => i.key === x.key)) d(`정의에 없는 인덱스 ${x.key}`);
   }
   const fresh = want.filter((w) => createColls.includes(w.id));
   return {
-    existing, diffs, createColls, createIndexes,
+    existing, diffs, waiting, createColls, createIndexes,
     attrs: fresh.reduce((a, w) => a + w.attributes.length, 0),
     indexCount: fresh.reduce((a, w) => a + w.indexes.length, 0) + createIndexes.length,
   };

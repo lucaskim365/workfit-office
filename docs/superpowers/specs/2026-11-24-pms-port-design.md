@@ -1281,6 +1281,7 @@ src/modules/gw/pm/  화면 (React + Tailwind, shared/ui 공용 부품)
   - `--resume` 없이 돌리면 그대로 "이미 있는 이름 — 멈춤". `--prod` · 운영 ID 거절 그대로.
 - **`--resume --dry-run` (12:42:11~13, 읽기만)**: 지금 컬렉션 113 · PM 20 · 속성 122 · 인덱스 21 · available 아닌 것 0 → 있는 것 20 · 차이 0 · 만들 컬렉션 3 · 속성 18 · 인덱스 4 (pmMoney idx_projectId + pmMoneyContracts idx_projectId + pmChangeLogs idx_projectId · idx_date) · 쓰기 0. 출력 `C:/dev/pm-migration/7-4/resume-dryrun-20261126.txt`.
 - 테스트 `pmSchemaPlan.test.ts` 7개: 맞아야 할 숫자 23 · 140 · 25 / 공용 파일 글자 대조 / 다 같음 → 쓰기 0 / 지금 상태 → 20 · 0 · 3 · 18 · 4 / 속성 크기 다름 · 정의에 없는 속성 · 속성 processing · 인덱스 failed · 정의에 없는 인덱스 · 속성 빠짐 · 권한 · documentSecurity → 멈춤.
+- **팀장 검수 F4 (고침)**: (a) 가 방금 만든 인덱스가 아직 processing 인 채로 다시 읽으면 차이로 보고 멈추던 것 → processing 인 속성 · 인덱스는 차이가 아니라 '기다릴 것'(`waiting`), 처음 읽을 때 · (a) 뒤 5초 간격 최대 2분 다시 읽은 뒤 대조, 2분 넘으면 멈춤. failed · stuck 등은 그대로 차이. 끝 확인은 숫자 합(23 · 140 · 25)과 `resumePlan` 대조(차이 0 · 만들 컬렉션 0 · 채울 인덱스 0 · 처리 중 0) 둘 다. 테스트 8개. 고친 뒤 `--resume --dry-run` (12:57:45~47) 같은 숫자 20 · 0 · 3 · 18 · 4 · 쓰기 0.
 - 실행 허락 범위 (팀장): 'not yet available' 로 또 끊기면 `--resume` 을 2번까지 다시(출력 파일 따로), 그 밖 오류 · 3번째는 멈추고 보고. `pm:drop` 은 쓰지 않음.
 
 ---

@@ -29,7 +29,7 @@ test('공용 appwrite-schema.ts 의 pmCollections() 글자가 이 정의와 같�
 
 test('다 같음 → 빠진 것 없음 · 쓰기 0', () => {
   const p = resumePlan(want, all());
-  assert.deepEqual([p.existing.length, p.diffs, p.createColls, p.createIndexes, p.attrs, p.indexCount], [23, [], [], [], 0, 0]);
+  assert.deepEqual([p.existing.length, p.diffs, p.waiting, p.createColls, p.createIndexes, p.attrs, p.indexCount], [23, [], [], [], [], 0, 0]);
 });
 
 test('지금 상태(7-4 실패 뒤): 있는 것 20 · 차이 0 · 만들 컬렉션 3 · 속성 18 · 인덱스 4', () => {
@@ -52,12 +52,21 @@ test('정의에 없는 속성 → 차이 (멈춤)', () => {
   assert.match(p.diffs.join('\n'), /pmMarks: 정의에 없는 속성 extra/);
 });
 
-test('속성 processing → 차이 (멈춤) · 인덱스 failed · 정의에 없는 인덱스 · 속성 빠짐 · 권한 · documentSecurity 도', () => {
+test('F4 processing 만 있음 → 차이 0 · 기다릴 것 (멈추지 않음) / failed → 차이', () => {
+  const p = resumePlan(want, edit(all(), 'pmChangeLogs', (g) => { g.indexes.find((i) => i.key === 'idx_date')!.status = 'processing'; }));
+  assert.deepEqual([p.diffs, p.waiting], [[], ['pmChangeLogs: 인덱스 idx_date']]);
+  const q = resumePlan(want, edit(all(), 'pmChangeLogs', (g) => { g.indexes.find((i) => i.key === 'idx_date')!.status = 'failed'; }));
+  assert.deepEqual([q.diffs, q.waiting], [['pmChangeLogs: 인덱스 idx_date 상태 failed'], []]);
+  const r = resumePlan(want, edit(all(), 'pmMoney', (g) => { g.attributes.find((a) => a.key === 'projectId')!.status = 'processing'; }));
+  assert.deepEqual([r.diffs, r.waiting], [[], ['pmMoney: 속성 projectId']]);
+});
+
+test('속성 stuck → 차이 (멈춤) · 인덱스 failed · 정의에 없는 인덱스 · 속성 빠짐 · 권한 · documentSecurity 도', () => {
   const got = all();
-  edit(got, 'pmIssues', (g) => { g.attributes.find((a) => a.key === 'projectId')!.status = 'processing'; });
+  edit(got, 'pmIssues', (g) => { g.attributes.find((a) => a.key === 'projectId')!.status = 'stuck'; });
   edit(got, 'pmTickets', (g) => { g.indexes[0].status = 'failed'; g.indexes.push({ key: 'idx_x', type: 'key', status: 'available', attributes: ['x'] }); });
   edit(got, 'pmSubtasks', (g) => { g.attributes = g.attributes.filter((a) => a.key !== 'taskId'); });
   edit(got, 'pmPersonal', (g) => { g.$permissions = ['read("any")']; g.documentSecurity = true; });
   const t = resumePlan(want, got).diffs.join('\n');
-  for (const re of [/pmIssues: 속성 projectId 상태 processing/, /pmTickets: 인덱스 idx_projectId 상태 failed/, /pmTickets: 정의에 없는 인덱스 idx_x/, /pmSubtasks: 속성 taskId 빠짐/, /pmPersonal: 권한/, /pmPersonal: documentSecurity/]) assert.match(t, re);
+  for (const re of [/pmIssues: 속성 projectId 상태 stuck/, /pmTickets: 인덱스 idx_projectId 상태 failed/, /pmTickets: 정의에 없는 인덱스 idx_x/, /pmSubtasks: 속성 taskId 빠짐/, /pmPersonal: 권한/, /pmPersonal: documentSecurity/]) assert.match(t, re);
 });
