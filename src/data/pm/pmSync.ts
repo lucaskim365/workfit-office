@@ -354,7 +354,10 @@ export function health(snap: PmSnapshot, rekeyMarks: ReadonlyMap<string, string>
   const subs = snap.subtasks.filter((s) => !tasks.has(s.taskId)).length;
   const tks = snap.tickets.filter((x) => x.taskId && !x.legacyKey && !tasks.has(x.taskId)).length;
   const fns = snap.functions.filter((f) => !tasks.has(f.id)).length;
+  const cids = new Set(snap.contracts.map((c) => c.id));
+  const pays = snap.pays.filter((x) => !cids.has(x.cid)).length;
   const parts = [subs && `세부 작업 ${subs}건`, tks && `티켓 ${tks}건`, fns && `세부 기능 ${fns}건`].filter(Boolean);
+  if (pays) out.push(`없는 계약을 가리키는 대금 ${pays}건 — 금액을 직접 넣은 대금은 손익에 잡힙니다 (저장이 중간에 끊긴 흔적일 수 있습니다)`);
   if (parts.length) out.push(`없는 업무를 가리키는 기록: ${parts.join(' · ')} (저장이 중간에 끊긴 흔적일 수 있습니다)`);
   if (bad.size) out.push(`읽지 못한 기록 ${[...bad.values()].reduce((a, b) => a + b, 0)}건 (${[...bad].map(([c, n]) => `${c} ${n}`).join(' · ')}) — 화면에 안 보입니다.`);
   return out;

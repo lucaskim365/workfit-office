@@ -751,6 +751,8 @@ export function createPmStore(today = todayStr(), opts: PmStoreOpts = {}) {
     },
     /** 사업 삭제 — 발행된 티켓이 있으면 막음. 업무 · 이슈 · CR · 액션 · 사업에 딸린 기록을 같이 지우고, 회의록은 '공통'으로 */
     async removeProject(id: string, by: string, day = todayStr()) {
+      // 옛 화면에서 이미 지워진 사업을 또 지움 (K3 로 다시 읽은 뒤라 없음) → 멈춤, '사업 삭제 — TASK 0건' 이력도 안 남김
+      if (!state.projects.some((x) => x.id === id)) throw new Error('사업을 찾을 수 없습니다 (이미 삭제됐을 수 있습니다)');
       const tks = state.tickets.filter((x) => x.projectId === id && x.status !== '취소');
       if (tks.length) throw new Error(`발행된 티켓 ${tks.length}건이 있어 삭제할 수 없습니다. 티켓을 먼저 발행 취소하세요.`);
       const n = state.tasks.filter((t) => t.projectId === id).length;

@@ -478,3 +478,24 @@ test('결정 (가) 사업 번호를 다시 안 씀: 마지막 사업을 지워�
     assert.deepEqual([x.kpiDefs.some((d) => d.projectId === k), x.updReq.some((r) => r.projectId === k)], [false, false], mode);
   }
 });
+
+test('사소: 옛 화면에서 이미 지워진 사업을 또 삭제 → "사업을 찾을 수 없습니다"로 멈춤 · 이력 한 줄 더 안 생김', async () => {
+  const db = seededDb(TODAY);
+  const A = await open(db);
+  const B = await open(db);
+  await B.removeProject('P5', 'u2');
+  const logs = (await reread(db, TODAY)).logs.length;
+  await assert.rejects(A.removeProject('P5', 'u1'), /사업을 찾을 수 없습니다/);
+  assert.equal((await reread(db, TODAY)).logs.length, logs);
+});
+
+test('처음 열 때 점검: 없는 계약을 가리키는 대금 → 안내 한 줄', async () => {
+  const rows = snapshotRows(createPmStore(TODAY).peek().snap);
+  const money = rows.get('pmMoney')!;
+  const pay = money.find((r) => r.kind === 'pay')!;
+  money.push({ ...pay, id: 'Dx', body: JSON.stringify({ ...JSON.parse(pay.body), id: 'Dx', cid: 'C없음' }) });
+  const db = createFakePmDb();
+  db.fill(rows);
+  const s = await open(db);
+  assert.match(s.notices().join('\n'), /없는 계약을 가리키는 대금 1건/);
+});
