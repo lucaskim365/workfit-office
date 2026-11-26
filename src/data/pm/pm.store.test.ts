@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import test from 'node:test';
+import test, { mock } from 'node:test';
 import { liveOf } from '@/domain/pm/rules';
 import { makeSubTicket, makeTaskTicket, taskTicketIndex } from '@/domain/pm/ticket';
 import { createPmStore } from './pm.store';
@@ -7,6 +7,8 @@ import { itemCheck, itemDraft, itemFromDraft, ruleCheck, ruleDraft, ruleFromDraf
 
 /** 2단계 저장소 — 티켓 번호·발행 잠금·세부 작업 연동·업무 수정 반영 (메모리, 사람은 가짜 ID u1·u3) */
 const TODAY = '2026-11-25';
+// 저장 함수는 날짜를 안 주면 오늘(todayStr)을 씀 → 기대값이 TODAY 로 고정돼 있어 날이 바뀌면 깨짐(11/26 발견). 시계만 TODAY 정오로 고정 (setTimeout 등은 그대로)
+mock.timers.enable({ apis: ['Date'], now: new Date(2026, 10, 25, 12) });
 const nameOf = (id: string) => id;
 
 async function setup() {
