@@ -6,6 +6,7 @@
  *   npm run appwrite:schema:pm                         (23개 모두 없을 때 — 하나라도 있으면 멈춤)
  *   npm run appwrite:schema:pm -- --resume --dry-run   (이어 채우기 미리보기 — 읽기만)
  *   npm run appwrite:schema:pm -- --resume             (이어 채우기 — 빠진 컬렉션 · 빠진 인덱스만)
+ *   npm run appwrite:schema:pm -- --touch=pmMoney [--dry-run]  (컬렉션 기록의 속성 상태 어긋남 풀기 — 읽은 값 그대로 다시 쓰기 1번)
  *
  * 지키는 것 (`pm-env.ts`): 개발 DB 접속 값 4개만 읽음(운영 열쇠 이름은 안 읽음) · 운영 프로젝트 ID · `--prod` 거절.
  * 먼저 개발 DB 컬렉션 목록을 **읽기만** 한다. 공용 스크립트는 `--only=<만들 것> --new-only` 로만 부른다 — 기존 컬렉션 · 데이터는 읽지도 쓰지도 않음.
@@ -127,15 +128,56 @@ async function resume(dbs: Databases, db: DevDb, dryRun: boolean) {
   }
 }
 
+/**
+ * --touch=<이름> (7-4 pmMoney, 11/26 팀장 (가)) — 컬렉션 기록이 속성 상태를 processing 으로 들고 있는데 속성 자체(listAttributes)는
+ * available 인 어긋남을 풀려고, **방금 읽은 값 그대로**(name · $permissions · documentSecurity · enabled) updateCollection 1번.
+ * 쓰기 전 읽기만으로: 가드 · assertPmColl · 문서 0 · 어긋남이 있을 때만. 다시 하기 없음. 쓴 뒤 다시 읽어 값이 같은지 · 속성 상태를 찍음.
+ */
+async function touch(dbs: Databases, db: DevDb, name: string, dryRun: boolean) {
+  assertPmColl(name);
+  const c = await dbs.getCollection(db.database, name);
+  const docs = (await dbs.listDocuments(db.database, name, [Query.limit(1)])).total;
+  const attrs = (await dbs.listAttributes(db.database, name, [Query.limit(500)])).attributes as unknown as Array<{ key: string; status: string }>;
+  const inColl = c.attributes as unknown as Array<{ key: string; status: string }>;
+  const off = inColl.filter((a) => a.status === 'processing' && attrs.find((x) => x.key === a.key)?.status === 'available').map((a) => a.key);
+  const sent = { name: c.name, permissions: [...c.$permissions], documentSecurity: c.documentSecurity, enabled: c.enabled };
+  console.log(`  읽은 값: ${JSON.stringify(sent)} · $updatedAt ${c.$updatedAt}`);
+  console.log(`  getCollection 속성: ${inColl.map((a) => `${a.key}:${a.status}`).join(' ')}`);
+  console.log(`  listAttributes 속성: ${attrs.map((a) => `${a.key}:${a.status}`).join(' ')}`);
+  console.log(`  문서 ${docs} · 어긋난 속성 ${off.length ? off.join(', ') : '없음'}`);
+  if (docs !== 0) fail(`문서가 ${docs}건 있음 — 쓰기 0 으로 멈춤`);
+  if (!off.length) { console.log('  할 일 없음 · 쓰기 0'); return; }
+  console.log(`  보낼 값 (읽은 값 그대로): ${JSON.stringify(sent)}`);
+  if (dryRun) { console.log('  미리보기만 — 쓰기 0'); return; }
+  assertPmColl(name);
+  await dbs.updateCollection(db.database, name, sent.name, sent.permissions, sent.documentSecurity, sent.enabled);
+  console.log('  ✓ updateCollection 1번 보냄');
+  const a = await dbs.getCollection(db.database, name);
+  const after = { name: a.name, permissions: [...a.$permissions], documentSecurity: a.documentSecurity, enabled: a.enabled };
+  const same = JSON.stringify(after) === JSON.stringify(sent);
+  console.log(`  쓴 뒤 값: ${JSON.stringify(after)} · $updatedAt ${a.$updatedAt} → 앞과 ${same ? '같음' : '다름'}`);
+  const st = (a.attributes as unknown as Array<{ key: string; status: string }>).map((x) => `${x.key}:${x.status}`);
+  console.log(`  쓴 뒤 getCollection 속성: ${st.join(' ')}`);
+  if (!same) process.exitCode = 1;
+}
+
 async function main() {
   const dryRun = process.argv.includes('--dry-run');
   const isResume = process.argv.includes('--resume');
+  const touchName = process.argv.find((a) => a.startsWith('--touch='))?.slice('--touch='.length);
   const db = devDb(`PM 스키마 ${isResume ? '이어 채우기 ' : ''}${dryRun ? '미리보기 (읽기만)' : '만들기'}`);
   console.log(`  시작 ${stampNow()}`);
   process.on('exit', () => console.log(`  끝 ${stampNow()}`));
   const dbs = new Databases(new Client().setEndpoint(db.endpoint).setProject(db.project).setKey(db.key));
   if (PM_COLL_NAMES.length !== 23 || new Set(PM_COLL_NAMES).size !== 23) fail('PM 컬렉션 정의가 23개가 아닙니다');
 
+  if (touchName !== undefined) {
+    // 이번 허락은 pmMoney 하나 (11/26 팀장) — 다른 이름은 받지 않음
+    if (touchName !== 'pmMoney') fail(`--touch 는 pmMoney 만 (받은 값 "${touchName}")`);
+    if (isResume) fail('--touch 와 --resume 은 따로 돌립니다');
+    await touch(dbs, db, touchName, dryRun);
+    return;
+  }
   if (isResume) { await resume(dbs, db, dryRun); return; }
 
   // 처음 만들기: 읽기만 — 지금 있는 컬렉션 목록, 23개 중 하나라도 있으면 멈춤
