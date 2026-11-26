@@ -17,6 +17,9 @@
     "appwrite:schema:purchase": "tsx scripts/appwrite-schema.ts --only=purchasePayments --new-only",
     "appwrite:schema:bizmaster": "tsx scripts/appwrite-schema.ts --only=companyClasses,bizCategories --new-only",
     "appwrite:schema:subledger": "tsx scripts/appwrite-schema.ts --only=substituteHolidayLedger --new-only",
+    "appwrite:schema:pm": "tsx scripts/pm-schema.ts",
+    "pm:import": "tsx scripts/pm-import.ts",
+    "pm:drop": "tsx scripts/pm-drop.ts",
     "etl": "tsx scripts/etl-firestore-to-appwrite.ts"
   },
   "dependencies": {

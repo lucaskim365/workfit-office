@@ -38,6 +38,7 @@ import {
   DatabasesIndexType,
   type Models,
 } from 'node-appwrite';
+import { PM_COLLS } from '../src/data/pm/pmDb';
 
 /**
  * `listAttributes` 는 기본 25건만 돌려준다. 속성이 그보다 많은 컬렉션(예: resources 29개)에서
@@ -1728,6 +1729,7 @@ const COLLECTIONS: CollectionDef[] = [
       IX('createdAt', ['createdAt']),
     ],
   },
+  ...pmCollections(),
 ];
 
 /** PoC 검증용 권한 — 누구나 CRUD. ⚠️ 운영 전 좁힐 것(계획서 §6). */
@@ -1737,6 +1739,28 @@ const POC_PERMISSIONS = [
   Permission.update(Role.any()),
   Permission.delete(Role.any()),
 ];
+
+/**
+ * 프로젝트 관리(PM) 23개 — `src/data/pm/pmDb.ts` 의 `PM_COLLS` 표에서 만든다 (설계 5.7.1 · 5.7.9 5번).
+ * 문서 하나 = { id, kind, at, seq, body, 찾는 칸 } — 기록 전체는 body(JSON 글자, 1,000,000자까지). 권한 = POC_PERMISSIONS.
+ * at = 저장 시각 ms(13자리 — INT 기본 범위 ±9,007,199,254,740,991 안), seq = 같은 시각 안 순번.
+ * 만들기는 `npm run appwrite:schema:pm` (scripts/pm-schema.ts — PM 23개만 · 새 컬렉션만).
+ */
+function pmCollections(): CollectionDef[] {
+  return PM_COLLS.map((c) => ({
+    id: c.name,
+    name: `프로젝트 관리 ${c.name}`,
+    attributes: [
+      S('id', 128, true),
+      S('kind', 32),
+      INT('at', true),
+      INT('seq', true),
+      S('body', 1_000_000, true),
+      ...c.idx.map((f) => S(f, 128)),
+    ],
+    indexes: c.idx.map((f) => IX(f, [f])),
+  }));
+}
 
 // ─────────────────────────────────────────────────────────────
 // 유틸

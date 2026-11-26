@@ -60,11 +60,17 @@ test('미리보기: 예전 WBS 번호는 연결 끊김, 새 번호는 이어짐,
   assert.equal(p.people.find((x) => x.name === '박외부')?.match, '안 함(이름 글자)');
   // 내장 데이터의 사업·업무 PM(실제 이름)도 데모 사용자 목록에서 찾으므로, 여기선 가짜 목록에 없는 이름이 잡히는지만
   assert.ok(p.unknownNames.includes('없는사람'));
-  // 일부러 넣은 잘못된 날짜(P2-0002 due 2026/11/01)만 칸 오류로 잡힌다
-  assert.deepEqual(p.schemaErrors.map((e) => e.split(':')[0]), ['티켓 P2-0002']);
+  // 일부러 넣은 잘못된 날짜(P2-0002 due 2026/11/01)만 칸 오류로 잡힌다 (티켓은 안 옮기지만 기록으로) · 넣을 줄 1,441건은 모두 저장 계층이 읽음
+  assert.deepEqual(p.schemaErrors.map((e) => e.split(':')[0]), ['(안 옮김) 티켓 P2-0002']);
   // 내장 데이터 건수 (1단계 확인 숫자와 같음)
   assert.equal(p.counts.find((c) => c.collection === 'pmTasks')?.count, 338);
   assert.equal(p.counts.find((c) => c.collection === 'pmProjects')?.count, 12);
+  // 7-3: 23개 전부 · 합 1,441 = 설계 5.7.8 표 · 티켓 0 · 세부 작업 = FP 432 (state.json 세부 작업 안 옮김)
+  assert.equal(p.counts.length, 23);
+  assert.equal(p.counts.reduce((a, c) => a + c.count, 0), 1441);
+  assert.deepEqual([p.counts.find((c) => c.collection === 'pmTickets')?.count, p.counts.find((c) => c.collection === 'pmSubtasks')?.count], [0, 432]);
+  assert.equal(p.left.find((r) => r.key === 'money')?.when, '옮기지 않음');
+  assert.equal(p.left.find((r) => r.key === 'tickets')?.when, '옮기지 않음');
   // 문제점: 빈 세부 작업 목록 · 없는 세부 작업에 묶인 티켓 · 날짜 형식 · 짝 없는 내부 직원 · PDF 없음
   const all = p.problems.join('\n');
   assert.match(all, /P2\|5\.9/);
@@ -75,4 +81,10 @@ test('미리보기: 예전 WBS 번호는 연결 끊김, 새 번호는 이어짐,
   // 분류 안 된 칸은 '확인 필요'로 드러난다
   assert.equal(p.left.find((r) => r.key === 'weird')?.when, '?');
   assert.equal(p.left.find((r) => r.key === 'plan')?.when, '옮기지 않음');
+});
+
+test('7-3 미리보기: state.json 에만 있는 사람이 넣은 기준정보(자동 아님)는 따로 목록 · 사업 PM → 사용자 ID', () => {
+  const p = buildImportPreview({ ...STATE, orgs: [{ id: 'o:도입기업:손으로', name: '손으로', auto: 0 }, { id: 'o:x', name: '자동', auto: 1 }], codes: { biz: [{ id: 'b:새', name: '새 구분' }] } }, USERS, { links: {}, files: [] }, '2026-11-24');
+  assert.deepEqual(p.hand.map((h) => `${h.kind}:${h.name}`), ['기업 · 기관:손으로', '사업구분:새 구분']);
+  assert.match(p.problems.join(' / '), /사람이 넣은 기준정보 2건/);
 });
