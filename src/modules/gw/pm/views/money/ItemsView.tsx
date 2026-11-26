@@ -11,6 +11,7 @@ import { usePmPeople } from '../../usePmPeople';
 import { EmptyHint, Tag } from '../wbs/parts';
 import { ScreenHead } from '../dash/parts';
 import { PARTIAL_LOCK_MSG, usePmPartialLock } from '@/features/pm/pmSaveBus';
+import { pmBase } from '@/data/pm/pm.store';
 
 /**
  * 기준정보 › 품목 · 단가 (money/items, 데모 pMoneyItems 4980 · ciList 4992 · ciForm 5009) — 6-4.
@@ -86,7 +87,7 @@ export function ItemsView() {
         </div>
       </section>
       {edit && <ItemModal it={edit === 'new' ? null : edit} onClose={() => setEdit(null)}
-        onSave={async (x) => { await mut.saveItem.mutateAsync(x); setMsg(edit === 'new' ? `품목 추가 — ${x.name}` : `품목 수정 — ${x.name}`); setEdit(null); }}
+        onSave={async (x) => { await mut.saveItem.mutateAsync({ it: x, base: edit === 'new' ? [] : [pmBase('items', edit.id, edit)] }); setMsg(edit === 'new' ? `품목 추가 — ${x.name}` : `품목 수정 — ${x.name}`); setEdit(null); }}
         onRemove={async (x) => { await mut.removeItem.mutateAsync(x.id); setMsg(`품목 삭제 — ${x.name}`); setEdit(null); }} />}
     </div>
   );

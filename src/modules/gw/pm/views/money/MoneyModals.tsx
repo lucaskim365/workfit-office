@@ -5,6 +5,7 @@ import { pmFundSchema, type FundKey, type FundOf, type PmContract, type PmFund, 
 import { COST_CATS, costCheck, manToWon, payCheck, wonToMan, type PmCost, type PmOh } from '@/domain/pm/pl';
 import { F, Foot, inp } from './RulesView';
 import { usePmPartialLock } from '@/features/pm/pmSaveBus';
+import { pmBase, type PmBases } from '@/data/pm/pm.store';
 
 /**
  * 사업별 수익 · 손익 입력 창 (데모 mnFundForm 4658 · mnPayForm 4668 · mnCostForm 4679 · mnOhForm 4620) — 6-6.
@@ -14,8 +15,14 @@ type Err = [string, string] | null;
 const errText = (e: unknown) => (e as Error).message || '저장하지 못했습니다';
 
 /** 재원 수정 (mnFundForm) — 지원 기준을 고르면 비율 · 상한으로 계산, 확정 금액이 있으면 그것이 우선 */
-export function FundModal({ short, F: FO, rules, cfg, onSave, onClose }: { short: string; F: FundOf; rules: readonly PmFundRule[]; cfg: PmMoneyCfg; onSave: (f: PmFund) => Promise<void>; onClose: () => void }) {
+export function FundModal({ short, F: FO, rec, fundId, rules, cfg, onSave, onClose }: {
+  short: string; F: FundOf;
+  /** 저장된 재원 기록 (없으면 null — 기준표, F5) · 사업 id */
+  rec: PmFund | null; fundId: string;
+  rules: readonly PmFundRule[]; cfg: PmMoneyCfg; onSave: (f: PmFund, base: PmBases) => Promise<void>; onClose: () => void;
+}) {
   const f = FO.f;
+  const [base] = useState<PmBases>(() => [pmBase('funds', fundId, rec)]);
   const [v, setV] = useState({
     rule: f.rule || (FO.auto && FO.r ? FO.r.id : ''),
     man: f.man ? String(f.man / 10000) : '',
@@ -32,7 +39,7 @@ export function FundModal({ short, F: FO, rules, cfg, onSave, onClose }: { short
     for (const [k] of FUND_SRC) { const w = manToWon(v.fix[k]); if (w != null) fix[k] = w; }
     setErr(null);
     try {
-      await onSave(pmFundSchema.parse({ ...f, rule: v.rule, ruleSet: true, man: Math.round((+v.man || 0) * 10000), cloudMonthly: v.cloudMo.trim() === '' ? null : +v.cloudMo, cloudM: v.cloudM.trim() === '' ? null : +v.cloudM, fix, fixNote: v.fixNote.trim() }));
+      await onSave(pmFundSchema.parse({ ...f, rule: v.rule, ruleSet: true, man: Math.round((+v.man || 0) * 10000), cloudMonthly: v.cloudMo.trim() === '' ? null : +v.cloudMo, cloudM: v.cloudM.trim() === '' ? null : +v.cloudM, fix, fixNote: v.fixNote.trim() }), base);
     } catch (e) { setErr([errText(e), '']); }
   };
   const bad = (k: string) => err?.[1] === k;
@@ -116,8 +123,10 @@ export function CostModal({ c, projectId, short, today, onSave, onRemove, onClos
 }
 
 /** 간접비 입력 (mnOhForm) — 달마다, 비우면 기본 월 간접비 */
-export function OhModal({ m, oh, cfg, onSave, onClose }: { m: string; oh: readonly PmOh[]; cfg: PmMoneyCfg; onSave: (x: { m: string; amt: number | null; memo: string; def: number | null }) => Promise<void>; onClose: () => void }) {
+export function OhModal({ m, oh, cfg, onSave, onClose }: { m: string; oh: readonly PmOh[]; cfg: PmMoneyCfg; onSave: (x: { m: string; amt: number | null; memo: string; def: number | null }, base: PmBases) => Promise<void>; onClose: () => void }) {
   const o = oh.find((x) => x.id === m);
+  // 기준표 (F5) — 연 달의 간접비 + 기본 월 간접비 (달 칸을 다른 달로 바꾸면 그 달은 창이 본 값이 없어 비교 안 함)
+  const [base] = useState<PmBases>(() => [pmBase('oh', m, o ?? null), pmBase('moneyCfg', undefined, cfg, ['ohDefault'])]);
   const [v, setV] = useState({ m, amt: wonToMan(o?.amt), memo: o?.memo ?? '', def: cfg.ohDefault ? String(cfg.ohDefault / 10000) : '' });
   const [err, setErr] = useState<Err>(null);
   const set = <K extends keyof typeof v>(k: K, x: string) => setV((p) => ({ ...p, [k]: x }));
@@ -125,7 +134,7 @@ export function OhModal({ m, oh, cfg, onSave, onClose }: { m: string; oh: readon
     if (!/^\d{4}-\d{2}$/.test(v.m.trim())) { setErr(['달은 2026-11처럼 넣어 주세요', 'm']); return; }
     for (const k of ['amt', 'def'] as const) if (v[k].trim() !== '' && !(+v[k] >= 0)) { setErr(['0 이상 숫자로 넣어 주세요', k]); return; }
     setErr(null);
-    try { await onSave({ m: v.m.trim(), amt: manToWon(v.amt), memo: v.memo, def: manToWon(v.def) }); } catch (x) { setErr([errText(x), '']); }
+    try { await onSave({ m: v.m.trim(), amt: manToWon(v.amt), memo: v.memo, def: manToWon(v.def) }, base); } catch (x) { setErr([errText(x), '']); }
   };
   const bad = (k: string) => err?.[1] === k;
   return (

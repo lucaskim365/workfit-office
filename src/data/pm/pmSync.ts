@@ -24,7 +24,14 @@ interface Known {
 }
 
 export class PmConflictError extends Error {
-  constructor(msg = '다른 사람이 먼저 고쳤습니다. 다시 읽었으니 확인 후 다시 저장해 주세요') { super(msg); this.name = 'PmConflictError'; }
+  constructor(msg = PM_CONFLICT_MSG) { super(msg); this.name = 'PmConflictError'; }
+}
+/** ①(DB 비교) 충돌 — 저장 안 함. 다시 읽은 뒤라 창을 닫고 다시 열면 새 값 (검수 ③ F5: '다시 저장'을 권하지 않음) */
+export const PM_CONFLICT_MSG = '다른 사람이 먼저 고쳤습니다. 저장하지 않았습니다 — 다시 읽었으니 창을 닫고 다시 열어 확인해 주세요';
+/** 창이 연 때 기록 ≠ 지금 기록 (F5, 설계 5.7.17) */
+export const PM_STALE_WINDOW_MSG = '이 창을 연 뒤 다른 사람이 먼저 고쳤습니다. 저장하지 않았습니다 — 창을 닫고 다시 열어 확인해 주세요';
+export class PmStaleWindowError extends PmConflictError {
+  constructor() { super(PM_STALE_WINDOW_MSG); this.name = 'PmStaleWindowError'; }
 }
 /** 번호를 새로 받는 문서(티켓 · 이슈 · CR)가 겹침 → 다시 읽고 다음 번호로 */
 export class PmNumberTakenError extends Error { constructor(public readonly coll: string) { super(`번호 겹침 (${coll})`); this.name = 'PmNumberTakenError'; } }

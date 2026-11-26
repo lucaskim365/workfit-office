@@ -7,6 +7,7 @@ import { PM_AGR_STATES, type PmAgreementChange, type PmFixItem, type PmGovRecord
 import type { PmPerson } from '../../usePmPeople';
 import { EmptyHint, Tag } from '../wbs/parts';
 import { PARTIAL_LOCK_MSG, usePmPartialLock } from '@/features/pm/pmSaveBus';
+import { pmBase, type PmBases } from '@/data/pm/pm.store';
 
 /**
  * 사업별 화면 팝업 — 점검 결과 기록(govResModal) · 지적 사항(govItemsModal) · 필수 TASK 연결(govLinkModal) ·
@@ -45,11 +46,13 @@ export function GovResultModal({ c, g, short, people, me, onSave, onRemove, onCl
   short: string;
   people: PmPerson[];
   me: string;
-  onSave: (x: { v: string; date: string; memo: string; fix: string; items: Array<{ id: string; text: string; whoId: string }> }) => Promise<void>;
+  onSave: (x: { v: string; date: string; memo: string; fix: string; items: Array<{ id: string; text: string; whoId: string }> }, base: PmBases) => Promise<void>;
   onRemove: () => Promise<void>;
   onClose: () => void;
 }) {
   const r = c.gov.get(g.id);
+  // 기준표 (F5) — 폼 처음 값을 복사한 그 판정 기록
+  const [base] = useState<PmBases>(() => [pmBase('gov', `${c.p.id}|${g.id}`, r ?? null)]);
   const F = GOV_FIX[g.id];
   const [v, setV] = useState(r?.v ?? '');
   const [date, setDate] = useState(r?.date || c.today);
@@ -63,7 +66,7 @@ export function GovResultModal({ c, g, short, people, me, onSave, onRemove, onCl
   const save = async () => {
     if (!v) { setErr('판정을 고르세요'); return; }
     if (isFix && !fix) { setErr('↑ 통보 공문에 적힌 보완 기한을 넣어야 저장됩니다'); return; }
-    await onSave({ v, date: date || c.today, memo, fix: isFix ? fix : '', items: isFix ? items : [] });
+    await onSave({ v, date: date || c.today, memo, fix: isFix ? fix : '', items: isFix ? items : [] }, base);
     onClose();
   };
   const del = async () => { await onRemove(); onClose(); };
@@ -181,16 +184,18 @@ export function GovLinkModal({ c, itemId, short, onSave, onClose }: {
   c: SiteCtx;
   itemId: string;
   short: string;
-  onSave: (taskIds: string[] | null) => Promise<void>;
+  onSave: (taskIds: string[] | null, base: PmBases) => Promise<void>;
   onClose: () => void;
 }) {
   const r = GOV_WBS.find((x) => x.id === itemId)!;
   const [sel, setSel] = useState<Set<string>>(() => new Set(govLinkTasks(c, r).map((t) => t.id)));
+  // 기준표 (F5, M2) — 연 때 직접 연결 목록 (없으면 null). 목록 통째로 저장하므로 비교 칸 = 연결 목록
+  const [base] = useState<PmBases>(() => [pmBase('govLinks', `${c.p.id}|${itemId}`, c.govLink.has(itemId) ? { taskIds: [...(c.govLink.get(itemId) ?? [])] } : null, ['taskIds'])]);
   const [q, setQ] = useState('');
   const ts = c.ts.filter((t) => !isPre(t) && (!q.trim() || `${t.code} ${t.name} ${t.output}`.includes(q.trim())));
   const man = c.govLink.has(itemId);
   const toggle = (id: string) => setSel((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
-  const done = async (ids: string[] | null) => { await onSave(ids); onClose(); };
+  const done = async (ids: string[] | null) => { await onSave(ids, base); onClose(); };
   return (
     <Modal open onClose={onClose} width={720} title={`${short} · ${r.short} — 연결할 업무`}
       footer={<><Button variant="secondary" onClick={() => void done(null)}>자동으로 되돌리기</Button><span className="flex-1" /><Button variant="secondary" onClick={onClose}>취소</Button><Button onClick={() => void done([...sel])}>저장</Button></>}>
@@ -216,12 +221,14 @@ export function GovDateModal({ c, itemId, short, onSave, onClose }: {
   c: SiteCtx;
   itemId: string;
   short: string;
-  onSave: (items: Array<{ id: string; start: string; end: string }>) => Promise<number>;
+  onSave: (items: Array<{ id: string; start: string; end: string }>, base: PmBases) => Promise<number>;
   onClose: () => void;
 }) {
   const r = GOV_WBS.find((x) => x.id === itemId)!;
   const ts = govLinkTasks(c, r);
   const [v, setV] = useState(() => Object.fromEntries(ts.map((t) => [t.id, { start: t.start, end: t.end }])));
+  // 기준표 (F5) — 연 때 업무마다 시작 · 종료 (일정 칸만 저장하므로 비교 칸도 그것만)
+  const [base] = useState<PmBases>(() => ts.map((t) => pmBase('tasks', t.id, t, ['start', 'end'])));
   const [err, setErr] = useState('');
   const ref = itemId === 'g_mid' && c.p.start ? `규정: 협약 후 3개월 이내 (${monthDay(addMonths(c.p.start, 3))}) · 운영기관 일정에 맞춰 바꾸면 기한 목록의 중간점검 날짜도 따라 바뀝니다` : '';
   const save = async () => {
@@ -230,7 +237,7 @@ export function GovDateModal({ c, itemId, short, onSave, onClose }: {
       if (!x.start || !x.end) { setErr('시작일과 종료일을 모두 넣어 주세요'); return; }
       if (x.end < x.start) { setErr('종료일은 시작일 이후여야 합니다'); return; }
     }
-    await onSave(ts.map((t) => ({ id: t.id, ...v[t.id] })));
+    await onSave(ts.map((t) => ({ id: t.id, ...v[t.id] })), base);
     onClose();
   };
   return (
@@ -258,10 +265,12 @@ export function AgreementModal({ c, x, short, onSave, onRemove, onClose }: {
   /** 없으면 새 기록 */
   x: PmAgreementChange | null;
   short: string;
-  onSave: (x: PmAgreementChange) => Promise<string>;
+  onSave: (x: PmAgreementChange, base: PmBases) => Promise<string>;
   onRemove: (id: string) => Promise<void>;
   onClose: () => void;
 }) {
+  // 기준표 (F5) — 고치기면 창을 연 그 기록
+  const [base] = useState<PmBases>(() => (x ? [pmBase('agreements', x.id, x)] : []));
   const from = x?.from ?? c.p.end;
   const [v, setV] = useState<PmAgreementChange>(() => x ?? {
     id: `AG${Date.now().toString(36)}`, projectId: c.p.id, date: c.today, kind: 'ext', from: c.p.end, to: '', text: '', why: '', st: '준비 중', by: '', applied: false,
@@ -272,7 +281,7 @@ export function AgreementModal({ c, x, short, onSave, onRemove, onClose }: {
   const save = async () => {
     const e = agrCheck({ kind: v.kind, to: v.to, why: v.why, date: v.date }, from);
     if (e) { setErr(e); return; }
-    const changed = await onSave({ ...v, from });
+    const changed = await onSave({ ...v, from }, base);
     if (changed) alert(`협약 종료일을 ${changed}로 바꿨습니다 (${j}) — 관리기준 기한도 다시 계산됩니다`);
     onClose();
   };

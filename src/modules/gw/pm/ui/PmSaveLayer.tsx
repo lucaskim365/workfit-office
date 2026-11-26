@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useIsMutating } from '@tanstack/react-query';
 import { pmStore } from '@/data/pm/pmStoreInstance';
+import { PM_MUTATION_KEY } from '@/features/pm/usePm';
 import type { PmProgress } from '@/data/pm/pmSync';
 import { clearPmSaveError, isShownPmSaveError, usePmSaveBus } from '@/features/pm/pmSaveBus';
 
@@ -13,7 +14,7 @@ import { clearPmSaveError, isShownPmSaveError, usePmSaveBus } from '@/features/p
  */
 export function PmSaveLayer() {
   const [prog, setProg] = useState<PmProgress | null>(null);
-  const busy = useIsMutating() > 0;
+  const busy = useIsMutating({ mutationKey: PM_MUTATION_KEY }) > 0;
   const { last } = usePmSaveBus();
 
   useEffect(() => {

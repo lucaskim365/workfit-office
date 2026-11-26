@@ -10,6 +10,7 @@ import type { usePmPeople } from '../../usePmPeople';
 import { EmptyHint, ProjectTag, Tag } from '../wbs/parts';
 import { hasV, MissBar } from './BaseView';
 import { PARTIAL_LOCK_MSG, usePmPartialLock } from '@/features/pm/pmSaveBus';
+import { pmBase } from '@/data/pm/pm.store';
 
 /**
  * 기준정보 › 사업 · 인력 · 코드의 나머지 탭 (데모 baseLink 3815 · baseGen 3882 · baseOrgs 3740 · baseUsers 3749 · baseCodes 3768 · baseStdTasks 3947)
@@ -102,7 +103,7 @@ export function LinkTab({ d, mut, manage, shortOf, say, openTask, onNewTask }: T
               <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-2.5">
                 <b className="text-[13px]">{cur.name}</b>
                 {!cur.isStd && <Button size="sm" variant="secondary" disabled={!manage} title={`이 단계를 ${p.biz} 표준 단계로 등록`}
-                  onClick={async () => { if (!p.biz) { say('사업구분이 없는 사업입니다', true); return; } await mut.saveCode.mutateAsync({ id: `g:${p.biz}|${cur.name}`, group: 'stage', name: cur.name, biz: p.biz, track: '', ord: 0, note: '', auto: false }); say(`'${cur.name}'을(를) ${p.biz} 표준 단계로 등록`); }}>표준 단계로 등록</Button>}
+                  onClick={async () => { if (!p.biz) { say('사업구분이 없는 사업입니다', true); return; } await mut.saveCode.mutateAsync({ c: { id: `g:${p.biz}|${cur.name}`, group: 'stage', name: cur.name, biz: p.biz, track: '', ord: 0, note: '', auto: false }, base: [] /* 새로 만들기 */ }); say(`'${cur.name}'을(를) ${p.biz} 표준 단계로 등록`); }}>표준 단계로 등록</Button>}
                 <span className="flex-1" />
                 {miss.length > 0 && !freePrj && <Button size="sm" variant="secondary" disabled={!manage} onClick={() => { if (confirm(`빠진 표준 업무 ${miss.length}개를 ${shortOf(p.id)} 업무 목록에 추가할까요?`)) void addStd(miss.map((r) => r.std!.id), '표준 세부 TASK 추가'); }}>빠진 표준 업무 {miss.length}개 모두 사업에 추가</Button>}
                 <Button size="sm" disabled={!manage} onClick={() => onNewTask(p.id, cur.name)}>+ 사업 업무 추가</Button>
@@ -314,7 +315,7 @@ export function OrgTab({ d, mut, manage, shortOf, say, q, editing, setEditing }:
         </table>
       </section>
       {editing && <OrgFormModal o={editing === 'new' ? null : editing} defType={type === 'all' ? '도입기업' : type} d={d} shortOf={shortOf}
-        onSave={async (o) => { const n = await mut.saveOrg.mutateAsync(o); say(n ? `${o.name} 수정 — 사업 ${n}개도 함께 바뀜` : `${o.name} ${editing === 'new' ? '등록' : '수정'}`); setEditing(null); }}
+        onSave={async (o) => { const n = await mut.saveOrg.mutateAsync({ o, base: editing === 'new' ? [] : [pmBase('orgs', editing.id, editing)] }); /* 기준표 = 창을 연 그 기록 (F5) */ say(n ? `${o.name} 수정 — 사업 ${n}개도 함께 바뀜` : `${o.name} ${editing === 'new' ? '등록' : '수정'}`); setEditing(null); }}
         onRemove={async (o) => { await mut.removeOrg.mutateAsync(o.id); say(`${o.name} 삭제됨`); setEditing(null); }} onClose={() => setEditing(null)} />}
     </div>
   );
@@ -483,10 +484,10 @@ export function CodeTab({ d, mut, manage, shortOf, say }: TabProps) {
         </section>
       )}
       {edit && <CodeFormModal g={edit.g} c={edit.c} defBiz={b} d={d} onClose={() => setEdit(null)}
-        onSave={async (c) => { const n = await mut.saveCode.mutateAsync(c); say(edit.c ? `${c.name} 수정${n ? ` — ${n}곳 함께 바뀜` : ''}` : `'${c.name}' 추가`); setEdit(null); }}
+        onSave={async (c) => { const n = await mut.saveCode.mutateAsync({ c, base: edit.c ? [pmBase('codes', edit.c.id, edit.c)] : [] }); say(edit.c ? `${c.name} 수정${n ? ` — ${n}곳 함께 바뀜` : ''}` : `'${c.name}' 추가`); setEdit(null); }}
         onRemove={async (c) => { await mut.removeCode.mutateAsync(c.id); say(`'${c.name}' 삭제됨`); setEdit(null); }} />}
       {std && st && <StdFormModal t={std === 'new' ? null : std} biz={st.biz} stage={st.name} d={d} onClose={() => setStd(null)}
-        onSave={async (x) => { await mut.saveStd.mutateAsync(x); say(std === 'new' ? `세부 업무 '${x.name}' 추가` : '세부 업무 수정'); setStd(null); }}
+        onSave={async (x) => { await mut.saveStd.mutateAsync({ x, base: std === 'new' ? [] : [pmBase('stdTasks', std.id, std)] }); say(std === 'new' ? `세부 업무 '${x.name}' 추가` : '세부 업무 수정'); setStd(null); }}
         onRemove={async (x) => { await mut.removeStd.mutateAsync(x.id); say('세부 업무 삭제됨'); setStd(null); }} />}
     </div>
   );

@@ -18,8 +18,8 @@ import { nextCrId } from '@/domain/pm/cr';
 import { nextIssueId } from '@/domain/pm/issue';
 import { ORG_FIELD, baseTplTasks, deriveMaster, makeTasks, projectNo, stdTplTasks, type Master } from '@/domain/pm/master';
 import { codeDelBlock, nextCodeIn as nextCode, orgUse, stdOf } from '@/domain/pm/masterLink';
-import type { PmDb } from './pmDb';
-import { createPmSync, PmConflictError, PmNumberTakenError, PmPartialError, PmProjectTakenError, type PmProgress } from './pmSync';
+import { PM_COLLS, type PmDb } from './pmDb';
+import { createPmSync, PmConflictError, PmNumberTakenError, PmPartialError, PmProjectTakenError, PmStaleWindowError, type PmProgress } from './pmSync';
 
 
 /**
@@ -130,10 +130,10 @@ export interface PmStoreOpts {
   nid?: (p: string) => string;
 }
 /** 저장 함수가 아닌 것 (테스트 ⓐ 가 '한 번도 안 부른 저장 함수'를 셀 때 뺌) */
-export const PM_READ_METHODS = ['snapshot', 'refresh', 'peek', 'gen', 'notices', 'onProgress', 'fundOf'] as const;
+export const PM_READ_METHODS = ['snapshot', 'refresh', 'peek', 'gen', 'notices', 'onProgress', 'fundOf', 'withBase'] as const;
 
 const MSG = {
-  partial: '저장 중 연결이 끊겨 일부만 저장됐습니다. 화면은 저장된 상태로 다시 읽었습니다. 확인 후 다시 저장해 주세요',
+  partial: '저장 중 연결이 끊겨 일부만 저장됐습니다. 화면은 저장된 상태로 다시 읽었습니다 — 다시 저장하지 말고 창을 닫아 목록에서 확인해 주세요 (사업 등록이면 [삭제]로 지운 뒤 다시 등록)',
   failed: '저장하지 못했습니다 (DB 연결 오류). 확인 후 다시 저장해 주세요',
   empty: 'PM 저장소가 비어 있어 저장할 수 없습니다 (데이터 옮기기 전)',
   number: '번호가 겹쳐 3번 다시 했지만 저장하지 못했습니다. 잠시 뒤 다시 저장해 주세요',
@@ -149,6 +149,54 @@ export class PmDbSaveError extends Error {
 }
 export const isPmDbSaveError = (e: unknown): e is Error => e instanceof PmDbSaveError || e instanceof PmConflictError;
 export const isPmPartialSave = (e: unknown) => e instanceof PmDbSaveError && e.partial;
+
+/**
+ * 기준표 (F5, 설계 5.7.17) — 수정 창이 **폼 처음 값을 복사한 그 기록**을 열 때 담아 두고, 저장 때 같이 넘긴다.
+ * DB 모드 저장소는 계산 전에 지금 기록과 비교해 다르면(남이 고침 · 지움 · 새로 만듦) 아무것도 안 쓰고 PmStaleWindowError.
+ * 저장이 다 끝나면 저장소가 표의 기록을 새 기록으로 바꿈 → 같은 창에서 잇달아 저장해도 안 막힘 (M7: 실패 · 일부만 저장이면 그대로).
+ * 메모리 모드는 표를 안 봄.
+ */
+export interface PmBase {
+  field: keyof PmSnapshot;
+  /** 기록 id (티켓은 no). 하나짜리 칸(moneyCfg)은 없음 */
+  id?: string;
+  /** 비교할 칸만 (없으면 기록 전체) */
+  keys?: readonly string[];
+  /** 창이 연 때 기록 — 그때 없던 기록이면 null */
+  rec: unknown;
+}
+export type PmBases = PmBase[];
+/** 창이 연 때 기록으로 기준표 한 줄 (기록은 복사해 둠 — 창이 나중에 고쳐도 안 바뀜) */
+export const pmBase = (field: keyof PmSnapshot, id: string | undefined, rec: unknown, keys?: readonly string[]): PmBase =>
+  ({ field, ...(id === undefined ? {} : { id }), ...(keys ? { keys } : {}), rec: rec == null ? null : structuredClone(rec) });
+
+const SCHEMA_OF = new Map(PM_COLLS.flatMap((c) => c.kinds).filter((k) => k.schema).map((k) => [k.field as string, k.schema!]));
+/** 지금 상태의 그 기록 (없으면 null) */
+export function baseCur(s: PmSnapshot, b: PmBase): unknown {
+  const v = (s as unknown as Record<string, unknown>)[b.field];
+  if (!Array.isArray(v)) return v ?? null;
+  if (b.id === undefined) return v;
+  const idOf = (r: Record<string, unknown>) => String(b.field === 'tickets' ? r.no : r.id);
+  return (v as Array<Record<string, unknown>>).find((r) => idOf(r) === b.id) ?? null;
+}
+/** 비교용 글자 — DB 에서 읽은 기록과 같은 모양으로(칸 스키마로 다시 읽음 · 빈 칸 기본값), 안쪽 칸 순서까지 맞춰 (M5: 빈 칸 · 칸 순서로 잘못 막지 않게) */
+function baseText(field: string, rec: unknown, keys?: readonly string[]): string {
+  let v = rec;
+  const sc = SCHEMA_OF.get(field);
+  if (v && typeof v === 'object' && !Array.isArray(v) && sc) { const p = sc.safeParse(v); if (p.success) v = p.data; }
+  if (v && keys) { const o = v as Record<string, unknown>; v = Object.fromEntries(keys.map((k) => [k, o[k] ?? null])); }
+  return JSON.stringify(sortDeep(v ?? null));
+}
+function sortDeep(v: unknown): unknown {
+  if (Array.isArray(v)) return v.map(sortDeep);
+  if (!v || typeof v !== 'object') return v;
+  const o = v as Record<string, unknown>;
+  const out: Record<string, unknown> = {};
+  for (const k of Object.keys(o).sort()) if (o[k] !== undefined) out[k] = sortDeep(o[k]);
+  return out;
+}
+/** 표의 기록 = 지금 기록 (있고 없음 포함, M3) */
+export const baseSame = (s: PmSnapshot, b: PmBase) => baseText(b.field, b.rec, b.keys) === baseText(b.field, baseCur(s, b), b.keys);
 
 /** DB 모드 처음 상태 — 계획서 내장 데이터 · 기본 설정만 (처음 값(내장 데이터)은 메모리 모드 전용, 5.7.4) */
 function emptyState(): PmSnapshot {
@@ -1095,6 +1143,8 @@ export function createPmStore(today = todayStr(), opts: PmStoreOpts = {}) {
     return {
       ...core,
       ...reads,
+      /** 메모리 모드는 기준표를 안 봄 = 그냥 저장 함수 (동작 그대로) */
+      withBase(_bases: PmBases): Core { return core; },
       async snapshot(): Promise<PmSnapshot> { return clone(state); },
       /** 메모리 모드는 다시 읽을 곳이 없음 = 지금 상태 */
       async refresh() { return reads.peek(); },
@@ -1141,11 +1191,25 @@ export function createPmStore(today = todayStr(), opts: PmStoreOpts = {}) {
     saveCode: (a) => { const c = a[0] as PmCode; const o = state.codes.find((x) => x.id === c?.id); return !!o && o.name !== c.name; },
   };
 
-  const run = (name: CoreKey, args: unknown[]) => line(async () => {
+  /** (c) 덧막이 — K3 로 다시 읽기 전 · 뒤에 이번 저장이 통째로 고치는 기록이 바뀌었으면 충돌 (표 없이 불려도) */
+  const K3_TARGET: Partial<Record<CoreKey, (a: unknown[]) => PmBase>> = {
+    updateProject: (a) => ({ field: 'projects', id: (a[0] as PmProject)?.id, rec: null }),
+    updateTask: (a) => ({ field: 'tasks', id: String(a[0]), rec: null }),
+    saveCode: (a) => ({ field: 'codes', id: (a[0] as PmCode)?.id, rec: null }),
+  };
+
+  const run = (name: CoreKey, args: unknown[], bases?: PmBases) => line(async () => {
     await ensure();
     if (empty) throw new PmDbSaveError(MSG.empty);
     for (let attempt = 1; ; attempt++) {
-      if (K3[name]?.(args)) await reload();
+      if (K3[name]?.(args)) {
+        const t = K3_TARGET[name]?.(args);
+        if (t) t.rec = clone(baseCur(state, t));
+        await reload();
+        if (t && t.rec !== null && !baseSame(state, t)) throw new PmStaleWindowError();
+      }
+      // F5: 창이 연 때 기록 ≠ 지금 기록 → 아무것도 안 씀 (다시 읽지 않음 — 저장소가 이미 더 새 것을 앎)
+      if (bases?.some((b) => !baseSame(state, b))) throw new PmStaleWindowError();
       const prev = state;
       const draft = clone(prev);
       state = draft;
@@ -1173,13 +1237,17 @@ export function createPmStore(today = todayStr(), opts: PmStoreOpts = {}) {
       }
       state = draft;
       generation++;
+      for (const b of bases ?? []) b.rec = clone(baseCur(state, b));
       return res;
     }
   });
-  const wrapped = Object.fromEntries((Object.keys(core) as CoreKey[]).map((k) => [k, (...a: unknown[]) => run(k, a)])) as unknown as Core;
+  const wrapOf = (bases?: PmBases) => Object.fromEntries((Object.keys(core) as CoreKey[]).map((k) => [k, (...a: unknown[]) => run(k, a, bases)])) as unknown as Core;
+  const wrapped = wrapOf();
   return {
     ...wrapped,
     ...reads,
+    /** 기준표를 같이 넘기는 저장 (F5) — `s.withBase(표).updateTask(…)` */
+    withBase(bases: PmBases): Core { return wrapOf(bases); },
     async snapshot(): Promise<PmSnapshot> { return line(async () => { await ensure(); return clone(state); }); },
     /** DB 전체 다시 읽기 (같은 줄에서 — 저장 사이에만) → 상태 + 세대 */
     async refresh() { return line(async () => { await reload(); return reads.peek(); }); },

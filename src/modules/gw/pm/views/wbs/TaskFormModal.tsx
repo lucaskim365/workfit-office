@@ -3,6 +3,7 @@ import { Modal } from '@/shared/ui/Modal';
 import { Button } from '@/shared/ui/Button';
 import { PM_TASK_STATUSES, pmTaskSchema, type PmTask } from '@/domain/pm/schema';
 import type { PmDerived, usePmMutations } from '@/features/pm/usePm';
+import { isPmDbSaveError, pmBase, type PmBases } from '@/data/pm/pm.store';
 import type { usePmPeople } from '../../usePmPeople';
 
 /**
@@ -97,6 +98,8 @@ export function TaskFormModal({ mode, d, people, mut, shortOf, onClose, onSaved 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const [v, setV] = useState(init);
+  // 기준표 (F5) — 폼 처음 값을 복사한 그 업무 기록 (init 과 같은 그리기에서)
+  const [editBase] = useState<PmBases>(() => (mode.kind === 'edit' && src ? [pmBase('tasks', src.id, src)] : []));
   const [err, setErr] = useState<{ msg: string; field: string } | null>(null);
   const set = <K extends keyof typeof v>(key: K, val: (typeof v)[K]) => setV((x) => ({ ...x, [key]: val }));
   // 티켓이 있는 업무는 다른 사업으로 못 옮김 (티켓 번호가 사업별)
@@ -161,8 +164,9 @@ export function TaskFormModal({ mode, d, people, mut, shortOf, onClose, onSaved 
     }
     const next = parsed.data;
     const done = () => onSaved(id);
-    const onError = (e: Error) => fail(e.message, 'code');
-    if (mode.kind === 'edit') mut.updateTask.mutate({ id: src!.id, next }, { onSuccess: done, onError });
+    // DB 저장 실패(충돌 등)는 번호 칸 탓이 아님 (사소 4)
+    const onError = (e: Error) => fail(e.message, isPmDbSaveError(e) ? '' : 'code');
+    if (mode.kind === 'edit') mut.updateTask.mutate({ id: src!.id, next, base: editBase }, { onSuccess: done, onError });
     else mut.addTask.mutate(next, { onSuccess: done, onError });
   };
 

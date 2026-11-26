@@ -8,6 +8,7 @@ import { pmProjectSchema, type PmProject } from '@/domain/pm/schema';
 import type { PmDerived, usePmMutations, usePmSiteMutations } from '@/features/pm/usePm';
 import type { usePmPeople } from '../../usePmPeople';
 import { usePmPartialLock } from '@/features/pm/pmSaveBus';
+import { pmBase, type PmBases } from '@/data/pm/pm.store';
 
 /**
  * 사업 등록 · 정보 수정 (데모 siteForm 2919) — 데모 칸 그대로 (새 칸 없음).
@@ -58,6 +59,8 @@ export function SiteFormModal({ s, presetTpl, d, people, mut, smut, money, short
     const base = pmProjectSchema.parse({ id: nextProjectKey(snap.projects, snap.tasks, snap.lastProjectNo), supplier: '워크핏 주식회사', pmName: people.labelOf(people.me), pmUserId: people.me, start: today, end: addDays(today, 270) });
     return { ...base, budget: '', subsidy: '', warrantyM: '', tpl: presetTpl ?? 'std', keepPeople: false };
   });
+  // 기준표 (F5) — 폼 처음 값을 복사한 그 사업 기록
+  const [editBase] = useState<PmBases>(() => (s ? [pmBase('projects', s.id, s)] : []));
   const [endTouched, setEndTouched] = useState(false);
   const [err, setErr] = useState<[string, string] | null>(null);
   const set = <K extends keyof V>(k: K, x: V[K]) => setV((o) => ({ ...o, [k]: x }));
@@ -81,12 +84,12 @@ export function SiteFormModal({ s, presetTpl, d, people, mut, smut, money, short
     if (!isNew) {
       const oldBid = [s.annDue, s.evalDate, s.start].join();
       const bidRes = next.bidRes;
-      await mut.updateProject.mutateAsync({ ...next, bidRes: s.bidRes, bidAt: s.bidAt });
+      await mut.updateProject.mutateAsync({ p: { ...next, bidRes: s.bidRes, bidAt: s.bidAt }, base: editBase });
       if (showBid && bidRes !== s.bidRes) await smut.setBidResult.mutateAsync({ projectId: s.id, v: bidRes });
       // 공고 마감 · 선정평가 · 협약일이 바뀌면 안 끝난 협약 이전 업무 날짜를 맞출지 (alignPre)
       if (oldBid !== [next.annDue, next.evalDate, next.start].join() && today < next.start) {
         const items = alignPre(next, snap.tasks, L);
-        if (items.length && confirm('공고 마감 · 선정평가 · 협약일이 바뀌었습니다. 아직 안 끝난 협약 이전 업무 일정을 새 날짜에 맞출까요?')) await mut.setTaskDates.mutateAsync({ items, note: '협약 이전 일정을 공고 마감 · 선정평가일에 맞춤' });
+        if (items.length && confirm('공고 마감 · 선정평가 · 협약일이 바뀌었습니다. 아직 안 끝난 협약 이전 업무 일정을 새 날짜에 맞출까요?')) await mut.setTaskDates.mutateAsync({ items, note: '협약 이전 일정을 공고 마감 · 선정평가일에 맞춤', base: [] /* 저장 때 화면 값으로 계산 — 해당 없음 */ });
       }
       const ext = s.end && next.end > s.end ? ` · 협약 종료일이 ${diffDays(s.end, next.end)}일 늦춰졌습니다 — ${addMonths(s.end, 3) <= next.end ? '협약변경 승인' : '사업관리시스템 등록'} 대상입니다. 사업별 화면 '협약변경 기록'에 남겨 주세요` : '';
       onDone(`${next.company} 정보가 수정되었습니다${ext}`, s.id);
@@ -98,7 +101,7 @@ export function SiteFormModal({ s, presetTpl, d, people, mut, smut, money, short
       // 새로 만든 업무 (등록 직후 스냅숏엔 아직 없음 → 저장소에서 다시 읽음)
       const { pmStore } = await import('@/data/pm/pmStoreInstance');
       const ts = (await pmStore().snapshot()).tasks.filter((t) => t.projectId === next.id);
-      if (next.annDue || next.evalDate) { const items = alignPre(next, ts, (t) => t.status === '완료'); if (items.length) await mut.setTaskDates.mutateAsync({ items, note: '협약 이전 일정을 공고 마감 · 선정평가일에 맞춤' }); }
+      if (next.annDue || next.evalDate) { const items = alignPre(next, ts, (t) => t.status === '완료'); if (items.length) await mut.setTaskDates.mutateAsync({ items, note: '협약 이전 일정을 공고 마감 · 선정평가일에 맞춤', base: [] }); }
       const past = prePast(next, (await pmStore().snapshot()).tasks, (t) => t.status === '완료', today);
       if (past.length) {
         const nm = [...new Set(past.map((t) => (t.name.match(/^\[([^\]]+)\]/) ?? [])[1]).filter(Boolean))];

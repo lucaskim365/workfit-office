@@ -13,6 +13,7 @@ import { EmptyHint, ProjectTag } from '../wbs/parts';
 import { ScreenHead } from '../dash/parts';
 import { TaskFormModal } from '../wbs/TaskFormModal';
 import { CrFormModal, CrReviewModal } from './CrModals';
+import { pmBase } from '@/data/pm/pm.store';
 
 /**
  * 점검 · 요구사항 · 산출물 › 요구사항(CR) (데모 siteCR 3616) — 변경 장부:
@@ -150,7 +151,7 @@ export function CrView() {
       {pop?.kind === 'form' && (
         <CrFormModal c={pop.c} projects={projects} shortOf={shortOf} defSite={defSite} today={todayStr()}
           onSave={async (x) => {
-            if (pop.c) { await smut.updateCr.mutateAsync({ id: pop.c.id, x }); say(`${pop.c.id} 수정 완료`); return; }
+            if (pop.c) { await smut.updateCr.mutateAsync({ id: pop.c.id, x, base: [pmBase('crs', pop.c.id, pop.c)] }); say(`${pop.c.id} 수정 완료`); return; }
             const c = await smut.addCr.mutateAsync(x);
             const m = nextMsOf(c.projectId);
             say(crConflict(m, c.days, today) ? `${c.id} 접수 완료 — 검토중 · ⚠ 반영 시 마일스톤 '${m!.name.slice(0, 20)}'(${dday(m!.end, today)}) 일정 충돌 위험` : `${c.id} 접수 완료 — 검토중`, crConflict(m, c.days, today));
@@ -162,7 +163,7 @@ export function CrView() {
         <CrReviewModal c={pop.c} company={d.snap.projects.find((p) => p.id === pop.c.projectId)?.company ?? shortOf(pop.c.projectId)} nextMs={nextMsOf(pop.c.projectId)} today={today}
           onSave={async ({ decision, comment, makeTask }) => {
             const c = pop.c;
-            try { await smut.reviewCr.mutateAsync({ id: c.id, decision, comment }); } catch (e) { say((e as Error).message, true); close(); return; }
+            try { await smut.reviewCr.mutateAsync({ id: c.id, decision, comment, base: [pmBase('crs', c.id, c)] }); /* 열 때 본 일정 · 비용 영향 그대로일 때만 (M2) */ } catch (e) { say((e as Error).message, true); close(); return; }
             say(`${c.id} ${decision} 처리`);
             close();
             if (decision === '승인' && makeTask) setPop({ kind: 'task', c: { ...c, status: '승인' } });

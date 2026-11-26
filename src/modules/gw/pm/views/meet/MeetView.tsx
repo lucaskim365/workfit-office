@@ -10,6 +10,7 @@ import { usePmPeople } from '../../usePmPeople';
 import { Avatar, EmptyHint, Tag } from '../wbs/parts';
 import { ScreenHead } from '../dash/parts';
 import { ActFormModal, MeetFormModal } from './MeetModals';
+import { pmBase } from '@/data/pm/pm.store';
 
 /**
  * 이슈 · 회의 · 보고 › 회의록 · 액션 아이템 (데모 docMeet 5658).
@@ -206,7 +207,7 @@ export function MeetView() {
         <MeetFormModal m={pop.m} defSite={defSite} me={people.me} today={todayStr()} projects={projects} people={people.people} shortOf={shortOf}
           nActs={pop.m ? d.snap.actions.filter((a) => a.meetingId === pop.m!.id).length : 0}
           onSave={async (x, addAct) => {
-            if (pop.m) { await mut.updateMeeting.mutateAsync({ id: pop.m.id, x }); done('회의록 수정'); return; }
+            if (pop.m) { await mut.updateMeeting.mutateAsync({ id: pop.m.id, x, base: [pmBase('meetings', pop.m.id, pop.m)] }); done('회의록 수정'); return; }
             const id = await mut.addMeeting.mutateAsync(x);
             setSel(id);
             setMsg('회의록 저장');
@@ -225,7 +226,7 @@ export function MeetView() {
             // 하나 더: 같은 회의로 새 창 (key 가 바뀌어 칸이 비워짐)
             setPop(more ? { kind: 'act', a: null, mt: d.snap.meetings.find((y) => y.id === x.meetingId) ?? pop.mt } : null);
           }}
-          onUpdate={async (x) => { await mut.updateAction.mutateAsync({ id: pop.a!.id, x }); done('액션 아이템 수정'); }}
+          onUpdate={async (x) => { await mut.updateAction.mutateAsync({ id: pop.a!.id, x, base: [pmBase('actions', pop.a!.id, pop.a)] }); done('액션 아이템 수정'); }}
           onRemove={async () => { await mut.removeAction.mutateAsync(pop.a!.id); done('액션 아이템 삭제'); }}
           onClose={() => setPop(null)} />
       )}

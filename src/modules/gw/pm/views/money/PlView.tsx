@@ -144,8 +144,8 @@ export function PlView() {
         </table>
       </section>
 
-      {modal === 'oh' && <OhModal m={d.today.slice(0, 7)} oh={X.oh} cfg={cfg} onClose={() => setModal(null)} onSave={async (x) => { await mut.saveOh.mutateAsync(x); setMsg(`${x.m} 간접비 저장`); setModal(null); }} />}
-      {modal === 'cfg' && <CfgModal c={cfg} onClose={() => setModal(null)} onSave={async (x) => { await mut.saveMoneyCfg.mutateAsync(x); setMsg('단가 · 계산 기준 저장'); setModal(null); }} />}
+      {modal === 'oh' && <OhModal m={d.today.slice(0, 7)} oh={X.oh} cfg={cfg} onClose={() => setModal(null)} onSave={async (x, base) => { await mut.saveOh.mutateAsync({ ...x, base }); setMsg(`${x.m} 간접비 저장`); setModal(null); }} />}
+      {modal === 'cfg' && <CfgModal c={cfg} onClose={() => setModal(null)} onSave={async (x, base) => { await mut.saveMoneyCfg.mutateAsync({ c: x, base }); setMsg('단가 · 계산 기준 저장'); setModal(null); }} />}
     </div>
   );
 }

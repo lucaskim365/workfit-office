@@ -1,13 +1,13 @@
 import { useMemo } from 'react';
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
-import { latestSnapshot, type PmSnapshot } from '@/data/pm/pm.store';
+import { latestSnapshot, pmBase, type PmBases, type PmSnapshot } from '@/data/pm/pm.store';
 import { pmStore } from '@/data/pm/pmStoreInstance';
 import { doneInfoOf, liveOf, todayStr, type FilterCtx, type Live } from '@/domain/pm/rules';
 import type { PmAgreementChange, PmDoc, PmPlanItem, PmProject, PmSubtask, PmTask, PmTaskDone, PmTaskFunctions } from '@/domain/pm/schema';
 import { isDrop, lastUpdate, siteBrief, siteCtxOf, siteStage, type SiteBrief, type SiteCtx, type SiteInputs, type SiteStage } from '@/domain/pm/site';
 import { taskTicketIndex, ticketDoneInfo, type PmTicket } from '@/domain/pm/ticket';
 import { docOf, type DocState } from '@/domain/pm/doc';
-import { reportPmSaveError } from './pmSaveBus';
+import { clearPmSaveError, reportPmSaveError } from './pmSaveBus';
 
 /**
  * PM 화면 훅. 저장소 전체를 한 번에 읽는다 (업무 338건 — 작음).
@@ -15,12 +15,14 @@ import { reportPmSaveError } from './pmSaveBus';
  * 저장 성공 · 실패 때는 다시 읽지 않고 저장소가 가진 상태를 바로 넣음 (요청 0 — 실패 · 충돌이면 저장소가 이미 DB 를 다시 읽어 둠).
  */
 const KEY = ['pm'] as const;
+/** PM 저장 (진행 표시가 그룹웨어 다른 저장을 세지 않게 — 사소 3) */
+export const PM_MUTATION_KEY = ['pm', 'save'] as const;
 const SNAP_KEY = [...KEY, 'snapshot'] as const;
 
 export function usePmSnapshot() {
   // 네트워크가 끊겼다 다시 붙을 때 저절로 다시 읽지 않음 (7-6 N4): 수정 창을 연 채 다시 읽으면 저장 계층이 '마지막으로 아는 내용'을
   // 남이 고친 값으로 바꿔, 옛 값으로 채워진 창의 저장이 ①(내용 비교)에 안 걸리고 남의 변경을 덮음 (시험: B 진행률 60 → A 창 저장으로 50).
-  // 창이 열려 있는 동안 다른 다시 읽기 길(화면이 새로 붙음 · 다른 저장 실패)은 창이 화면을 덮어 생기지 않음.
+  // 다른 다시 읽기 길(화면이 새로 붙음 · 다른 저장 실패 · K3)은 수정 창이 연 때 기록(기준표, pm.store PmBase)을 같이 넘겨 막음 (F5, 설계 5.7.17).
   return useQuery({ queryKey: SNAP_KEY, queryFn: () => latestSnapshot(pmStore()), staleTime: 30_000, refetchOnReconnect: false });
 }
 
@@ -94,10 +96,10 @@ export function usePmMutations(me: string, nameOf?: (id: string) => string) {
   const done = useApply();
   const s = pmStore();
   const nm = nameOf ?? ((x: string) => x);
-  const m = <A, R = unknown>(fn: (a: A) => Promise<R>) => useMutation({ mutationFn: fn, onSuccess: done, onError: (e) => { reportPmSaveError(e); done(); } });
+  const m = <A, R = unknown>(fn: (a: A) => Promise<R>) => useMutation({ mutationKey: PM_MUTATION_KEY, mutationFn: fn, onSuccess: () => { clearPmSaveError(); done(); }, onError: (e) => { reportPmSaveError(e); done(); } });
   return {
     addTask: m((t: PmTask) => s.addTask(t, me)),
-    updateTask: m(({ id, next }: { id: string; next: PmTask }) => s.updateTask(id, next, me, nameOf)),
+    updateTask: m(({ id, next, base }: { id: string; next: PmTask; base: PmBases }) => s.withBase(base).updateTask(id, next, me, nameOf)),
     bulkUpdate: m((items: Array<{ next: PmTask; summary: string }>) => s.bulkUpdate(items, me)),
     setProgress: m(({ id, pct, why }: { id: string; pct: number; why: string }) => s.setProgress(id, pct, why, me)),
     addSubtask: m(({ taskId, text, assigneeId, due, est }: { taskId: string; text: string; assigneeId: string; due: string; est?: number }) => s.addSubtask(taskId, text, assigneeId, due, me, todayStr(), est ?? 0)),
@@ -115,50 +117,55 @@ export function usePmMutations(me: string, nameOf?: (id: string) => string) {
     removeTicketFile: m(({ no, index }: { no: string; index: number }) => s.removeTicketFile(no, index, me)),
     // 6단계: 사업 등록 · 수정 · 삭제
     addProject: m(({ p, tpl, keepPeople }: { p: PmProject; tpl: string; keepPeople: boolean }) => s.addProject(p, tpl, keepPeople, me)),
-    updateProject: m((p: PmProject) => s.updateProject(p, me)),
+    updateProject: m(({ p, base }: { p: PmProject; base: PmBases }) => s.withBase(base).updateProject(p, me)),
     removeProject: m((id: string) => s.removeProject(id, me)),
     // 6-2: 기준정보
     setTlinks: m((pairs: Array<[string, string | null]>) => s.setTlinks(pairs)),
     addStdToProject: m(({ projectId, rows, note }: { projectId: string; rows: Array<{ stdId: string; code?: string; start?: string; end?: string }>; note: string }) => s.addStdToProject(projectId, rows, note, me)),
     stdFromTask: m((taskId: string) => s.stdFromTask(taskId)),
-    saveCode: m((c: Parameters<typeof s.saveCode>[0]) => s.saveCode(c, me)),
+    saveCode: m(({ c, base }: { c: Parameters<typeof s.saveCode>[0]; base: PmBases }) => s.withBase(base).saveCode(c, me)),
     removeCode: m((id: string) => s.removeCode(id)),
     moveStage: m(({ id, dir }: { id: string; dir: -1 | 1 }) => s.moveStage(id, dir)),
     moveStd: m(({ id, dir }: { id: string; dir: -1 | 1 }) => s.moveStd(id, dir)),
-    saveStd: m((x: Parameters<typeof s.saveStd>[0]) => s.saveStd(x)),
+    saveStd: m(({ x, base }: { x: Parameters<typeof s.saveStd>[0]; base: PmBases }) => s.withBase(base).saveStd(x)),
     removeStd: m((id: string) => s.removeStd(id)),
-    saveOrg: m((o: Parameters<typeof s.saveOrg>[0]) => s.saveOrg(o)),
+    saveOrg: m(({ o, base }: { o: Parameters<typeof s.saveOrg>[0]; base: PmBases }) => s.withBase(base).saveOrg(o)),
     removeOrg: m((id: string) => s.removeOrg(id)),
     // 6-4 지원 기준 · 단가 · 품목 · 단가
-    saveMoneyCfg: m((c: Parameters<typeof s.saveMoneyCfg>[0]) => s.saveMoneyCfg(c)),
-    saveFundRule: m((r: Parameters<typeof s.saveFundRule>[0]) => s.saveFundRule(r)),
+    saveMoneyCfg: m(({ c, base }: { c: Parameters<typeof s.saveMoneyCfg>[0]; base: PmBases }) => s.withBase(base).saveMoneyCfg(c)),
+    saveFundRule: m(({ r, base }: { r: Parameters<typeof s.saveFundRule>[0]; base: PmBases }) => s.withBase(base).saveFundRule(r)),
     removeFundRule: m((id: string) => s.removeFundRule(id)),
-    saveItem: m((it: Parameters<typeof s.saveItem>[0]) => s.saveItem(it)),
+    saveItem: m(({ it, base }: { it: Parameters<typeof s.saveItem>[0]; base: PmBases }) => s.withBase(base).saveItem(it)),
     removeItem: m((id: string) => s.removeItem(id)),
     // 6-5 견적 작성
-    saveQuote: m(({ E, src }: { E: Parameters<typeof s.saveQuote>[0]; src: string }) => s.saveQuote(E, src)),
+    // 새 견적: 저장이 끝나면 표에 새 계약 줄을 더함 (같은 표로 그 계약을 또 저장해도 안 막힘 — M4). 재원 줄은 저장소가 새 기록으로 바꿈
+    saveQuote: m(async ({ E, src, base }: { E: Parameters<typeof s.saveQuote>[0]; src: string; base: PmBases }) => {
+      const r = await s.withBase(base).saveQuote(E, src);
+      if (!base.some((b) => b.field === 'contracts')) base.push(pmBase('contracts', r.c.id, r.c));
+      return r;
+    }),
     removeContract: m((id: string) => s.removeContract(id)),
     registerItems: m(({ lines, src, date }: { lines: Parameters<typeof s.registerItems>[0]; src: string; date: string }) => s.registerItems(lines, src, date)),
     // 6-6 사업별 수익 · 손익
-    saveFund: m((f: Parameters<typeof s.saveFund>[0]) => s.saveFund(f)),
-    savePay: m((p: Parameters<typeof s.savePay>[0]) => s.savePay(p)),
+    saveFund: m(({ f, base }: { f: Parameters<typeof s.saveFund>[0]; base: PmBases }) => s.withBase(base).saveFund(f)),
+    savePay: m(({ p, base }: { p: Parameters<typeof s.savePay>[0]; base: PmBases }) => s.withBase(base).savePay(p)),
     removePay: m((id: string) => s.removePay(id)),
-    saveCost: m((c: Parameters<typeof s.saveCost>[0]) => s.saveCost(c)),
+    saveCost: m(({ c, base }: { c: Parameters<typeof s.saveCost>[0]; base: PmBases }) => s.withBase(base).saveCost(c)),
     removeCost: m((id: string) => s.removeCost(id)),
-    saveOh: m(({ m: mo, amt, memo, def }: { m: string; amt: number | null; memo: string; def: number | null }) => s.saveOh(mo, amt, memo, def, me)),
+    saveOh: m(({ m: mo, amt, memo, def, base }: { m: string; amt: number | null; memo: string; def: number | null; base: PmBases }) => s.withBase(base).saveOh(mo, amt, memo, def, me)),
     completeTasks: m(({ ids, note }: { ids: string[]; note: string }) => s.completeTasks(ids, note, me)),
-    setTaskDates: m(({ items, note }: { items: Array<{ id: string; start: string; end: string }>; note: string }) => s.setTaskDates(items, note, me)),
+    setTaskDates: m(({ items, note, base }: { items: Array<{ id: string; start: string; end: string }>; note: string; base: PmBases }) => s.withBase(base).setTaskDates(items, note, me)),
     // 5단계: 이슈 (여러 화면에서 등록 창을 열어서 여기 둠)
     addIssue: m((x: Parameters<typeof s.addIssue>[0]) => s.addIssue(x, me)),
-    updateIssue: m(({ id, x }: { id: string; x: Parameters<typeof s.updateIssue>[1] }) => s.updateIssue(id, x)),
+    updateIssue: m(({ id, x, base }: { id: string; x: Parameters<typeof s.updateIssue>[1]; base: PmBases }) => s.withBase(base).updateIssue(id, x)),
     removeIssue: m((id: string) => s.removeIssue(id)),
     escalateIssue: m((id: string) => s.escalateIssue(id)),
     // 5단계: 회의록 · 액션 아이템
     addMeeting: m((x: Parameters<typeof s.addMeeting>[0]) => s.addMeeting(x, me)),
-    updateMeeting: m(({ id, x }: { id: string; x: Parameters<typeof s.updateMeeting>[1] }) => s.updateMeeting(id, x)),
+    updateMeeting: m(({ id, x, base }: { id: string; x: Parameters<typeof s.updateMeeting>[1]; base: PmBases }) => s.withBase(base).updateMeeting(id, x)),
     removeMeeting: m((id: string) => s.removeMeeting(id)),
     addAction: m((x: Parameters<typeof s.addAction>[0]) => s.addAction(x, me)),
-    updateAction: m(({ id, x }: { id: string; x: Parameters<typeof s.updateAction>[1] }) => s.updateAction(id, x, me)),
+    updateAction: m(({ id, x, base }: { id: string; x: Parameters<typeof s.updateAction>[1]; base: PmBases }) => s.withBase(base).updateAction(id, x, me)),
     removeAction: m((id: string) => s.removeAction(id)),
     setActionDone: m(({ id, done }: { id: string; done: boolean }) => s.setActionDone(id, done, me)),
     // 5단계: 주간 진행률 · 보고서
@@ -202,17 +209,17 @@ export function usePmSites(d: PmDerived | null): { rows: PmSiteRow[]; all: PmSit
 export function usePmSiteMutations(me: string) {
   const done = useApply();
   const s = pmStore();
-  const m = <A, R = unknown>(fn: (a: A) => Promise<R>) => useMutation({ mutationFn: fn, onSuccess: done, onError: (e) => { reportPmSaveError(e); done(); } });
+  const m = <A, R = unknown>(fn: (a: A) => Promise<R>) => useMutation({ mutationKey: PM_MUTATION_KEY, mutationFn: fn, onSuccess: () => { clearPmSaveError(); done(); }, onError: (e) => { reportPmSaveError(e); done(); } });
   return {
     checkDeadlines: m(({ items, date, bulk }: { items: Array<{ projectId: string; kind: 'gov' | 'plan'; id: string }>; date: string; bulk: boolean }) => s.checkDeadlines(items, date, me, bulk)),
     uncheckDeadline: m(({ projectId, kind, id }: { projectId: string; kind: 'gov' | 'plan'; id: string }) => s.uncheckDeadline(projectId, kind, id)),
-    setGovResult: m(({ projectId, itemId, x }: { projectId: string; itemId: string; x: Parameters<typeof s.setGovResult>[2] }) => s.setGovResult(projectId, itemId, x, me)),
+    setGovResult: m(({ projectId, itemId, x, base }: { projectId: string; itemId: string; x: Parameters<typeof s.setGovResult>[2]; base: PmBases }) => s.withBase(base).setGovResult(projectId, itemId, x, me)),
     removeGovResult: m(({ projectId, itemId }: { projectId: string; itemId: string }) => s.removeGovResult(projectId, itemId)),
     setFixItemState: m(({ projectId, itemId, fixId, action, note }: { projectId: string; itemId: string; fixId: string; action: '조치 완료' | '확인' | '반려' | '조치 전'; note: string }) => s.setFixItemState(projectId, itemId, fixId, action, note, me)),
-    saveAgreement: m((x: PmAgreementChange) => s.saveAgreement(x, me)),
+    saveAgreement: m(({ x, base }: { x: PmAgreementChange; base: PmBases }) => s.withBase(base).saveAgreement(x, me)),
     removeAgreement: m((id: string) => s.removeAgreement(id)),
-    setGovLink: m(({ projectId, itemId, taskIds }: { projectId: string; itemId: string; taskIds: string[] | null }) => s.setGovLink(projectId, itemId, taskIds)),
-    setTaskDates: m(({ items, note }: { items: Array<{ id: string; start: string; end: string }>; note: string }) => s.setTaskDates(items, note, me)),
+    setGovLink: m(({ projectId, itemId, taskIds, base }: { projectId: string; itemId: string; taskIds: string[] | null; base: PmBases }) => s.withBase(base).setGovLink(projectId, itemId, taskIds)),
+    setTaskDates: m(({ items, note, base }: { items: Array<{ id: string; start: string; end: string }>; note: string; base: PmBases }) => s.withBase(base).setTaskDates(items, note, me)),
     setBidResult: m(({ projectId, v }: { projectId: string; v: '' | '선정' | '탈락' }) => s.setBidResult(projectId, v, me)),
     // 팀 현황 (3-4)
     setLoadMax: m((v: number) => s.setLoadMax(v)),
@@ -228,9 +235,9 @@ export function usePmSiteMutations(me: string) {
     savePdfDraft: m((x: { date: string; dept: string; name: string; rows: Array<[string, string, string]>; at: string }) => s.savePdfDraft({ ...x, who: me })),
     removePdfDraft: m((date: string) => s.removePdfDraft(me, date)),
     // 3-7: 성과지표 · 알림 · 즐겨찾기
-    saveKpiDef: m((x: Parameters<typeof s.saveKpiDef>[0]) => s.saveKpiDef(x)),
+    saveKpiDef: m(({ x, base }: { x: Parameters<typeof s.saveKpiDef>[0]; base: PmBases }) => s.withBase(base).saveKpiDef(x)),
     removeKpiDef: m((id: string) => s.removeKpiDef(id)),
-    saveKpiMeas: m((x: Parameters<typeof s.saveKpiMeas>[0]) => s.saveKpiMeas(x, me)),
+    saveKpiMeas: m(({ x, base }: { x: Parameters<typeof s.saveKpiMeas>[0]; base: PmBases }) => s.withBase(base).saveKpiMeas(x, me)),
     removeKpiMeas: m((id: string) => s.removeKpiMeas(id)),
     addAiMeas: m((x: Parameters<typeof s.addAiMeas>[0]) => s.addAiMeas(x, me)),
     setSeen: m(({ txt, on }: { txt: string; on: boolean }) => s.setSeen(me, txt, on)),
@@ -240,9 +247,10 @@ export function usePmSiteMutations(me: string) {
     uploadDoc: m(({ taskId, name }: { taskId: string; name: string }) => s.uploadDoc(taskId, name, me)),
     // 4단계: 요구사항(CR)
     addCr: m((x: Parameters<typeof s.addCr>[0]) => s.addCr(x, me)),
-    updateCr: m(({ id, x }: { id: string; x: Parameters<typeof s.updateCr>[1] }) => s.updateCr(id, x)),
+    updateCr: m(({ id, x, base }: { id: string; x: Parameters<typeof s.updateCr>[1]; base: PmBases }) => s.withBase(base).updateCr(id, x)),
     removeCr: m((id: string) => s.removeCr(id)),
-    reviewCr: m(({ id, decision, comment }: { id: string; decision: '승인' | '반려'; comment: string }) => s.reviewCr(id, decision, comment, me)),
+    // 검토 창은 열 때 본 일정 · 비용 영향으로 승인하므로 그 CR 표를 같이 (M2)
+    reviewCr: m(({ id, decision, comment, base }: { id: string; decision: '승인' | '반려'; comment: string; base: PmBases }) => s.withBase(base).reviewCr(id, decision, comment, me)),
     linkCrTask: m(({ id, taskId }: { id: string; taskId: string }) => s.linkCrTask(id, taskId)),
   };
 }

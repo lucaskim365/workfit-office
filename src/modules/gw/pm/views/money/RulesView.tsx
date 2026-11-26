@@ -7,6 +7,7 @@ import { usePmPeople } from '../../usePmPeople';
 import { EmptyHint, Tag } from '../wbs/parts';
 import { ScreenHead } from '../dash/parts';
 import { PARTIAL_LOCK_MSG, usePmPartialLock } from '@/features/pm/pmSaveBus';
+import { pmBase, type PmBases } from '@/data/pm/pm.store';
 
 /**
  * 기준정보 › 지원 기준 · 단가 (money/rules, 데모 pMoneyRules 4631 · mnCfgForm 4690 · mnRuleForm 4697) — 6-4.
@@ -90,16 +91,19 @@ export function RulesView() {
           </table>
         </div>
       </section>
-      {cfgOn && <CfgModal c={c} onClose={() => setCfgOn(false)} onSave={async (x) => { await mut.saveMoneyCfg.mutateAsync(x); setMsg('단가 · 계산 기준 저장'); setCfgOn(false); }} />}
+      {cfgOn && <CfgModal c={c} onClose={() => setCfgOn(false)} onSave={async (x, base) => { await mut.saveMoneyCfg.mutateAsync({ c: x, base }); setMsg('단가 · 계산 기준 저장'); setCfgOn(false); }} />}
       {edit && <RuleModal r={edit === 'new' ? null : edit} year={+d.today.slice(0, 4)} onClose={() => setEdit(null)}
-        onSave={async (r) => { await mut.saveFundRule.mutateAsync(r); setMsg(edit === 'new' ? '지원 기준 추가' : '지원 기준 수정'); setEdit(null); }}
+        onSave={async (r) => { await mut.saveFundRule.mutateAsync({ r, base: edit === 'new' ? [] : [pmBase('fundRules', edit.id, edit)] }); setMsg(edit === 'new' ? '지원 기준 추가' : '지원 기준 수정'); setEdit(null); }}
         onRemove={async (id) => { await mut.removeFundRule.mutateAsync(id); setMsg('지원 기준 삭제'); setEdit(null); }} />}
     </div>
   );
 }
 
 /** 단가 · 계산 기준 창 (mnCfgForm) */
-export function CfgModal({ c, onSave, onClose }: { c: PmMoneyCfg; onSave: (c: PmMoneyCfg) => Promise<void>; onClose: () => void }) {
+/** 단가 창이 고치는 칸 (나머지는 저장 때 지금 값 그대로) — 기준표 비교 칸 (F5) */
+const CFG_KEYS = ['cloudMonthly', 'cloudMonths', 'kosaName', 'kosaMonthly', 'workH', 'revBasis', 'laborOn'] as const;
+export function CfgModal({ c, onSave, onClose }: { c: PmMoneyCfg; onSave: (c: PmMoneyCfg, base: PmBases) => Promise<void>; onClose: () => void }) {
+  const [base] = useState<PmBases>(() => [pmBase('moneyCfg', undefined, c, CFG_KEYS)]);
   const [v, setV] = useState({ cloudMonthly: String(c.cloudMonthly), cloudMonths: String(c.cloudMonths), kosaName: c.kosaName, kosaMonthly: String(c.kosaMonthly), workH: String(c.workH), revBasis: c.revBasis, laborOn: c.laborOn });
   const [err, setErr] = useState<[string, string] | null>(null);
   const set = <K extends keyof typeof v>(k: K, x: (typeof v)[K]) => setV((p) => ({ ...p, [k]: x }));
@@ -107,7 +111,7 @@ export function CfgModal({ c, onSave, onClose }: { c: PmMoneyCfg; onSave: (c: Pm
     for (const k of ['cloudMonthly', 'cloudMonths', 'kosaMonthly'] as const) if (v[k].trim() === '' || !(+v[k] >= 0)) { setErr(['0 이상 숫자로 넣어 주세요', k]); return; }
     if (!(+v.workH >= 1)) { setErr(['월 근무시간은 1 이상으로 넣어 주세요', 'workH']); return; }
     setErr(null);
-    try { await onSave(pmMoneyCfgSchema.parse({ ...c, cloudMonthly: Math.round(+v.cloudMonthly), cloudMonths: Math.round(+v.cloudMonths), kosaName: v.kosaName.trim(), kosaMonthly: Math.round(+v.kosaMonthly), workH: +v.workH, revBasis: v.revBasis, laborOn: v.laborOn })); } catch (e) { setErr([(e as Error).message || '저장하지 못했습니다', '']); }
+    try { await onSave(pmMoneyCfgSchema.parse({ ...c, cloudMonthly: Math.round(+v.cloudMonthly), cloudMonths: Math.round(+v.cloudMonths), kosaName: v.kosaName.trim(), kosaMonthly: Math.round(+v.kosaMonthly), workH: +v.workH, revBasis: v.revBasis, laborOn: v.laborOn }), base); } catch (e) { setErr([(e as Error).message || '저장하지 못했습니다', '']); }
   };
   const bad = (f: string) => err?.[1] === f;
   return (

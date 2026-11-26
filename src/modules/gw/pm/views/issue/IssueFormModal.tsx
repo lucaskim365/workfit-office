@@ -7,6 +7,7 @@ import type { PmIssue } from '@/domain/pm/schema';
 import type { PmDerived, usePmMutations } from '@/features/pm/usePm';
 import type { usePmPeople } from '../../usePmPeople';
 import { PARTIAL_LOCK_MSG, usePmPartialLock } from '@/features/pm/pmSaveBus';
+import { pmBase, type PmBases } from '@/data/pm/pm.store';
 
 /**
  * 이슈 등록 · 수정 창 (데모 issueForm 3182) — 데모 칸 그대로 (새 칸 없음).
@@ -45,6 +46,8 @@ export function IssueFormModal({ issue, site, d, people, mut, shortOf, onDone, o
     projectId: site || projects.find((p) => d.snap.tasks.some((t) => t.projectId === p.id))?.id || projects[0]?.id || '',
     cat: '설비 통신 장애', title: '', equip: '', taskId: '', sev: '보통', ownerId: people.me, date: d.today, watchIds: [], status: '열림', desc: '', action: '',
   }));
+  // 기준표 (F5) — 폼 처음 값을 복사한 그 이슈 기록
+  const [base] = useState<PmBases>(() => (issue ? [pmBase('issues', issue.id, issue)] : []));
   const [err, setErr] = useState<[string, string] | null>(null);
   const set = <K extends keyof V>(k: K, x: V[K]) => setV((o) => ({ ...o, [k]: x }));
   const p = d.snap.projects.find((x) => x.id === v.projectId);
@@ -54,7 +57,7 @@ export function IssueFormModal({ issue, site, d, people, mut, shortOf, onDone, o
   const save = async () => {
     const e = issueCheck(v);
     if (e) { setErr(e); return; }
-    if (issue) { await mut.updateIssue.mutateAsync({ id: issue.id, x: v }); onDone(`${issue.id} 수정 완료`); }
+    if (issue) { await mut.updateIssue.mutateAsync({ id: issue.id, x: v, base }); onDone(`${issue.id} 수정 완료`); }
     else { const i = await mut.addIssue.mutateAsync(v); onDone(v.sev === '긴급' ? `${i.id} 긴급 이슈 — 윗선에 보고됨` : `${i.id} 이슈 등록`); }
     onClose();
   };

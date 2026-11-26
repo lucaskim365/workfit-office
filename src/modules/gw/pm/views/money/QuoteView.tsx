@@ -8,7 +8,7 @@ import {
 import { fillMyungsung } from '@/domain/pm/quoteDemo';
 import { buildQuoteXlsx, quoteFileName } from '@/data/pm/quoteXlsx';
 import tplUrl from '@/data/pm/seed/quote-template.xlsx?url';
-import type { PmSnapshot } from '@/data/pm/pm.store';
+import { pmBase, type PmBases, type PmSnapshot } from '@/data/pm/pm.store';
 import { usePmDerived, usePmMutations } from '@/features/pm/usePm';
 import { usePmPeople } from '../../usePmPeople';
 import { EmptyHint, Tag } from '../wbs/parts';
@@ -57,6 +57,11 @@ function QuoteEditor({ snap, today, projectId, cid, onBack }: { snap: PmSnapshot
   const p = snap.projects.find((x) => x.id === projectId)!;
   const short = shortName(p, snap.projects);
   const [E, setE] = useState<QuoteDraft>(() => quoteDraft(snap.contracts.find((x) => x.id === cid) ?? null, projectId, snap.funds.find((f) => f.id === projectId), snap.moneyCfg, today));
+  // 기준표 (F5) — E 를 만든 그 snap 의 계약 · 재원 (새 견적도 재원을 E 값으로 쓰므로 재원 줄은 늘)
+  const [base] = useState<PmBases>(() => [
+    pmBase('contracts', cid || undefined, cid ? snap.contracts.find((x) => x.id === cid) ?? null : null),
+    pmBase('funds', projectId, snap.funds.find((f) => f.id === projectId) ?? null),
+  ].filter((b) => b.field !== 'contracts' || b.id));
   const [dirty, setDirty] = useState(false);
   const [err, setErr] = useState('');
   const [msg, setMsg] = useState('');
@@ -86,7 +91,7 @@ function QuoteEditor({ snap, today, projectId, cid, onBack }: { snap: PmSnapshot
     const e = quoteCheck(E);
     if (e) { setErr(e[0]); return; }
     setBusy(true);
-    try { const r = await mut.saveQuote.mutateAsync({ E, src: short }); onBack(r.isNew ? '견적을 저장했습니다' : '견적을 고쳤습니다'); }
+    try { const r = await mut.saveQuote.mutateAsync({ E, src: short, base }); onBack(r.isNew ? '견적을 저장했습니다' : '견적을 고쳤습니다'); }
     catch (x) { setErr((x as Error).message || '저장하지 못했습니다'); }
     finally { setBusy(false); }
   };

@@ -14,6 +14,7 @@ import { PARTIAL_LOCK_MSG, usePmPartialLock } from '@/features/pm/pmSaveBus';
 import { usePmPeople } from '../../usePmPeople';
 import { EmptyHint, ProjectTag, Tag } from '../wbs/parts';
 import { CardHead, ScreenHead } from './parts';
+import { pmBase } from '@/data/pm/pm.store';
 
 /**
  * 대시보드 › 성과지표 실측 (site/kpi, 데모 siteKpi 6990) — 3-7. 메뉴 탭에 없는 화면:
@@ -109,12 +110,12 @@ export function KpiView() {
   const modal = form && (
     form.kind === 'meas' ? (
       <MeasModal ds={ds} m={form.m} kid={form.kid} short={shortOf(s)} today={today}
-        onSave={async (v) => { await smut.saveKpiMeas.mutateAsync({ ...v, projectId: s.id, id: form.m?.id }); setForm(null); }}
+        onSave={async (v) => { await smut.saveKpiMeas.mutateAsync({ x: { ...v, projectId: s.id, id: form.m?.id }, base: form.m ? [pmBase('kpiMeas', form.m.id, form.m)] : [] }); setForm(null); }}
         onRemove={form.m ? async () => { if (!confirm('이 실측 기록을 삭제할까요?')) return; await smut.removeKpiMeas.mutateAsync(form.m!.id); setForm(null); } : undefined}
         onClose={() => setForm(null)} />
     ) : form.kind === 'def' ? (
       <DefModal x={form.x} short={shortOf(s)}
-        onSave={async (v) => { await smut.saveKpiDef.mutateAsync({ ...v, projectId: s.id, id: form.x?.id }); setForm(null); }}
+        onSave={async (v) => { await smut.saveKpiDef.mutateAsync({ x: { ...v, projectId: s.id, id: form.x?.id }, base: form.x ? [pmBase('kpiDefs', form.x.id, form.x)] : [] }); setForm(null); }}
         onRemove={form.x ? async () => { if (!confirm('이 지표와 실측 기록을 삭제할까요?')) return; await smut.removeKpiDef.mutateAsync(form.x!.id); setForm(null); } : undefined}
         onClose={() => setForm(null)} />
     ) : (

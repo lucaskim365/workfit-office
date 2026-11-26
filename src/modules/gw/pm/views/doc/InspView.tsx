@@ -135,7 +135,7 @@ export function InspView() {
 
       {pop?.kind === 'res' && popRow && gOf(pop.id) && (
         <GovResultModal c={popRow.c} g={gOf(pop.id)!} short={shortOf(pop.k)} people={people.people} me={people.me}
-          onSave={(v) => smut.setGovResult.mutateAsync({ projectId: pop.k, itemId: pop.id, x: v })}
+          onSave={(v, base) => smut.setGovResult.mutateAsync({ projectId: pop.k, itemId: pop.id, x: v, base })}
           onRemove={() => smut.removeGovResult.mutateAsync({ projectId: pop.k, itemId: pop.id })} onClose={() => setPop(null)} />
       )}
       {pop?.kind === 'fix' && popRow && gOf(pop.id) && popRow.c.gov.get(pop.id) && (

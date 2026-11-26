@@ -142,7 +142,7 @@ export function SiteView() {
     const base = c.baseline?.map[taskId];
     if (!t || !base) return;
     if (!confirm(`'${t.name}' 일정을 최초 계획으로 되돌릴까요?\n\n지금: ${t.start || '-'} ~ ${t.end || '-'}\n최초 계획: ${base.start || '-'} ~ ${base.end || '-'}`)) return;
-    void smut.setTaskDates.mutateAsync({ items: [{ id: taskId, start: base.start || t.start, end: base.end }], note: '최초 계획으로 되돌림' });
+    void smut.setTaskDates.mutateAsync({ items: [{ id: taskId, start: base.start || t.start, end: base.end }], note: '최초 계획으로 되돌림', base: [] /* 창 없음 — 누를 때 화면 값 */ });
   };
   const bidRes = (v: '' | '선정' | '탈락') => {
     const ev = p.evalDate || p.annDue;
@@ -235,7 +235,7 @@ export function SiteView() {
       )}
       {pop?.kind === 'res' && gOf(pop.id) && (
         <GovResultModal c={c} g={gOf(pop.id)!} short={short} people={people.people} me={people.me}
-          onSave={(x) => smut.setGovResult.mutateAsync({ projectId: k, itemId: pop.id, x })}
+          onSave={(x, base) => smut.setGovResult.mutateAsync({ projectId: k, itemId: pop.id, x, base })}
           onRemove={() => smut.removeGovResult.mutateAsync({ projectId: k, itemId: pop.id })} onClose={() => setPop(null)} />
       )}
       {pop?.kind === 'fix' && gOf(pop.id) && c.gov.get(pop.id) && (
@@ -244,13 +244,13 @@ export function SiteView() {
           onEdit={() => { const id = pop.id; closeFix(); setPop({ kind: 'res', id }); }} onClose={closeFix} />
       )}
       {pop?.kind === 'link' && (
-        <GovLinkModal c={c} itemId={pop.id} short={short} onSave={(taskIds) => smut.setGovLink.mutateAsync({ projectId: k, itemId: pop.id, taskIds })} onClose={() => setPop(null)} />
+        <GovLinkModal c={c} itemId={pop.id} short={short} onSave={(taskIds, base) => smut.setGovLink.mutateAsync({ projectId: k, itemId: pop.id, taskIds, base })} onClose={() => setPop(null)} />
       )}
       {pop?.kind === 'date' && (
-        <GovDateModal c={c} itemId={pop.id} short={short} onSave={(items) => smut.setTaskDates.mutateAsync({ items, note: '관리기준 필수 TASK' })} onClose={() => setPop(null)} />
+        <GovDateModal c={c} itemId={pop.id} short={short} onSave={(items, base) => smut.setTaskDates.mutateAsync({ items, note: '관리기준 필수 TASK', base })} onClose={() => setPop(null)} />
       )}
       {pop?.kind === 'agr' && (
-        <AgreementModal c={c} x={pop.x} short={short} onSave={(x) => smut.saveAgreement.mutateAsync(x)} onRemove={(id) => smut.removeAgreement.mutateAsync(id)} onClose={() => setPop(null)} />
+        <AgreementModal c={c} x={pop.x} short={short} onSave={(x, base) => smut.saveAgreement.mutateAsync({ x, base })} onRemove={(id) => smut.removeAgreement.mutateAsync(id)} onClose={() => setPop(null)} />
       )}
       {modals.node}
     </div>

@@ -13,6 +13,7 @@ import { EmptyHint, ProjectTag, Tag } from '../wbs/parts';
 import { ScreenHead } from '../dash/parts';
 import { QuoteView } from './QuoteView';
 import { CostModal, FundModal, PayModal } from './MoneyModals';
+import { pmBase } from '@/data/pm/pm.store';
 
 /**
  * 사업 · 손익 › 사업별 수익 (money/site, 데모 pMoneySite 4499) — 6-5 입구 + 6-6 나머지.
@@ -238,12 +239,12 @@ export function SiteMoneyView() {
           )}
         </div>
       </div>
-      {modal?.kind === 'fund' && <FundModal short={short(k)} F={FO} rules={snap.fundRules} cfg={cfg} onClose={() => setModal(null)} onSave={async (f) => { await mut.saveFund.mutateAsync(f); done('재원 저장'); }} />}
+      {modal?.kind === 'fund' && <FundModal short={short(k)} F={FO} rec={snap.funds.find((x) => x.id === k) ?? null} fundId={k} rules={snap.fundRules} cfg={cfg} onClose={() => setModal(null)} onSave={async (f, base) => { await mut.saveFund.mutateAsync({ f, base }); done('재원 저장'); }} />}
       {modal?.kind === 'pay' && <PayModal p={modal.p} projectId={k} cs={P.cs} onClose={() => setModal(null)}
-        onSave={async (p) => { await mut.savePay.mutateAsync(p); done(modal.p ? '대금 단계 수정' : '대금 단계 추가'); }}
+        onSave={async (p) => { await mut.savePay.mutateAsync({ p, base: modal.p ? [pmBase('pays', modal.p.id, modal.p)] : [] }); done(modal.p ? '대금 단계 수정' : '대금 단계 추가'); }}
         onRemove={async (id) => { await mut.removePay.mutateAsync(id); done('대금 단계 삭제'); }} />}
       {modal?.kind === 'cost' && <CostModal c={modal.c} projectId={k} short={short(k)} today={d.today} onClose={() => setModal(null)}
-        onSave={async (c) => { await mut.saveCost.mutateAsync(c); done(modal.c ? '원가 변경 수정' : '원가 변경 등록'); }}
+        onSave={async (c) => { await mut.saveCost.mutateAsync({ c, base: modal.c ? [pmBase('costs', modal.c.id, modal.c)] : [] }); done(modal.c ? '원가 변경 수정' : '원가 변경 등록'); }}
         onRemove={async (id) => { await mut.removeCost.mutateAsync(id); done('원가 변경 삭제'); }} />}
     </div>
   );

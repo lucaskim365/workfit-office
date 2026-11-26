@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { defaultAssignee, diffDays, doneInfoOf, isDone, isLate, liveOf, monthDay, taskPeople, undoPct } from '@/domain/pm/rules';
 import type { PmTask, PmTaskStatus } from '@/domain/pm/schema';
 import type { PmDerived, usePmMutations } from '@/features/pm/usePm';
+import { pmBase } from '@/data/pm/pm.store';
 import type { usePmPeople } from '../../usePmPeople';
 import { ProgressBar, ProjectTag } from './parts';
 
@@ -61,7 +62,8 @@ export function WbsBoard({ list, d, people, shortOf, onOpen, mut }: {
       setMsg(`진행률이 ${t.actualPct}%라 시작 전으로 옮길 수 없습니다 — 진행률을 0으로 고친 뒤 옮기세요`);
       return;
     }
-    mut.updateTask.mutate({ id: t.id, next: { ...t, status: to } });
+    // 창 없는 끌어 놓기 — 화면 값 t 가 기준 (화면이 저장소보다 늦은 드문 때만 막힘)
+    mut.updateTask.mutate({ id: t.id, next: { ...t, status: to }, base: [pmBase('tasks', t.id, t)] });
   };
 
   return (
