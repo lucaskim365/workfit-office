@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { approvalDocSchema, APPROVAL_BOXES, type ApprovalBox, type ApprovalDoc } from './schema';
 import type { ApprovalPostReadShare } from '@/domain/approvalPostRead/schema';
-import { baselineReadDocIds, isDocRead, isRejectionUnread, rejectBaselineDocIds, rejectionReadKey, unreadByBox } from './unread';
+import { baselineReadDocIds, isDocRead, isRejectionUnread, rejectionReadKey, unreadByBox } from './unread';
 
 const me = 'U012';
 const doc = (id: string, over: Partial<ApprovalDoc> = {}): ApprovalDoc =>
@@ -52,17 +52,9 @@ test('상신함·완료함·임시함은 안읽음을 세지 않는다', () => {
 
 // ── 처음 적용할 때의 기준선 ──
 
-test('처음 적용할 때 대기·참조·수신·반려함의 기존 문서를 읽음으로 남긴다(후열함은 남기지 않는다)', () => {
+test('처음 적용할 때 대기·참조·수신함의 기존 문서와 브라우저에 남은 반려 열람 기록을 읽음으로 남긴다', () => {
   const byBox = boxes({ 대기: [doc('A')], 참조: [doc('C')], 수신: [doc('D')], 반려: [doc('E'), doc('E2')], 후열: [doc('F')] });
-  assert.deepEqual(baselineReadDocIds(byBox).sort(), ['A', 'C', 'D', 'E', 'E2']);
-});
-
-test('반려함 기준선은 반려함의 기존 문서만 읽음으로 남긴다 — 이후 새로 반려된 문서는 안읽음', () => {
-  const before = boxes({ 대기: [doc('A')], 반려: [doc('E'), doc('E2')] });
-  const read = new Set(rejectBaselineDocIds(before));
-  assert.deepEqual([...read].sort(), ['E', 'E2']);
-  const after = boxes({ 반려: [doc('E'), doc('E2'), doc('E3')] });
-  assert.deepEqual([...unreadByBox(after, me, read, []).반려.ids], ['E3']);
+  assert.deepEqual(baselineReadDocIds(byBox, new Set(['E'])).sort(), ['A', 'C', 'D', 'E']);
 });
 
 // ── 상신함 반려 알림 ──
@@ -74,19 +66,26 @@ const rejected = (id: string, decidedAt: string) =>
   });
 
 test('반려된 상신 문서는 반려 뒤에 열어 보기 전까지 안읽음, 열면 꺼진다', () => {
-  const d = rejected('R1', '2026-11-20T09:00:00Z');
+  const d = rejected('R1', '2026-11-27T09:00:00Z');
   assert.equal(isRejectionUnread(d, new Set()), true);
   assert.equal(isRejectionUnread(d, new Set(['R1'])), true); // 반려 전에 열어 본 기록으로는 꺼지지 않는다
   assert.equal(isRejectionUnread(d, new Set([rejectionReadKey(d)!])), false);
 });
 
 test('재상신 후 다시 반려되면 다시 안읽음이다', () => {
-  const first = rejected('R2', '2026-11-20T09:00:00Z');
-  const again = rejected('R2', '2026-11-25T09:00:00Z');
+  const first = rejected('R2', '2026-11-27T09:00:00Z');
+  const again = rejected('R2', '2026-11-30T09:00:00Z');
   assert.equal(isRejectionUnread(again, new Set([rejectionReadKey(first)!])), true);
 });
 
 test('반려 문서가 아니면 반려 알림이 없다', () => {
   assert.equal(rejectionReadKey(doc('P1')), null);
   assert.equal(isRejectionUnread(doc('P1'), new Set()), false);
+});
+
+test('알림 시작 시각 전에 반려된 문서는 열지 않았어도 알림이 없다 — 새로 반려되는 문서부터', () => {
+  assert.equal(isRejectionUnread(rejected('OLD', '2026-11-20T09:00:00Z'), new Set()), false);
+  assert.equal(isRejectionUnread(rejected('NEW', '2026-11-26T02:00:00Z'), new Set()), true);
+  const noTime = doc('NT', { status: '반려', steps: [{ seq: 1, kind: '결재', approverId: 'U020', approverName: '', decision: '반려' } as never] });
+  assert.equal(isRejectionUnread(noTime, new Set()), false);
 });
