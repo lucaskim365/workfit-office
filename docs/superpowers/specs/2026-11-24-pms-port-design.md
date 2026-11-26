@@ -1261,6 +1261,13 @@ src/modules/gw/pm/  화면 (React + Tailwind, shared/ui 공용 부품)
 - 되돌리기 `npm run pm:drop`: 컬렉션 93 = PM 0 + 그 밖 93, 지울 것 없음.
 - 안전장치 확인: `--prod` → 거절 · 운영 프로젝트 ID 를 넣은 가짜 `.env`(scratchpad) → 접속 전에 거절 · `scripts/pm-*.ts` 에 운영 열쇠 이름 없음(grep).
 **설계와 다르게 한 것**: ① 스키마 정의는 23개를 글로 늘어놓지 않고 `PM_COLLS` 에서 만듦(한 곳만 고치면 됨 — 공용 스크립트가 PM 코드 `pmDb.ts` 를 import) ② 스키마 실행은 공용 스크립트 줄(`--only=… --new-only`)이 아니라 PM 감싸개 `pm-schema.ts` (공용 스크립트는 `.env.local` 만 읽고 `--prod` 면 운영 열쇠를 읽음 → 감싸개가 개발 값 4개만 프로세스 환경으로 넘기고 `--prod` 를 막음) ③ `.env` 의 프로젝트 ID 값 뒤 주석(` # …`)을 떼고 읽음 (처음 돌렸을 때 주석까지 붙어 요청 머리말 오류 — 쓰기 전 단계).
+**검수 ② 통과 (11/26 팀장 claude-34 — 꼭 고칠 것 없음)** + 사소 · 알아 둘 것:
+- `pm-drop --write` 는 **`--confirm=<지울 문서 합>`** 이 미리보기가 보여 준 합과 같을 때만 지움 (7-6 뒤 사람이 넣은 PM 기록을 실수로 다 지우지 않게 — 팀장 제안).
+- `pm-import --write` 는 429 다시 하기가 없음 — 끊기면 멈추고, 다시 돌리면 같은 id 는 건너뛰어 이어서 됨 (서버 API 키라 브라우저 제한과 다를 수 있음).
+- 넣는 날에 따라 달라지는 줄 = `pmSubtasks` 432 (createdDate) · `pmBaselines` 6 (date) — 실행한 날짜가 들어감. 7-5 를 끊겼다 다른 날 이어 돌리면 날짜가 섞임 (해는 없음).
+- **전체 `npm run appwrite:schema`(--only 없이)는 돌리지 않음** — PM 23 + 개발 DB 에 없는 남의 정의(creditLimits)까지 24개가 생김. 7-4 는 감싸개 `npm run appwrite:schema:pm` 로만. **8단계(main 합치기 · 운영) 주의 목록: "전체 실행 · `--prod` 전체 실행 금지"**.
+- 7-3 보고서 `dryrun-20261126.md` 는 커밋 전 코드 출력 (pmPlanDays · pmPdfDrafts 비고 글만 다름) → 7-5 미리보기 때 다시 만듦.
+
 **7-4 에 넘기는 것**: 실행 = `npm run appwrite:schema:pm` (팀장 "실행해도 됨" 뒤) — 시작 · 끝 시각이 첫 줄 · 끝 줄에 찍힘. 그 뒤 브라우저 쓰기 제한 머리말 확인(K4 c).
 
 ---

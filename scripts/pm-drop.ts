@@ -4,8 +4,8 @@
  * 실행:
  *   npm run pm:drop                       (미리보기 — 지울 컬렉션 · 문서 수, 읽기만. 기본)
  *   npm run pm:drop -- --docs-only        (미리보기 — 컬렉션은 두고 문서만)
- *   npm run pm:drop -- --write            (컬렉션째 지움 — 팀장 확인 뒤에만)
- *   npm run pm:drop -- --docs-only --write
+ *   npm run pm:drop -- --write --confirm=<지울 문서 합>   (컬렉션째 지움 — 팀장 확인 뒤에만, 합은 미리보기가 알려 줌)
+ *   npm run pm:drop -- --docs-only --write --confirm=<지울 문서 합>
  *
  * 지키는 것 (`pm-env.ts`): 개발 DB 접속 값 4개만 읽음(운영 열쇠 이름은 안 읽음) · 운영 프로젝트 ID · `--prod` 거절 ·
  * 지울 이름 = PM_COLLS 23개 목록 그대로, 지우기 직전마다 `assertPmColl` 로 다시 확인 (pm 으로 시작하는지만 보지 않음).
@@ -41,7 +41,12 @@ async function main() {
     console.log(`  - ${name.padEnd(17)} 문서 ${r.total}`);
   }
   if (!targets.length) { console.log('  지울 PM 컬렉션 없음'); return; }
-  if (!write) { console.log(`  끝 ${stampNow()} — 미리보기만 (지운 것 없음). 실행은 --write`); return; }
+  // 실수로 돌려 사람이 넣은 기록까지 지우지 않게 — 지울 문서 합을 보여 주고 --confirm=<그 숫자> 가 맞을 때만 (검수 ② 제안)
+  const total = [...counts.values()].reduce((a, b) => a + b, 0);
+  console.log(`  지울 문서 합 ${total} — 실행하려면 --write --confirm=${total}`);
+  if (!write) { console.log(`  끝 ${stampNow()} — 미리보기만 (지운 것 없음)`); return; }
+  const confirm = process.argv.find((a) => a.startsWith('--confirm='))?.slice('--confirm='.length);
+  if (confirm !== String(total)) fail(`--confirm=${confirm ?? '(없음)'} 이 지울 문서 합 ${total} 과 다릅니다 — 지우지 않고 멈춤`);
 
   for (const name of targets) {
     assertPmColl(name);
