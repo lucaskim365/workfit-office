@@ -16,7 +16,7 @@ import {
   type RelatedDoc,
 } from '@/domain/approvalDoc/schema';
 import { CANCEL_FORM_CODE, RESERVED_BODY_KEY, amountFieldOf, documentBodyKeyOf, type ApprovalForm, type FieldValue } from '@/domain/approvalForm/schema';
-import { withBodyHeader, withSealTexts } from '@/domain/approvalForm/headerItems';
+import { TITLE_ROW, withBodyHeader, withSealTexts } from '@/domain/approvalForm/headerItems';
 import { sheetHasLogo, sheetHeaderItems } from '@/domain/approvalForm/sheet/sheetHeader';
 import { type ApprovalDraftInput } from '@/data/approvalDoc/approvalDoc.repo';
 import { approvalProcessRepo } from '@/data/approvalProcess/approvalProcess.repo';
@@ -516,6 +516,13 @@ function ApprovalDraftInner({
 
   // 작성 중인 내용 임시 저장 후 새 양식 선택
   const handleSaveAndChange = async () => {
+    // 임시저장 단추와 같은 검사를 거친다(제목 없음·서식을 아직 못 읽음 등) — 건너뛰면 안내 없이 실패하거나 잘못된 모양으로 저장된다
+    const err = validate(false);
+    if (err) {
+      setShowChangeConfirm(false);
+      setError(err);
+      return;
+    }
     setIsChangingFormSaving(true);
     try {
       await persistDraft();
@@ -1038,9 +1045,20 @@ function ApprovalDraftInner({
 
   const form: ApprovalForm | undefined = useMemo(() => forms.find((x) => x.code === code), [forms, code]);
   // 시트 서식 — 이 문서가 이미 쓴 버전이 있으면 그 틀, 없으면 서식의 최신 버전(§11.2)
-  const { latest: sheetLatest } = useSheetFormVersions();
-  const { switches: sheetSwitches } = useSheetSwitches();
+  const sheetHeadsQuery = useSheetFormVersions();
+  const sheetSwitchQuery = useSheetSwitches();
+  const { latest: sheetLatest } = sheetHeadsQuery;
+  const { switches: sheetSwitches } = sheetSwitchQuery;
   const savedSheetVersion = parseVersionKey(String(values[SHEET_VERSION_KEY] ?? ''));
+  // 새 기안이 시트 서식인지는 버전 목록·적용 스위치를 읽어야 안다 — 아직 못 읽었거나 읽기에 실패한 동안은 '기존 양식'으로 보이므로 저장·상신을 막는다
+  const sheetKindFromLive = !!form && savedSheetVersion?.formId !== form.id && !editDoc;
+  const sheetKindUnknown: 'loading' | 'failed' | null = !sheetKindFromLive
+    ? null
+    : (sheetHeadsQuery.isError && sheetHeadsQuery.data === undefined) || (sheetSwitchQuery.isError && sheetSwitchQuery.data === undefined)
+      ? 'failed'
+      : sheetHeadsQuery.data === undefined || sheetSwitchQuery.data === undefined
+        ? 'loading'
+        : null;
   const sheetVersion = !form
     ? null
     : savedSheetVersion?.formId === form.id
@@ -1058,8 +1076,11 @@ function ApprovalDraftInner({
   // 시트로 쓰는 문서는 기존 양식 항목을 그리지 않는다 — 기존 서식에 시트를 붙여도 항목 목록(옛 문서용)은 남아 있으므로
   const docForm = useMemo(() => {
     const f = withBodyHeader(form, sheetHeaderItems(sheetTpl?.sheet));
+    // 시트 서식인지 아직 모르는 동안에도 항목을 그리지 않는다 — 빈 기존 양식이 잠깐 보였다가 시트로 바뀌지 않게
+    // 그동안은 머리의 제목 줄도 숨긴다 — 제목 칸이 따로 있는 서식에서 제목 입력란이 잠깐 머리에 보였다가 자리를 옮기면, 치던 사람의 커서가 빠진다
+    if (f && sheetKindUnknown) return { ...f, fields: [], hiddenHeaderItems: [...(f.hiddenHeaderItems ?? []), TITLE_ROW] };
     return f && sheetVersion !== null ? { ...f, fields: [] } : f;
-  }, [form, sheetTpl, sheetVersion]);
+  }, [form, sheetTpl, sheetVersion, sheetKindUnknown]);
   // 연동 유형 — 시트 서식이 대신하는 기존 서식 코드(휴가·외근·출장·휴일근무). 기존 서식은 서식 코드 그대로
   const linkCode = typeof values[LINK_KEY] === 'string' && values[LINK_KEY] ? String(values[LINK_KEY]) : code;
   /** 시트로 쓰는 휴일근무 신청서 — 같은 규칙(사후 신청·근태 기록으로만 시각)을 시트 칸에 */
@@ -1396,6 +1417,9 @@ function ApprovalDraftInner({
     if (forSubmit && (!me.dept || me.dept === '미지정')) {
       return '기안자 소속 부서를 확인하지 못했습니다. 화면을 새로고침한 뒤 다시 상신해 주세요. 계속되면 관리자에게 인명관리의 소속 부서를 확인해 달라고 해 주세요.';
     }
+    // 시트 서식인지 아직 모르면(버전 정보를 읽는 중·읽기 실패) 저장도 상신도 하지 않는다 — 시트 서식이 빈 기존 양식으로 나가지 않게
+    if (sheetKindUnknown === 'loading') return '서식을 불러오는 중입니다. 잠시 뒤 다시 눌러 주세요.';
+    if (sheetKindUnknown === 'failed') return '서식 정보를 읽지 못했습니다. 문서 가운데 [다시 읽기]를 누르거나 화면을 새로고침한 뒤 다시 해 주세요. 계속되면 관리자에게 알려 주세요.';
     // 시트 틀을 아직 못 읽었으면 필수·숫자 검사 목록이 비어 있다 — 검사 없이 상신되지 않게 막는다
     if (forSubmit && sheetVersion !== null && !sheetTpl?.sheet && !readOwnSheet(values[SHEET_OWN_KEY])) {
       if (sheetTplLoading) return '서식을 불러오는 중입니다. 잠시 뒤 다시 눌러 주세요.';
@@ -1938,7 +1962,27 @@ function ApprovalDraftInner({
             lastSavedAt={autosavedAt}
             onStampTableClick={() => setLineModalOpen(true)}
             sheetBody={
-              form && sheetVersion !== null ? (
+              sheetKindUnknown ? (
+                <div className="py-16 text-center text-[13px] text-ink3">
+                  {sheetKindUnknown === 'loading' ? (
+                    '서식을 불러오는 중…'
+                  ) : (
+                    <>
+                      서식 정보를 읽지 못했습니다. 통신이 잠깐 끊겼을 수 있습니다. 계속되면 관리자에게 알려 주세요.
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void sheetHeadsQuery.refetch();
+                          void sheetSwitchQuery.refetch();
+                        }}
+                        className="mx-auto mt-3 block rounded-lg border border-border bg-panel px-4 py-1.5 text-[12px] font-semibold text-ink hover:bg-bg"
+                      >
+                        다시 읽기
+                      </button>
+                    </>
+                  )}
+                </div>
+              ) : form && sheetVersion !== null ? (
                 (slots) => (
                 <SheetDraftForm
                   formId={form.id}

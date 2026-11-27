@@ -10,7 +10,10 @@ import { cellKey, createSheet, recalculate, type BorderW, type CellStyle, type M
 import { child, children, find, parseXml, textOf, type XmlNode } from './xml';
 import { unzip, ZipError } from './zip';
 
-export class XlsxError extends Error {}
+export class XlsxError extends Error {
+  /** 통합 문서의 시트 이름 — 고른 시트가 비어 못 읽었을 때도 다른 시트로 넘어갈 수 있게(알 때만) */
+  sheetNames?: string[];
+}
 
 export interface XlsxImport {
   sheet: Sheet;
@@ -448,7 +451,7 @@ export async function importXlsx(bytes: Uint8Array, opts: XlsxOptions = {}): Pro
   }
   let rowCount = contentRow + 1;
   let colCount = contentCol + 1;
-  if (rowCount <= 0 || colCount <= 0) throw new XlsxError('시트에 내용이 없습니다.');
+  if (rowCount <= 0 || colCount <= 0) throw Object.assign(new XlsxError('시트에 내용이 없습니다.'), { sheetNames: picked.names });
   // 인쇄 영역이 정해져 있으면 그 밖(메모·계산용 칸 등)은 서식에 넣지 않는다
   if (printArea && !opts.ignorePrintArea && (rowCount > printArea.rows || colCount > printArea.cols)) {
     rowCount = Math.min(rowCount, printArea.rows);

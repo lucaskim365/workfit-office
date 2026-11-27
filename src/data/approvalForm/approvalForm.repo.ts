@@ -1,4 +1,4 @@
-import { approvalFormSchema, approvalFolderSchema, type ApprovalForm, type ApprovalFolder } from '@/domain/approvalForm/schema';
+import { approvalFormSchema, approvalFolderSchema, referenceUserIdsOf, type ApprovalForm, type ApprovalFolder } from '@/domain/approvalForm/schema';
 import { APPROVAL_FORM_SEED } from '@/data/seeds/approvalForm.seed';
 import { createCrudBackend } from '@/data/_backend/crudBackend';
 
@@ -157,9 +157,11 @@ export const approvalFormRepo = {
       // 설정을 건드린 서식만 보냄(건드리지 않은 서식 저장은 예전과 같음)
       ...(typeof form.hideDocInfoOnComplete === 'boolean' ? { hideDocInfoOnComplete: form.hideDocInfoOnComplete } : {}),
       ...(Array.isArray(form.hiddenHeaderItems) ? { hiddenHeaderItems: form.hiddenHeaderItems } : {}),
-      // 기본 참조 사용자(여러 명) — 예전 한 명 칸에는 첫 사람을 같이 적는다
+      // 기본 참조 사용자(여러 명) — 예전 한 명 칸에는 첫 사람을 같이 적는다.
+      // 여러 명 칸이 비어 있어도 한 명 칸에 사람이 있으면 그 사람을 지킨다(한 명 칸만 있던 서식 — DB 는 빈 목록으로 돌려준다).
+      // 편집 화면은 사람을 모두 빼면 두 칸을 함께 비우므로, 일부러 비운 것과 헷갈리지 않는다
       ...(Array.isArray(form.referenceUserIds)
-        ? { referenceUserIds: [...new Set(form.referenceUserIds.filter(Boolean))], referenceUserId: form.referenceUserIds.filter(Boolean)[0] ?? null }
+        ? { referenceUserIds: referenceUserIdsOf(form), referenceUserId: referenceUserIdsOf(form)[0] ?? null }
         : {}),
     };
 

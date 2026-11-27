@@ -40,19 +40,6 @@ function formatDateTime(iso: string | null | undefined): string {
 
 export default function ApprovalMonitorScreen() {
   const { canAccess } = usePermission();
-  if (!canAccess('/base/approval-monitor')) {
-    return (
-      <div className="flex h-[calc(100vh/var(--font-scale,1)-130px)] items-center justify-center p-6">
-        <div className="flex flex-col items-center gap-3 rounded-2xl border border-border bg-panel p-8 text-center max-w-md shadow-sm">
-          <h2 className="text-base font-bold text-ink">접근 권한 제한</h2>
-          <p className="text-xs leading-relaxed text-ink2">
-            해당 화면에 접근할 수 있는 권한이 부여되지 않았습니다. 관리자에게 권한 그룹 배정을 문의하세요.
-          </p>
-        </div>
-      </div>
-    );
-  }
-
   const { data: allDocs = [], isLoading } = useAllApprovals();
   const org = useOrgTree();
   const [tab, setTab] = useState<MonitorTab>('ALL');
@@ -100,6 +87,20 @@ export default function ApprovalMonitorScreen() {
     if (ids.length === 0) return '—';
     return ids.map(nameOf).join(', ');
   };
+
+  // 권한 안내는 훅을 모두 부른 뒤에 — 훅보다 먼저 돌아가면 훅 순서 규칙을 어긴다
+  if (!canAccess('/base/approval-monitor')) {
+    return (
+      <div className="flex h-[calc(100vh/var(--font-scale,1)-130px)] items-center justify-center p-6">
+        <div className="flex flex-col items-center gap-3 rounded-2xl border border-border bg-panel p-8 text-center max-w-md shadow-sm">
+          <h2 className="text-base font-bold text-ink">접근 권한 제한</h2>
+          <p className="text-xs leading-relaxed text-ink2">
+            해당 화면에 접근할 수 있는 권한이 부여되지 않았습니다. 관리자에게 권한 그룹 배정을 문의하세요.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-3.5 pb-10">
