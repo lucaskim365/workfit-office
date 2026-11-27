@@ -2,13 +2,13 @@
  * 7-6 확인용 (읽기만) — PM 컬렉션 23개 건수 + body 에 "ZZ" 가 든 문서 목록 + `--since=` 뒤에 만들거나 고친 문서 목록.
  * (넣은 줄(buildImportRows)과의 대조는 없음 — 그건 pm:import 의 'DB 건수 대조')
  *   npx tsx scripts/pm-zz-check.ts [--since=2026-11-26T05:00:00.000Z]
- * 쓰기 호출 없음 (listDocuments 만). 접속 = pm-env (개발 값 4개만, 운영 거절).
+ * 쓰기 호출 없음 (listDocuments 만). 접속 = pm-env (기본 개발 · 운영은 --prod-project=<ID> 로 읽기만 — 설계 5.7.20 검수 P5).
  */
 import { Client, Databases, Query } from 'node-appwrite';
-import { devDb, PM_COLL_NAMES, stampNow } from './pm-env';
+import { pmDb, PM_COLL_NAMES, stampNow } from './pm-env';
 
 async function main() {
-  const db = devDb('7-6 ZZ시험 기록 확인 (읽기만)');
+  const db = pmDb('PM 건수 · ZZ시험 기록 확인 (읽기만)', { prodOk: true, mode: '미리보기' });
   const dbs = new Databases(new Client().setEndpoint(db.endpoint).setProject(db.project).setKey(db.key));
   const counts: Record<string, number> = {};
   const zz: string[] = [];

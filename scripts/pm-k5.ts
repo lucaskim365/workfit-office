@@ -14,7 +14,7 @@
 import { Client, Databases, Query } from 'node-appwrite';
 import { safeDocId } from '../src/shared/lib/appwrite';
 import { docKeyOf, LOG_COLL, PM_COLLS, rowOf, type PmRow } from '../src/data/pm/pmDb';
-import { assertPmColl, devDb, fail, stampNow } from './pm-env';
+import { assertPmColl, fail, pmDb, stampNow } from './pm-env';
 
 const N = 6000;
 const PREFIX = 'zzk5';
@@ -57,7 +57,8 @@ async function main() {
   const remove = process.argv.includes('--remove');
   const write = process.argv.includes('--write');
   if (write && process.argv.includes('--dry-run')) fail('--dry-run 과 --write 를 같이 줄 수 없습니다');
-  const db = devDb(`K5 시험 이력 ${remove ? '지우기' : '넣기'} ${write ? '실행' : '미리보기 (읽기만)'}`);
+  // 운영 길 없음 (prodOk 안 줌 — --prod-project 거절)
+  const db = pmDb(`K5 시험 이력 ${remove ? '지우기' : '넣기'} ${write ? '실행' : '미리보기 (읽기만)'}`);
   console.log(`  시작 ${stampNow()}`);
   assertPmColl(LOG_COLL);
   const dbs = new Databases(new Client().setEndpoint(db.endpoint).setProject(db.project).setKey(db.key));
