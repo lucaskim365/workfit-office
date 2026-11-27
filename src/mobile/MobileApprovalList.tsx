@@ -117,13 +117,12 @@ export default function MobileApprovalList() {
     }).length;
   }, [byBox, me]);
 
-  // 2. 상신한 문서 중 반려되어 조치가 필요한 건수
-  const rejectedDraftCount = useMemo(() => {
-    const list = byBox['상신'] ?? [];
-    return list.filter(
-      (d) => d.status === '반려' || d.status === '긴급 조치 사후 검토 반려' || d.status === '시행반송'
-    ).length;
-  }, [byBox]);
+  // 2. 상신한 문서 중 반려되어 아직 열어 보지 않은 건수(반려 뒤에 열면 빠진다)
+  const { isRejectionUnreadDoc } = unreadState;
+  const rejectedDraftCount = useMemo(
+    () => (byBox['상신'] ?? []).filter((d) => isRejectionUnreadDoc(d)).length,
+    [byBox, isRejectionUnreadDoc],
+  );
 
   // 3. 아직 열람하지 않은 반려 문서 건수
   const unreadRejectedCount = unreadState.unreadCount('반려');

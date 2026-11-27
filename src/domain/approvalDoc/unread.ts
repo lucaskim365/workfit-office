@@ -55,3 +55,48 @@ export function baselineReadDocIds(
   for (const d of byBox['반려'] ?? []) if (legacyReadRejectedIds.has(d.id)) ids.add(d.id);
   return [...ids];
 }
+
+/** 반려된 문서인지(반려·긴급 조치 사후 검토 반려·시행반송) */
+export function isRejectedDoc(doc: ApprovalDoc): boolean {
+  return doc.status === '반려' || doc.status === '긴급 조치 사후 검토 반려' || doc.status === '시행반송';
+}
+
+/**
+ * 상신함 반려 알림을 켜기 시작한 시각 — 이보다 먼저 반려된 문서는 알림(빨간 숫자)을 띄우지 않는다.
+ * 앞으로 새로 반려되는 문서부터 적용(사용자 결정 2026-11-26).
+ */
+export const REJECTION_ALERT_SINCE = '2026-11-26T01:45:00.000Z'; // 2026-11-26 10:45 KST
+
+/** 가장 최근 반려 시각(ms) — 반려 단계에 처리 시각이 없으면 null */
+function lastRejectedAt(doc: ApprovalDoc): number | null {
+  const times = doc.steps
+    .filter((s) => s.decision === '반려' && s.decidedAt)
+    .map((s) => Date.parse(s.decidedAt as string))
+    .filter((t) => Number.isFinite(t));
+  return times.length ? Math.max(...times) : null;
+}
+
+/**
+ * 상신함 반려 알림의 읽음 기록 키 — 반려될 때마다 새 키(반려 시각 포함)라서
+ * 반려 전에 열어 본 기록이나 지난번 반려를 읽은 기록으로는 꺼지지 않는다. 반려 문서가 아니면 null.
+ */
+export function rejectionReadKey(doc: ApprovalDoc): string | null {
+  if (!isRejectedDoc(doc)) return null;
+  const at = lastRejectedAt(doc);
+  return `rj:${doc.id}:${at === null ? '0' : at.toString(36)}`;
+}
+
+/**
+ * 상신함 반려 문서를 반려된 뒤로 아직 열어 보지 않았는지.
+ * 알림 시작 시각(`REJECTION_ALERT_SINCE`) 전에 반려된 문서와 반려 시각을 모르는 문서는 알림 대상이 아니다.
+ */
+export function isRejectionUnread(
+  doc: ApprovalDoc,
+  readDocIds: ReadonlySet<string>,
+  since: string = REJECTION_ALERT_SINCE,
+): boolean {
+  const key = rejectionReadKey(doc);
+  const at = lastRejectedAt(doc);
+  if (key === null || at === null || at < Date.parse(since)) return false;
+  return !readDocIds.has(key);
+}

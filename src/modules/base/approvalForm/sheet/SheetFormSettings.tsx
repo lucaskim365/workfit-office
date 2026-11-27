@@ -6,6 +6,8 @@ import { useJobTitles } from '@/features/jobTitle/useJobTitles';
 import { useRouteRules } from '@/features/gw/useRouteRules';
 import { FormPermissionSettings } from '../components/FormPermissionSettings';
 import { FormTargetSelector } from '../components/FormTargetSelector';
+import { FormReferenceSelector } from '../components/FormReferenceSelector';
+import { referenceUserIdsOf } from '@/domain/approvalForm/schema';
 import { ApprovalRouteRuleModal } from '../routeRules/ApprovalRouteRuleModal';
 import { PRESERVATION_OPTIONS } from '@/domain/approvalForm/sheet/approvalSheet';
 
@@ -66,15 +68,13 @@ export function SheetFormSettings({ form, onChange }: { form: ApprovalForm; onCh
         org={org}
         onChange={(patch) => onChange({ recipientDeptId: patch.deptId ?? null, recipientUserId: patch.userId ?? null })}
       />
-      <FormTargetSelector
-        title="기본 참조 대상"
-        desc="기안 상신 즉시 참조 열람할 부서/사용자"
+      <FormReferenceSelector
         deptId={form.referenceDeptId}
-        userId={form.referenceUserId}
+        userIds={referenceUserIdsOf(form)}
         depts={org.depts ?? []}
         users={users}
         org={org}
-        onChange={(patch) => onChange({ referenceDeptId: patch.deptId ?? null, referenceUserId: patch.userId ?? null })}
+        onChange={(patch) => onChange({ referenceDeptId: patch.deptId, referenceUserIds: patch.userIds, referenceUserId: patch.userIds[0] ?? null })}
       />
 
       <div className="space-y-1.5 rounded-lg border border-border p-2.5">

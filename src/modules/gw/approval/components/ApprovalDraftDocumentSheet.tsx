@@ -87,6 +87,8 @@ export interface ApprovalDraftDocumentSheetProps {
   titleMode?: string | null;
   /** 루미팹 문서면 상단 바에 워크핏 로고 대신 '루미팹' */
   company?: ApprovalCompany | null;
+  /** 시트에 회사 로고 칸이 있다 — 루미팹 표시를 그 칸에 그리고 상단 바에는 그리지 않는다(두 번 보이지 않게) */
+  sheetHasLogo?: boolean;
   docCode: string;
   me: User;
   title: string;
@@ -145,6 +147,7 @@ export function ApprovalDraftDocumentSheet({
   form,
   titleMode,
   company,
+  sheetHasLogo = false,
   docCode,
   me,
   title,
@@ -428,7 +431,9 @@ export function ApprovalDraftDocumentSheet({
   const shownDocNo = docNoField ? String(values[docNoField.key] ?? '') : editDocNo ?? '';
   const showDocTitle = headerShown(form, 'docTitle');
   /** 문서 머리가 모두 시트 안 — 위 상단 바·큰 제목·결재란·문서 정보가 하나도 안 그려짐 */
-  const sheetOnlyHead = !!sheetBody && !company && !headerShown(form, 'topBar') && !showDocTitle && !stampTableInHeader(form) && !headerShown(form, 'drafter');
+  // 루미팹 문서의 상단 바 — 시트에 로고 칸이 없을 때만(있으면 그 칸이 '루미팹'을 보인다)
+  const companyBar = !!company && !sheetHasLogo;
+  const sheetOnlyHead = !!sheetBody && !companyBar && !headerShown(form, 'topBar') && !showDocTitle && !stampTableInHeader(form) && !headerShown(form, 'drafter');
 
   // 결재란·기안자 서명·로고 — 문서 머리와, 문서 머리를 시트에 넣은 시트 서식의 칸(SheetSlots)이 함께 쓴다
   const stampBlock = (
@@ -658,7 +663,7 @@ export function ApprovalDraftDocumentSheet({
   const slots: SheetSlots = {
     approvalLine: stampBlock,
     // 기존 문서 상단 바와 같은 모양 — 회사 정보 화면에 등록한 로고(없으면 기존 상단 바 로고) + 그룹웨어 글자
-    logo: <SheetTopMark fallbackSrc={processedLogo} />,
+    logo: company ? <CompanyTopMark company={company} /> : <SheetTopMark fallbackSrc={processedLogo} />,
     letterhead: <CompanyLetterheadBlock config={DEFAULT_LETTERHEAD} />,
     drafterSign: drafterSignBlock,
     extras: extrasBlock,
@@ -669,7 +674,7 @@ export function ApprovalDraftDocumentSheet({
     <SealMarkProvider markId={sealMarkIdOf(form?.fields)}>
     <div className="mx-auto bg-white px-5 sm:px-8 py-7 text-[#1a1a1a] w-full max-w-[800px] min-w-0 shadow-2xl border border-black/15 rounded-xs box-border transition-all ring-1 ring-black/5" style={paperWidth ? { maxWidth: paperWidth, width: paperWidth } : undefined}>
       {/* 1. 상단 워크핏 로고 및 문서번호 바 */}
-      <div className={`mb-2 h-10 items-center justify-between border-b border-[#eee] pb-2 ${headerShown(form, 'topBar') || company ? 'flex' : 'hidden'}`}>
+      <div className={`mb-2 h-10 items-center justify-between border-b border-[#eee] pb-2 ${headerShown(form, 'topBar') || companyBar ? 'flex' : 'hidden'}`}>
         {company ? (
           <CompanyTopMark company={company} />
         ) : (

@@ -561,6 +561,7 @@ const COLLECTIONS: CollectionDef[] = [
       // 기본 참조 대상(서식 설정) — 없을 땐 저장소가 이 값을 빼고 저장해 설정이 사라졌다
       S('referenceDeptId', 64),
       S('referenceUserId', 64),
+      SA('referenceUserIds', 64), // 기본 참조 사용자 여러 명
       BOOL('recipientDrafter'),
       INT('allowedPositionFromRank'),
       INT('allowedPositionToRank'),

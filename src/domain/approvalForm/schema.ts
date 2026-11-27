@@ -109,8 +109,10 @@ export const approvalFormSchema = z.object({
   recipientDrafter: z.boolean().nullable().optional(),
   /** 기본 참조 부서 ID */
   referenceDeptId: z.string().nullable().optional(),
-  /** 기본 참조 사용자 ID */
+  /** 기본 참조 사용자 ID — 한 명만 되던 때의 칸. 지금은 referenceUserIds 의 첫 사람을 같이 적어 둔다(읽을 때는 referenceUserIdsOf) */
   referenceUserId: z.string().nullable().optional(),
+  /** 기본 참조 사용자 ID(여러 명) */
+  referenceUserIds: z.array(z.string()).nullable().optional(),
   /** 기안 가능한 직급 서열 최소값 (null 이면 제한 없음) */
   allowedPositionFromRank: z.number().nullable().optional(),
   /** 기안 가능한 직급 서열 최대값 (null 이면 제한 없음) */
@@ -188,3 +190,15 @@ export function draftCatalogForms<T extends FormIdentity>(forms: T[]): T[] {
 /** 서식의 금액 필드(있으면) — 상신 시 이 값을 amount 로 승격. */
 export const amountFieldOf = (form: ApprovalForm): FormField | undefined =>
   form.fields.find((f) => f.type === '금액' && f.isAmountKey) ?? form.fields.find((f) => f.type === '금액');
+
+/**
+ * 서식의 기본 참조 사용자 — 여러 명 칸에 사람이 있으면 그것, 비었으면 한 명 칸(예전에 저장한 서식).
+ * DB 는 여러 명 칸이 없던 서식도 빈 목록으로 돌려주므로 '빈 목록'을 '아무도 없음'으로 보지 않는다 —
+ * 그래서 저장·편집 때 한 명 칸에 늘 첫 사람(없으면 null)을 같이 적는다
+ */
+export function referenceUserIdsOf(form: { referenceUserId?: string | null; referenceUserIds?: string[] | null } | null | undefined): string[] {
+  if (!form) return [];
+  const ids = (form.referenceUserIds ?? []).filter(Boolean);
+  if (ids.length) return [...new Set(ids)];
+  return form.referenceUserId ? [form.referenceUserId] : [];
+}

@@ -390,3 +390,77 @@ test('양식이 든 시트가 지워진 파일 — 줄 표시를 버려 다른 �
   assert.equal(res.changed, 0);
   assert.ok(res.notes.length > 0);
 });
+
+test('엑셀에서 지운 칸은 화면에서도 비운다 — 받을 때 값이 있던 자리만', async () => {
+  const tpl = template();
+  const what = cellKey(3, tpl.cols[1]);
+  const who = cellKey(3, tpl.cols[4]);
+  const values = { [what]: '점심', [who]: '홍길동 (영업팀)' };
+  const { xlsx, names } = await roundTrip(tpl, {}, values);
+  // 받은 뒤 화면에서 정산기간을 골랐다(받을 때는 빈 칸)
+  const period = cellKey(1, tpl.cols[1]);
+  const res = fillFromXlsx({ template: tpl, formKey: KEY, extras: {}, values: { ...values, [period]: '2026-11-01 ~ 2026-11-30' }, refs: { [who]: 'U001' }, xlsx: setX(setX(xlsx, 3, 1, ''), 3, 4, ''), names, people: PEOPLE });
+  assert.ok(res.ok);
+  assert.equal(res.values[what], '');
+  assert.equal(res.values[who], '');
+  assert.deepEqual(res.refs, {});
+  assert.equal(res.values[period], '2026-11-01 ~ 2026-11-30');
+  assert.equal(res.changed, 2);
+  // 얹기 전 값은 그대로 돌려준다(미리보기에서 칸별로 되돌릴 때)
+  assert.equal(res.base[what], '점심');
+  assert.deepEqual(res.baseRefs, { [who]: 'U001' });
+});
+
+test('엑셀에서 표를 정렬해도 다른 줄의 값이 남지 않는다', async () => {
+  const tpl = template();
+  const at = (r: number, c: number) => cellKey(r, tpl.cols[c]);
+  // 첫 줄은 내역·금액·구분, 둘째 줄은 내역·금액만
+  const values = { [at(3, 1)]: '점심', [at(3, 2)]: '12000', [at(3, 3)]: '식대', [at(4, 1)]: '택시', [at(4, 2)]: '8000' };
+  const { xlsx, names } = await roundTrip(tpl, {}, values);
+  // 엑셀에서 두 줄의 내용을 맞바꿨다(정렬 — 줄 이름은 제자리)
+  let x = xlsx;
+  [['택시', '8000', ''], ['점심', '12000', '식대']].forEach((row, k) => row.forEach((v, i) => (x = setX(x, 3 + k, 1 + i, v))));
+  const res = fillFromXlsx({ template: tpl, formKey: KEY, extras: {}, values, refs: {}, xlsx: x, names });
+  assert.ok(res.ok);
+  assert.deepEqual([res.values[at(3, 1)], res.values[at(3, 2)], res.values[at(3, 3)]], ['택시', '8000', '']);
+  assert.deepEqual([res.values[at(4, 1)], res.values[at(4, 2)], res.values[at(4, 3)]], ['점심', '12000', '식대']);
+});
+
+test('글 칸은 비어 있어도 엑셀 텍스트 서식으로 담는다 — 엑셀에서 쓴 010… 의 앞자리 0이 남게', async () => {
+  const tpl = template();
+  const sheet = applyValues(tpl, {}, { recalc: true });
+  const out = draftXlsxExport({ sheet, template: tpl, extras: {}, formKey: KEY });
+  assert.equal(out.options.textFormat?.(3, 1), true); // 내역(글)
+  assert.equal(out.options.textFormat?.(3, 2), false); // 금액
+  assert.equal(out.options.textFormat?.(2, 1), false); // 머리글(입력 칸 아님)
+  const files = await unzip(await exportXlsx(out.sheet, out.options));
+  const text = (name: string) => new TextDecoder().decode(files.get(name));
+  const styles = text('xl/styles.xml');
+  const fmtId = /<numFmt numFmtId="(\d+)" formatCode="@"\/>/.exec(styles)?.[1];
+  assert.ok(fmtId, '텍스트 서식(@)이 있다');
+  const xfs = [...styles.matchAll(/<xf [^>]*>/g)].map((m) => m[0]);
+  const cellXfs = xfs.slice(1); // 첫 xf 는 cellStyleXfs
+  const b4 = /<c r="B4" s="(\d+)"/.exec(text('xl/worksheets/sheet1.xml'))?.[1];
+  assert.ok(b4, '빈 글 칸도 서식을 담는다');
+  assert.ok(cellXfs[Number(b4)].includes(`numFmtId="${fmtId}"`));
+});
+
+test('엑셀에서 표를 정렬해 안 쓴 줄이 온 자리 — 틀에 미리 쓴 글자로 되돌린다(화면의 다른 줄 값이 남지 않게)', async () => {
+  let tpl = template();
+  // 내역 칸에 틀이 '2026.'을 미리 써 둔 날짜 칸처럼 — 날짜 칸으로 바꾼다
+  for (let r = 3; r <= 5; r++) {
+    tpl = setCellValue(tpl, r, 1, '2026.');
+    tpl = setCellMeta(tpl, APPROVAL_NS.input, r, 1, { type: 'date' });
+  }
+  const at = (r: number, c: number) => cellKey(r, tpl.cols[c]);
+  const values = { [at(3, 1)]: '2026-10-01', [at(3, 2)]: '12000' };
+  const { xlsx, names } = await roundTrip(tpl, {}, values);
+  // 첫 줄과 둘째 줄을 맞바꿨다
+  let x = xlsx;
+  [['2026.', ''], ['2026-10-01', '12000']].forEach((row, k) => row.forEach((v, i) => (x = setX(x, 3 + k, 1 + i, v))));
+  const res = fillFromXlsx({ template: tpl, formKey: KEY, extras: {}, values, refs: {}, xlsx: x, names });
+  assert.ok(res.ok);
+  assert.deepEqual([res.values[at(3, 1)], res.values[at(3, 2)]], ['2026.', '']);
+  assert.deepEqual([res.values[at(4, 1)], res.values[at(4, 2)]], ['2026-10-01', '12000']);
+  assert.deepEqual(res.notes, []);
+});

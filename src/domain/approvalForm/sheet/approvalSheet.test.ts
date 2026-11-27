@@ -50,7 +50,7 @@ test('이름 칸에는 수식이 들어가지 않는다', () => {
 });
 
 test('이름공간 값은 바뀌지 않는다', () => {
-  assert.deepEqual(APPROVAL_NS, { input: 'input', name: 'name', bind: 'bind', lock: 'lock', secret: 'secret', seal: 'seal', repeat: 'repeat', extHide: 'extHide', guide: 'guide', autoNo: 'autoNo', sealMark: 'sealMark', logoMark: 'logoMark', required: 'required', showIf: 'showIf' });
+  assert.deepEqual(APPROVAL_NS, { input: 'input', name: 'name', bind: 'bind', lock: 'lock', secret: 'secret', seal: 'seal', repeat: 'repeat', extHide: 'extHide', guide: 'guide', autoNo: 'autoNo', sealMark: 'sealMark', logoMark: 'logoMark', required: 'required', showIf: 'showIf', titleHint: 'titleHint' });
 });
 
 /** 2×3: A1 라벨(잠금 없음, 입력 아님) · B1 입력+이름 amount · C1 입력+잠금 · A2 입력 · B2 수식 =B1*2 */
@@ -99,8 +99,9 @@ test('값만 뽑아 틀에 다시 얹으면 같은 문서, 상신 문서는 저�
   const tpl = form();
   const s = setApprovalCellValue(tpl, 0, 1, '1000');
   const values = extractValues(s);
-  const [a, b] = s.cols;
-  assert.deepEqual(values, { [cellKey(0, b)]: '1000', [cellKey(1, b)]: '2000' });
+  const [a, b, c] = s.cols;
+  // 입력 칸·수식 칸은 빈 값도 담는다(빈 입력 칸 둘)
+  assert.deepEqual(values, { [cellKey(0, b)]: '1000', [cellKey(1, b)]: '2000', [cellKey(0, c)]: '', [cellKey(1, a)]: '' });
   assert.equal(values[cellKey(0, a)], undefined); // 라벨은 틀에 있으므로 저장하지 않음
   const view = applyValues(tpl, values, { recalc: false });
   assert.equal(view.rows[1][b], '2000');
@@ -110,6 +111,23 @@ test('값만 뽑아 틀에 다시 얹으면 같은 문서, 상신 문서는 저�
   assert.equal(applyValues(changed, values, { recalc: true }).rows[1][b], '3000');
   // 틀에 없는 칸 키는 버림
   assert.equal(applyValues(tpl, { 'x:none': '1' }, { recalc: false }).rows.length, 2);
+});
+
+test('비운 칸은 빈 값으로 저장한다 — 틀의 기본값·옛 수식 결과가 되살아나지 않게', () => {
+  let tpl = createSheet(2, 2);
+  // 기본값이 적힌 입력 칸(수량 5), 값을 넣으면 빈 칸이 되는 안내 수식
+  tpl = setCellMeta(setCellValue(tpl, 0, 0, '5'), APPROVAL_NS.input, 0, 0, { type: 'number' });
+  tpl = recalculate(setCellValue(tpl, 1, 0, '=IF(A1>0,"","수량을 입력하세요")'));
+  const [a] = tpl.cols;
+  // 기안자가 수량을 지움 → 다시 얹어도 빈 칸(틀의 5 가 비치지 않음)
+  const cleared = extractValues(recalculate(setCellValue(tpl, 0, 0, '', { allowFormula: false })));
+  assert.equal(cleared[cellKey(0, a)], '');
+  assert.equal(applyValues(tpl, cleared, { recalc: true }).rows[0][a], '');
+  // 틀의 수식 결과가 글자였다가 빈 칸이 됨 → 문서 보기(다시 계산 안 함)에도 빈 칸
+  const emptyTpl = recalculate(setCellValue(tpl, 0, 0, '', { allowFormula: false }));
+  assert.equal(emptyTpl.rows[1][a], '수량을 입력하세요');
+  const filled = extractValues(recalculate(setCellValue(emptyTpl, 0, 0, '3', { allowFormula: false })));
+  assert.equal(applyValues(emptyTpl, filled, { recalc: false }).rows[1][a], '');
 });
 
 test('이름 붙은 칸 값은 이름으로 복사', () => {

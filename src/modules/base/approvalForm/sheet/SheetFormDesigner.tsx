@@ -15,13 +15,14 @@ import type { ApprovalStep } from '@/domain/approvalDoc/schema';
 import { autoNumberPreview } from '@/domain/approvalForm/autoNumber';
 import { useAuth } from '@/app/auth/AuthProvider';
 import type { ApprovalFolder, ApprovalForm } from '@/domain/approvalForm/schema';
-import { useFormVersionList, useFormVersionSheet, useSaveSheetForm, useSetSheetSwitch, useSheetFormVersions, useSheetSwitches } from '@/features/gw/useApprovalFormVersions';
+import { useFormVersionList, useFormVersionSheet, useSaveSheetForm, useSetSheetSwitch, useSetVersionNote, useSheetFormVersions, useSheetSwitches } from '@/features/gw/useApprovalFormVersions';
 import { hasLegacyFields, sheetApplied } from '@/domain/approvalForm/sheetSwitch';
 import { SheetFormSettings } from './SheetFormSettings';
 import { DEFAULT_COL_WIDTH, SheetEditor, createSheet, importXlsx, type CellRange, type Sheet, type SheetSelection } from '@/lib/sheet';
 import {
   SHEET_PAGE_WIDTH,
   approvalCellProps,
+  titleHintOf,
   bindLabel,
   mergeApprovalRange,
   mergeCoversLinks,
@@ -44,7 +45,7 @@ import {
 import { Help, SheetCellPanel } from './SheetCellPanel';
 import { requestSidebarCollapse } from '@/app/shell/collapseSidebar';
 import { PALETTE_HELP, PART_MIME, PartRemoveButton, SheetPalette, applyPart } from './SheetPalette';
-import { InputLook } from './InputLook';
+import { HINT_LOOK, InputLook } from './InputLook';
 import { SheetEditorTour } from './SheetEditorTour';
 import { SheetEditorGuide } from './SheetEditorGuide';
 import { healRepeatSections, repeatIssues, repeatSections } from '@/domain/approvalForm/sheet/repeatRows';
@@ -275,6 +276,10 @@ function Designer({
   // 결재선 규칙 — 저장할 때 금액 조건 규칙이 걸린 서식에 금액 키 칸이 없으면 알린다(못 읽었으면 알리지 않음)
   const { data: routeRules } = useRouteRules();
   const onSave = async () => {
+    // 바뀐 것이 없으면 저장하지 않는다(새 서식은 처음 저장이라 그대로 진행)
+    if (!isNew && !dirty) {
+      return setMsg({ kind: 'info', text: note.trim() ? '바뀐 것이 없어 저장하지 않았습니다. 메모는 서식을 고쳐 저장할 때 남습니다.' : '바뀐 것이 없어 저장하지 않았습니다.' });
+    }
     const code = effectiveCode.trim();
     const name = form.name.trim();
     if (!name) return setMsg({ kind: 'err', text: '서식명을 입력하세요.' });
@@ -292,6 +297,14 @@ function Designer({
     const errors = [...validateApprovalSheet(sheet), ...repeatIssues(sheet), ...linkIssues(sheet, link)];
     if (errors.length) return setMsg({ kind: 'err', text: '저장할 수 없습니다. 아래를 고쳐 주세요.', list: errors });
     if (!user) return setMsg({ kind: 'err', text: '로그인 정보가 없습니다.' });
+    // 저장 전에 한 번 묻는다 — 틀이 바뀌었으면 새 버전이 쌓이고 메모가 같이 남는다
+    const frameChanged = isNew || sheet !== savedSheet || link !== savedLink;
+    const ask = frameChanged
+      ? `서식을 저장할까요? 새 버전이 만들어집니다.
+
+메모: ${note.trim() || '(없음 — 저장 단추 왼쪽 칸에 적을 수 있습니다)'}`
+      : '서식 정보를 저장할까요? 틀은 바뀌지 않아 새 버전은 만들어지지 않습니다.';
+    if (!confirm(ask)) return;
 
     // 기존 서식은 항목 목록을 그대로 둔다(옛 문서가 그 항목으로 보임). 서식 설정을 바꿨을 때만 서식 기록에 저장
     const header: ApprovalForm = { ...form, id: code, code, name, fields: legacy ? initialForm.fields : [] };
@@ -397,6 +410,11 @@ function Designer({
           className="pointer-events-none absolute inset-1 flex items-center justify-center rounded border-2 border-dashed border-indigo-300 bg-indigo-50/60 text-[11px] font-semibold text-indigo-500"
         >
           결재란 — 결재선에 따라 칸 수가 바뀝니다
+        </span>
+      ) : p.bind === 'doc.title' && emptyCell && titleHintOf(sheet, r, c) ? (
+        // 문서 제목 칸에 정한 입력 예시 — 기안 화면처럼 흐리게
+        <span aria-hidden title="입력 예시 — 기안 화면에서 빈 제목 칸에 흐리게 보입니다" className={HINT_LOOK}>
+          <span className="truncate">{titleHintOf(sheet, r, c)}</span>
         </span>
       ) : (p.bind?.startsWith('draft.') || p.bind?.startsWith('doc.')) && emptyCell ? (
         <span aria-hidden className="pointer-events-none absolute inset-0 flex items-center px-1.5 text-[11px] italic text-sky-600/70">
@@ -764,6 +782,16 @@ function Designer({
             <Eye className="h-3.5 w-3.5" />
             <span>미리보기</span>
           </button>
+          {/* 이번 저장에 남길 메모 — 버전 기록에 같이 남는다. 엑셀 불러오기·되살리기는 저절로 채운다 */}
+          <input
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && void onSave()}
+            placeholder="이번 저장 메모 (예: 품목 표 열 추가)"
+            title="저장하면 버전 기록에 이 메모가 같이 남습니다. 편집하는 동안 미리 적어 둘 수 있습니다"
+            maxLength={255}
+            className="w-[230px] rounded-lg border border-teal/40 bg-white px-2.5 py-1.5 text-[12px] text-ink outline-none placeholder:text-ink3 focus:border-teal"
+          />
           <button
             type="button"
             onClick={onSave}
@@ -1072,11 +1100,6 @@ function Designer({
             <SheetFormSettings form={form} onChange={set} />
           ) : (
             <>
-            {/* 다음 저장에 남길 메모 — 엑셀 불러오기·되살리기는 저절로 채운다 */}
-            <label className="mb-3 block">
-              <span className="mb-0.5 block text-[11px] font-bold text-ink2">이번 저장 메모</span>
-              <input className={inp} value={note} onChange={(e) => setNote(e.target.value)} placeholder="예: 품목 표 열 추가" maxLength={255} />
-            </label>
             <VersionHistory
               formId={isNew ? null : form.id}
               current={baseVersion}
@@ -1180,6 +1203,20 @@ function VersionHistory({
     setWant({ version, action });
   };
   const fmt = useMemo(() => new Intl.DateTimeFormat('ko-KR', { dateStyle: 'short', timeStyle: 'short' }), []);
+  // 메모 고치기 — 내가 저장한 버전만. 틀은 그대로 두고 메모 글만 바꾼다
+  const myId = useAuth().user?.id ?? null;
+  const setNote = useSetVersionNote();
+  const [editing, setEditing] = useState<{ version: number; text: string } | null>(null);
+  const [noteErr, setNoteErr] = useState<number | null>(null);
+  const saveNote = () => {
+    if (!formId || !myId || !editing || setNote.isPending) return;
+    const { version, text } = editing;
+    setNoteErr(null);
+    setNote.mutate(
+      { formId, version, note: text, userId: myId! },
+      { onSuccess: () => setEditing(null), onError: () => setNoteErr(version) }
+    );
+  };
 
   if (!formId) return <div className="text-[11.5px] text-ink3">처음 저장하면 v1 이 생깁니다. 이후 틀을 바꿔 저장할 때마다 버전이 하나씩 쌓입니다.</div>;
   if (isLoading) return <div className="text-[11.5px] text-ink3">불러오는 중…</div>;
@@ -1188,7 +1225,7 @@ function VersionHistory({
     <div className="space-y-2">
       <div className="flex items-center gap-1.5 text-[11px] text-ink3">
         <History className="h-3.5 w-3.5" />
-        <span>저장할 때마다 쌓이며 고치거나 지우지 않습니다. 문서는 쓸 때의 버전 모양으로 보입니다.</span>
+        <span>저장할 때마다 쌓이며 틀은 고치거나 지우지 않습니다(메모는 저장한 사람이 고칠 수 있음). 문서는 쓸 때의 버전 모양으로 보입니다.</span>
       </div>
       <ul className="max-h-[calc(100vh-380px)] space-y-1.5 overflow-y-auto">
         {versions.map((v) => (
@@ -1201,7 +1238,47 @@ function VersionHistory({
               <span className="text-[10.5px] text-ink3">{fmt.format(new Date(v.createdAt))}</span>
             </div>
             <div className="mt-0.5 truncate text-[11px] text-ink2">{v.createdByName ?? v.createdBy}</div>
-            {v.note && <div className="mt-0.5 text-[11px] text-ink3">{v.note}</div>}
+            {editing?.version === v.version ? (
+              <div className="mt-1 space-y-1">
+                <input
+                  autoFocus
+                  value={editing.text}
+                  maxLength={255}
+                  onChange={(e) => setEditing({ version: v.version, text: e.target.value })}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.nativeEvent.isComposing) saveNote();
+                    if (e.key === 'Escape') setEditing(null);
+                  }}
+                  placeholder="메모 (비우면 메모 없음)"
+                  className="w-full rounded border border-border bg-panel px-2 py-1 text-[11px] text-ink outline-none focus:border-teal"
+                />
+                <div className="flex gap-1.5">
+                  <button type="button" onClick={saveNote} disabled={setNote.isPending} className="rounded bg-teal px-2 py-0.5 text-[10.5px] font-semibold text-white disabled:opacity-50">
+                    {setNote.isPending ? '저장 중…' : '메모 저장'}
+                  </button>
+                  <button type="button" onClick={() => setEditing(null)} className="rounded border border-border px-2 py-0.5 text-[10.5px] font-semibold text-ink2 hover:text-ink">
+                    취소
+                  </button>
+                </div>
+                {noteErr === v.version && <div className="text-[10.5px] text-rose-600">메모를 저장하지 못했습니다. 다시 눌러 주세요.</div>}
+              </div>
+            ) : (
+              (v.note || v.createdBy === myId) && (
+                <div className="mt-0.5 flex items-start gap-1.5 text-[11px] text-ink3">
+                  <span className="min-w-0 flex-1 break-words">{v.note || '메모 없음'}</span>
+                  {v.createdBy === myId && (
+                    <button
+                      type="button"
+                      onClick={() => (setNoteErr(null), setEditing({ version: v.version, text: v.note ?? '' }))}
+                      className="shrink-0 font-semibold text-teal hover:underline"
+                      title="내가 저장한 버전의 메모를 고칩니다(틀은 바뀌지 않음)"
+                    >
+                      메모 고치기
+                    </button>
+                  )}
+                </div>
+              )
+            )}
             <div className="mt-1.5 flex gap-1.5">
               {want?.version === v.version ? (
                 <span className="py-0.5 text-[10.5px] text-ink3">읽는 중…</span>

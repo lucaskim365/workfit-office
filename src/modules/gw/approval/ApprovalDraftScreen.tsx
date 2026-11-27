@@ -17,7 +17,7 @@ import {
 } from '@/domain/approvalDoc/schema';
 import { CANCEL_FORM_CODE, RESERVED_BODY_KEY, amountFieldOf, documentBodyKeyOf, type ApprovalForm, type FieldValue } from '@/domain/approvalForm/schema';
 import { withBodyHeader, withSealTexts } from '@/domain/approvalForm/headerItems';
-import { sheetHeaderItems } from '@/domain/approvalForm/sheet/sheetHeader';
+import { sheetHasLogo, sheetHeaderItems } from '@/domain/approvalForm/sheet/sheetHeader';
 import { type ApprovalDraftInput } from '@/data/approvalDoc/approvalDoc.repo';
 import { approvalProcessRepo } from '@/data/approvalProcess/approvalProcess.repo';
 import { useCreateDraft, useSaveDraft, useSubmitApproval, useApprovalDoc, useCachedApprovalLookup } from '@/features/gw/useApprovals';
@@ -35,8 +35,11 @@ import { DraftRecipientSection } from './components/DraftRecipientSection';
 import { DraftApprovalLineModal } from './components/DraftApprovalLineModal';
 import { DraftSubmitConfirmDialog } from './components/DraftSubmitConfirmDialog';
 import { ApprovalDraftDocumentSheet } from './components/ApprovalDraftDocumentSheet';
-import { SheetDraftForm, type RelatedSource } from './sheetForm/SheetDraftForm';
+import { REQUIRED_EMPTY_CLASS, SheetDraftForm, type RelatedSource } from './sheetForm/SheetDraftForm';
 import { sheetDraftTouched } from '@/domain/approvalForm/sheet/draftTouched';
+import { titleDefaultOf } from '@/domain/approvalForm/sheet/approvalSheet';
+import { referenceUserIdsOf } from '@/domain/approvalForm/schema';
+import { listXlsxAliasesOf } from '@/domain/approvalForm/sheet/listExcel';
 import { isSheetDoc } from './sheetForm/SheetDocView';
 import { SHEET_NAMED_KEY, namedFromLegacy, readNamed, secretNames, withoutNames, type NamedValues } from '@/domain/approvalForm/sheet/relatedImport';
 import { SHEET_LABELED_KEY, labeledFromDoc, labeledFromLegacy } from '@/domain/approvalForm/sheet/labelMatch';
@@ -427,7 +430,9 @@ function ApprovalDraftInner({
     const isSheetDraft = sheetVersion !== null;
     const sheetTouched = isSheetDraft && !!sheetTpl?.sheet && sheetDraftTouched(sheetTpl.sheet, values);
 
-    if (title.trim().length > 0) return true;
+    // 서식이 제목 칸에 미리 적어 둔 글 그대로면 쓴 것이 아니다
+    const titleDefault = isSheetDraft && sheetTpl?.sheet ? titleDefaultOf(sheetTpl.sheet) : '';
+    if (title.trim().length > 0 && title.trim() !== titleDefault) return true;
     if (!isSheetDraft && amount.trim().length > 0) return true;
     if (attachments.length > 0) return true;
     if (relatedDocs.length > 0) return true;
@@ -1158,13 +1163,14 @@ function ApprovalDraftInner({
   const amountField = form ? amountFieldOf(form) : undefined;
 
   const amountNum = useMemo(() => {
-    if (amountField && values[amountField.key] != null && values[amountField.key] !== '') {
+    // 시트로 쓰는 문서의 금액은 시트 금액 칸(amount)에서만 — 기존 양식으로 쓰다 만 보관본을 불러와도 옛 금액 항목 값이 문서 금액이 되지 않게
+    if (sheetVersion === null && amountField && values[amountField.key] != null && values[amountField.key] !== '') {
       const n = Number(String(values[amountField.key]).replace(/,/g, ''));
       if (!isNaN(n)) return n;
     }
     const n = Number(amount.replace(/,/g, ''));
     return isNaN(n) || !amount ? null : n;
-  }, [amount, amountField, values]);
+  }, [amount, amountField, values, sheetVersion]);
 
   // 실시간 결재선 규칙 엔진 연동 + 서식 기본 참조자 연동
   const lastAutoSteps = useRef<string>('');
@@ -1172,25 +1178,23 @@ function ApprovalDraftInner({
     if (route.isLoading || !code || editDoc) return;
     let line = route.build({ drafterId: me.id, docType: code, linkType: linkCode !== code ? linkCode : null, amount: amountNum, docData: values });
 
-    // 서식 기본 참조자(사용자)가 지정되어 있다면 결재선에 병합 (중복/본인 제외)
-    if (form?.referenceUserId && form.referenceUserId !== me.id) {
-      const alreadyHasRef = line.some((s) => s.approverId === form.referenceUserId);
-      if (!alreadyHasRef) {
-        line = [
-          ...line,
-          {
-            seq: line.length + 1,
-            parallelGroup: null,
-            executionType: 'sequential' as const,
-            kind: '참조' as const,
-            approverId: form.referenceUserId,
-            delegatedFromId: null,
-            decision: '대기' as const,
-            decidedAt: null,
-            comment: '',
-          },
-        ];
-      }
+    // 서식 기본 참조자(사용자, 여러 명)가 지정되어 있다면 결재선에 병합 (중복/본인 제외)
+    for (const refId of referenceUserIdsOf(form)) {
+      if (refId === me.id || line.some((s) => s.approverId === refId)) continue;
+      line = [
+        ...line,
+        {
+          seq: line.length + 1,
+          parallelGroup: null,
+          executionType: 'sequential' as const,
+          kind: '참조' as const,
+          approverId: refId,
+          delegatedFromId: null,
+          decision: '대기' as const,
+          decidedAt: null,
+          comment: '',
+        },
+      ];
     }
 
     const lineStr = JSON.stringify(line);
@@ -1202,7 +1206,7 @@ function ApprovalDraftInner({
         lastAutoSteps.current = lineStr;
       }
     }
-  }, [code, amountNum, values, route, me.id, steps, editDoc, form?.referenceUserId]);
+  }, [code, amountNum, values, route, me.id, steps, editDoc, form?.referenceUserId, form?.referenceUserIds]);
 
   // 서식 기본 수신처/참조부서 초기값 연동 — 서식마다 한 번만(조직 정보가 다시 와도 사용자가 지운 수신처를 되살리지 않는다)
   const recipientsSeededFor = useRef<string | null>(null);
@@ -1384,6 +1388,8 @@ function ApprovalDraftInner({
     };
   };
 
+  /** 필수 칸이 비어 상신을 막을 때의 안내 머리말 — 이 안내면 비어 있는 칸으로 화면을 옮긴다 */
+  const REQUIRED_MESSAGE = '필수 칸을 채워 주세요';
   const validate = (forSubmit: boolean): string | null => {
     if (!title.trim()) return '제목을 입력하세요.';
     // 기안부서를 모르면 상신하지 않는다 — 문서함·공개범위·결재선 규칙이 부서로 움직인다(임시저장은 된다)
@@ -1399,7 +1405,8 @@ function ApprovalDraftInner({
         : `이 문서가 쓴 서식 틀(v${sheetVersion})을 찾지 못해 상신할 수 없습니다. 관리자에게 알려 주세요.`;
     }
     if (forSubmit && sheetVersion !== null && sheetRequiredRef.current.length > 0) {
-      return `필수 칸을 채워 주세요: ${sheetRequiredRef.current.slice(0, 5).join(', ')}${sheetRequiredRef.current.length > 5 ? ' 외' : ''}`;
+      return `${REQUIRED_MESSAGE}: ${sheetRequiredRef.current.slice(0, 5).join(', ')}${sheetRequiredRef.current.length > 5 ? ' 외' : ''}
+빨간 별표(*)가 붙은 칸입니다.`;
     }
     // 계산이 안 되는 칸(#오류)이 있으면 상신하지 않는다 — 금액이 '#오류'인 채로 결재·매입 결제 대장에 들어가지 않게(임시저장은 된다)
     if (forSubmit && sheetVersion !== null && sheetFormulaErrorsRef.current.length > 0) {
@@ -1671,6 +1678,8 @@ function ApprovalDraftInner({
     const err = validate(true);
     if (err) {
       alert(err);
+      // 필수 칸 때문이면 비어 있는 첫 필수 칸(별표)이 보이게 화면을 옮긴다
+      if (err.startsWith(REQUIRED_MESSAGE)) document.querySelector(`.${REQUIRED_EMPTY_CLASS}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' });
       return setError(err);
     }
     // 휴일근로 — 같은 날 이미 낸 신청서가 있으면 확인창 전에 알린다(상신 때 저장소도 한 번 더 막는다)
@@ -1886,6 +1895,7 @@ function ApprovalDraftInner({
             form={docForm}
             titleMode={editDoc ? editDoc.titleMode : TITLE_MODE_JOB_TITLE}
             company={company}
+            sheetHasLogo={sheetHasLogo(sheetTpl?.sheet)}
             docCode={code}
             me={me}
             title={title}
@@ -1969,6 +1979,8 @@ function ApprovalDraftInner({
                     if (p.preservationPeriod !== undefined) setPreservationPeriod(p.preservationPeriod);
                     if (p.visibility !== undefined) setVisibility(p.visibility === '비공개' ? '비공개' : '부서');
                   }}
+                  // 카드 이용내역 엑셀을 올리는 서식(법인카드·개인 경비) — 카드사 열 제목을 표 머리글에 맞춘다
+                  xlsxAliases={listXlsxAliasesOf(form)}
                   // 문서 머리를 시트에 넣은 서식 — 결재란(누르면 결재선 편집)·로고·기안자 서명
                   slots={slots}
                   draftInfo={{

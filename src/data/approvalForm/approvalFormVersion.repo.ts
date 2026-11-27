@@ -9,8 +9,8 @@ import type { Sheet } from '@/lib/sheet/core';
 
 /**
  * 시트 서식 버전 Repository — approvalFormVersions 컬렉션(새 컬렉션, 기존 컬렉션과 분리).
- * 버전은 쌓기만 한다(insert). 고치거나 지우는 메서드를 두지 않는다 — 문서가 버전 틀 위에 값만 얹어 저장하므로
- * 이미 쓰인 버전이 바뀌면 결재된 문서 모양이 달라진다.
+ * 버전은 쌓기만 한다(insert). 틀을 고치거나 버전을 지우는 메서드를 두지 않는다 — 문서가 버전 틀 위에 값만 얹어 저장하므로
+ * 이미 쓰인 버전이 바뀌면 결재된 문서 모양이 달라진다. 메모(note)만 저장한 사람이 고칠 수 있다(설명 글이라 문서 모양과 무관).
  */
 const backend = createCrudBackend<ApprovalFormVersion>({
   coll: 'approvalFormVersions',
@@ -78,5 +78,13 @@ export const approvalFormVersionRepo = {
         throw e;
       }
     }
+  },
+
+  /** 메모만 고치기 — 그 버전을 저장한 사람만. 틀·저장한 사람·시각은 건드리지 않는다 */
+  async setNote(formId: string, version: number, note: string, userId: string): Promise<void> {
+    const head = (await this.listForForm(formId)).find((v) => v.version === version);
+    if (!head) throw new Error('버전을 찾지 못했습니다.');
+    if (head.createdBy !== userId) throw new Error('메모는 그 버전을 저장한 사람만 고칠 수 있습니다.');
+    await backend.patch(versionKey(formId, version), { note: note.trim().slice(0, 255) || null });
   },
 };

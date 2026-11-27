@@ -7,6 +7,8 @@ import type { ApprovalBox, ApprovalDoc } from '@/domain/approvalDoc/schema';
 import {
   baselineReadDocIds,
   isDocRead,
+  isRejectionUnread,
+  rejectionReadKey,
   UNREAD_TRACKED_BOXES,
   unreadByBox,
   type UnreadTrackedBox,
@@ -68,6 +70,21 @@ export function useApprovalUnread(userId: string, byBox: Record<ApprovalBox, App
     [userId, readDocIds, qc],
   );
 
+  /** 상신함 반려 문서를 반려된 뒤로 아직 열지 않았는지 — 기록을 불러오기 전에는 표시하지 않는다 */
+  const isRejectionUnreadDoc = useCallback(
+    (doc: ApprovalDoc) => Boolean(readQuery.data) && isRejectionUnread(doc, readDocIds),
+    [readQuery.data, readDocIds],
+  );
+
+  /** 내가 기안한 반려 문서를 열면 반려 알림을 읽음으로 기록 */
+  const markRejectionRead = useCallback(
+    (doc: ApprovalDoc) => {
+      const key = doc.drafterId === userId ? rejectionReadKey(doc) : null;
+      if (key) markRead(key);
+    },
+    [userId, markRead],
+  );
+
   return {
     unread,
     unreadCount: (box: ApprovalBox) => (UNREAD_TRACKED_BOXES as readonly string[]).includes(box) ? unread[box as UnreadTrackedBox].count : 0,
@@ -77,6 +94,8 @@ export function useApprovalUnread(userId: string, byBox: Record<ApprovalBox, App
     isUnreadAnywhere: (docId: string) => UNREAD_TRACKED_BOXES.some((b) => unread[b].ids.has(docId)),
     isUnreadDoc,
     markRead,
+    isRejectionUnreadDoc,
+    markRejectionRead,
   };
 }
 
@@ -84,8 +103,17 @@ export function useApprovalUnread(userId: string, byBox: Record<ApprovalBox, App
  * 상세 화면을 열면 읽음으로 기록 — 푸시 알림 등으로 목록을 거치지 않고 바로 들어오는 경우용.
  * 결재함 분류 없이 기록만 한다(목록 화면이 다시 열리면 최신 기록을 읽는다).
  */
-export function useMarkApprovalReadOnOpen(userId: string | undefined, docId: string | undefined) {
+export function useMarkApprovalReadOnOpen(userId: string | undefined, docId: string | undefined, doc?: ApprovalDoc | null) {
   const qc = useQueryClient();
+  // 내가 기안한 반려 문서 — 반려 알림(상신함 빨간 동그라미)도 읽음으로
+  const rejectionKey = doc && userId && doc.drafterId === userId ? rejectionReadKey(doc) : null;
+  useEffect(() => {
+    if (!userId || !rejectionKey) return;
+    approvalReadRepo
+      .markRead(userId, [rejectionKey])
+      .then(() => qc.invalidateQueries({ queryKey: [KEY, userId] }))
+      .catch((err) => console.warn('[approvalReads] 반려 읽음 기록 실패:', err));
+  }, [userId, rejectionKey, qc]);
   useEffect(() => {
     if (!userId || !docId) return;
     approvalReadRepo

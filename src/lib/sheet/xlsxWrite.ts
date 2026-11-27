@@ -33,6 +33,8 @@ export interface XlsxExportOptions {
   pictures?: XlsxPicture[];
   /** 숫자처럼 보여도 글자로 담을 칸 — 제목·번호처럼 숫자가 아닌 글(숫자로 담으면 엑셀이 오른쪽에 붙이고 '1,000'의 콤마 같은 글자를 버린다) */
   textCell?: (r: number, c: number) => boolean;
+  /** 엑셀 '텍스트' 서식으로 담을 칸 — 엑셀에서 새로 쓰는 글도 숫자·날짜로 바뀌지 않게(글 입력 칸). 수식·숫자로 담는 칸은 빼고 */
+  textFormat?: (r: number, c: number) => boolean;
   /** 숨겨 담을 행 — 빼지 않고 엑셀에서 숨김(행 번호·수식이 그대로라, 채워서 다시 읽을 파일에 쓴다) */
   hiddenRow?: (r: number) => boolean;
   /**
@@ -103,6 +105,9 @@ function asNumber(text: string, numeric = false): number | null {
   const n = parseNumber(t);
   return n !== null && Number.isFinite(n) ? n : null;
 }
+
+/** 엑셀 '텍스트' 표시 서식 — 이 서식의 칸에 쓴 것은 엑셀이 숫자·날짜로 바꾸지 않는다 */
+const TEXT_FMT = '@';
 
 /** 소수 자릿수(최대 10) — 표시 서식의 자릿수를 정하지 않은 칸 */
 function decimalsOf(n: number): number {
@@ -285,7 +290,8 @@ export async function exportXlsx(s: Sheet, opts: XlsxExportOptions = {}): Promis
       const text = opts.cellText?.(src, c) ?? String(s.rows[src]?.[col] ?? '');
       const formula = withFormulas ? s.formulas[key] : undefined;
       const n = opts.textCell?.(src, c) ? null : asNumber(text, style?.numFmt === 'currency' || style?.numFmt === 'percent');
-      const xf = book.xf(style, numFmtCode(style, n), n === null ? fitOf(src, c, text, style) : null);
+      // 텍스트 서식(@) 칸 — 비어 있어도 서식을 담는다. 엑셀에서 '010…'을 써도 숫자로 바뀌지 않는다
+      const xf = book.xf(style, !formula && n === null && opts.textFormat?.(src, c) ? TEXT_FMT : numFmtCode(style, n), n === null ? fitOf(src, c, text, style) : null);
       const sAttr = xf ? ` s="${xf}"` : '';
       if (formula) {
         const f = `<f>${esc(formula.replace(/^=/, ''))}</f>`;

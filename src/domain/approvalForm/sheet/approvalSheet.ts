@@ -35,6 +35,8 @@ export const APPROVAL_NS = {
    * (기존 서식 visibleIf '지출 항목이 식대일 때만'과 같음). 숨은 행은 작성·결재·인쇄 모두 빠지고 필수 검사·연동 값에서도 빠진다
    */
   showIf: 'showIf',
+  /** 문서 제목 칸의 입력 예시 — 값 글자. 입력 칸의 예시는 칸 종류 설정(input.placeholder)에 있고, 문서 제목 칸은 입력 칸이 아니라 여기에 둔다 */
+  titleHint: 'titleHint',
 } as const;
 
 export type CellInputType =
@@ -65,10 +67,29 @@ export interface CellInput {
   placeholder?: string;
 }
 
+/**
+ * 문서 제목 칸에 서식이 미리 적어 둔 글 — 새 문서를 열면 제목에 이 글이 들어가 있고 기안자가 고쳐 쓴다(제목을 같은 꼴로 맞추려는 서식).
+ * 편집 화면에서 제목 칸에 직접 쓴 글자다. 없으면 ''
+ */
+export function titleDefaultOf(s: Sheet): string {
+  const key = Object.entries(s.cellMeta[APPROVAL_NS.bind] ?? {}).find(([, b]) => b === 'doc.title')?.[0];
+  if (!key) return '';
+  const i = key.indexOf(':');
+  return String(s.rows[Number(key.slice(0, i))]?.[key.slice(i + 1)] ?? '').trim();
+}
+
 /** 입력 예시를 쓸 수 있는 입력 칸 — 글·숫자를 직접 쓰는 칸(날짜·선택·사람 칸은 고르는 화면이 따로 있다) */
 export const PLACEHOLDER_INPUTS: ReadonlySet<CellInputType> = new Set<CellInputType>(['text', 'multiline', 'number', 'currency']);
 /** 입력 예시 최대 길이 */
 export const PLACEHOLDER_MAX = 60;
+
+/** 문서 제목 칸에 서식이 정한 입력 예시 — 없으면 undefined(작성 화면이 기본 문구를 보인다) */
+export function titleHintOf(s: Sheet, r: number, c: number): string | undefined {
+  const col = s.cols[c];
+  const v = col === undefined ? undefined : s.cellMeta[APPROVAL_NS.titleHint]?.[cellKey(r, col)];
+  const p = typeof v === 'string' ? v.trim() : '';
+  return p ? p.slice(0, PLACEHOLDER_MAX) : undefined;
+}
 
 /** 이 칸의 입력 예시 — 쓸 수 없는 칸 종류거나 비었으면 undefined */
 export function placeholderOf(input: CellInput | undefined): string | undefined {
@@ -351,7 +372,7 @@ export function mergeApprovalRange(s: Sheet, range: CellRange): Sheet {
   return { ...merged, cellMeta };
 }
 
-/** 문서에 저장할 값 — 칸 키 → 보이는 글자(수식 칸은 계산 결과). 빈 칸은 뺀다 */
+/** 문서에 저장할 값 — 칸 키 → 보이는 글자(수식 칸은 계산 결과). 입력·수식 칸은 빈 값도 담는다(extractValues) */
 export type SheetValues = Record<string, string>;
 
 /**
@@ -367,14 +388,12 @@ export function extractValues(s: Sheet): SheetValues {
       const c = s.cols.indexOf(col);
       // 입력·불러오기·수식 칸 + 이름 붙은 칸(시스템이 계산해 넣는 휴가 일수 등 — 입력 칸이 아니어도 값이 있다)
       // + 자동번호 칸(상신 때 받은 번호 — 반려 뒤 고쳐서 다시 올려도 같은 번호를 쓰게)
-      const keep =
-        s.formulas[cellKey(r, col)] !== undefined ||
-        hasMeta(s, APPROVAL_NS.input, r, c) ||
-        hasMeta(s, APPROVAL_NS.bind, r, c) ||
-        hasMeta(s, APPROVAL_NS.name, r, c) ||
-        hasMeta(s, APPROVAL_NS.autoNo, r, c);
-      if (v !== undefined && v !== '' && keep) {
-        out[cellKey(r, col)] = v;
+      // 입력 칸·수식 칸은 빈 값도 남긴다 — 빼면 다시 얹을 때 틀의 글자가 비쳐 나온다:
+      // 기안자가 지운 기본값('2026.'·번호·수량 1)이 되살아나고, 빈 칸이 된 수식 결과 자리에 틀의 옛 결과가 보인다
+      const blankable = s.formulas[cellKey(r, col)] !== undefined || hasMeta(s, APPROVAL_NS.input, r, c);
+      const keep = blankable || hasMeta(s, APPROVAL_NS.bind, r, c) || hasMeta(s, APPROVAL_NS.name, r, c) || hasMeta(s, APPROVAL_NS.autoNo, r, c);
+      if (keep && (blankable || (v !== undefined && v !== ''))) {
+        out[cellKey(r, col)] = v ?? '';
       }
     });
   });
@@ -601,7 +620,8 @@ export function setApprovalProp(
     | typeof APPROVAL_NS.autoNo
     | typeof APPROVAL_NS.sealMark
     | typeof APPROVAL_NS.logoMark
-    | typeof APPROVAL_NS.required,
+    | typeof APPROVAL_NS.required
+    | typeof APPROVAL_NS.titleHint,
   value: CellInput | AutoNumberConfig | string | boolean | undefined
 ): Sheet {
   const v = value === false || value === '' ? undefined : value;
@@ -814,9 +834,12 @@ export function cellCaption(s: Sheet, r: number, c: number): string {
   return cellAddress(r, c);
 }
 
-/** 필수 입력 칸 중 비어 있는 칸의 이름표 — 상신 전 검사(기안자가 쓰는 칸만) */
-export function requiredMissing(s: Sheet): string[] {
-  const out: string[] = [];
+/**
+ * 필수 입력 칸(기안자가 쓰는 칸, 조건으로 숨은 행 제외)과 지금 비어 있는지 — 작성 화면의 별표와 상신 전 검사가 같이 쓴다.
+ * 고를 항목이 없는 종속 선택 칸은 지금 쓸 수 없는 칸이라 뺀다(별표도 없고 검사도 안 한다)
+ */
+export function requiredCells(s: Sheet): { r: number; c: number; missing: boolean }[] {
+  const out: { r: number; c: number; missing: boolean }[] = [];
   const hiddenRows = conditionHiddenRows(s);
   Object.entries(s.cellMeta[APPROVAL_NS.required] ?? {}).forEach(([key, v]) => {
     if (v !== true) return;
@@ -826,9 +849,14 @@ export function requiredMissing(s: Sheet): string[] {
     if (c < 0 || r >= s.rows.length || hiddenRows.has(r)) return;
     const input = draftInputOf(s, r, c);
     if (!input || (input.depends && draftOptions(s, input).length === 0)) return;
-    if (String(s.rows[r]?.[s.cols[c]] ?? '').trim() === '') out.push(cellCaption(s, r, c));
+    out.push({ r, c, missing: String(s.rows[r]?.[s.cols[c]] ?? '').trim() === '' });
   });
-  return [...new Set(out)];
+  return out;
+}
+
+/** 필수 입력 칸 중 비어 있는 칸의 이름표 — 상신 전 검사(기안자가 쓰는 칸만) */
+export function requiredMissing(s: Sheet): string[] {
+  return [...new Set(requiredCells(s).filter((x) => x.missing).map((x) => cellCaption(s, x.r, x.c)))];
 }
 
 /**
