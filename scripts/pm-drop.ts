@@ -88,15 +88,17 @@ async function main() {
   if (ce) fail(ce.replace('쓰지 않고', '지우지 않고'));
 
   if (db.prod) {
-    // 사본 확인 — 파일이 있고 · 운영 것이고 · 컬렉션마다 $id 목록이 지금 DB 와 같을 때만
+    // 사본 확인 — 파일이 있고 · 운영 것이고 · 컬렉션마다 문서 목록($id + $updatedAt)이 지금 DB 와 같을 때만
+    // ($updatedAt 까지 보는 이유: 사본 뒤에 고친 문서가 있으면 사본에는 고치기 전 값만 있어 그 고친 내용을 잃음 — G-1 사소 ①)
     const path = process.argv.find((a) => a.startsWith('--backup='))?.slice('--backup='.length);
     if (!path || !existsSync(path)) fail(`--backup=<미리보기가 만든 사본> 이 없거나 파일이 없습니다 (${path ?? '없음'}) — 지우지 않고 멈춤`);
     const b = JSON.parse(readFileSync(path, 'utf8')) as Backup;
     if (b.project !== db.project || b.database !== db.database) fail(`사본의 project · database (${b.project} / ${b.database}) 가 지금과 다름 — 지우지 않고 멈춤`);
+    const sig = (docs: Array<Record<string, unknown> & { $id: string }>) => docs.map((d) => `${d.$id}@${String(d.$updatedAt ?? '')}`).sort().join(',');
     for (const name of targets) {
-      const now = (await allDocs(dbs, db, name)).map((d) => d.$id).sort().join(',');
-      const was = (b.collections[name] ?? []).map((d) => d.$id).sort().join(',');
-      if (now !== was) fail(`${name}: 사본과 지금 DB 의 문서 목록이 다름 (사본 뒤에 바뀜) — 미리보기를 다시 돌려 새 사본으로`);
+      const now = sig(await allDocs(dbs, db, name));
+      const was = sig(b.collections[name] ?? []);
+      if (now !== was) fail(`${name}: 사본과 지금 DB 의 문서 목록 · 고친 시각이 다름 (사본 뒤에 바뀜) — 미리보기를 다시 돌려 새 사본으로`);
     }
     console.log(`  사본 확인 맞음: ${path} (${b.total}건, ${b.at})`);
   }
