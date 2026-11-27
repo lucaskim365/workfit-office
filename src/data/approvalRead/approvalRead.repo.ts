@@ -4,8 +4,6 @@ import {
   approvalReadId,
   approvalReadSchema,
   BASELINE_DOC_ID,
-  isMarkerDocId,
-  REJECT_BASELINE_DOC_ID,
   type ApprovalRead,
 } from '@/domain/approvalRead/schema';
 
@@ -50,31 +48,22 @@ export function createApprovalReadRepo(backend: CrudBackend<ApprovalRead>) {
     rowsOf,
 
     /** 읽은 문서 목록과 처음 적용 기준선을 남겼는지 */
-    async readState(userId: string): Promise<{ readDocIds: Set<string>; hasBaseline: boolean; hasRejectBaseline: boolean }> {
+    async readState(userId: string): Promise<{ readDocIds: Set<string>; hasBaseline: boolean }> {
       const rows = await rowsOf(userId);
       return {
-        readDocIds: new Set(rows.filter((r) => !isMarkerDocId(r.docId)).map((r) => r.docId)),
+        readDocIds: new Set(rows.filter((r) => r.docId !== BASELINE_DOC_ID).map((r) => r.docId)),
         hasBaseline: rows.some((r) => r.docId === BASELINE_DOC_ID),
-        hasRejectBaseline: rows.some((r) => r.docId === REJECT_BASELINE_DOC_ID),
       };
     },
 
     /** 문서를 읽음으로 기록(이미 있으면 그대로) */
     async markRead(userId: string, docIds: string[], now: Date = new Date()): Promise<void> {
-      await writeMissing(userId, docIds.filter((id) => !isMarkerDocId(id)), now);
+      await writeMissing(userId, docIds.filter((id) => id !== BASELINE_DOC_ID), now);
     },
 
-    /** 처음 적용 기준선 — 기존 문서(반려함 포함)를 읽음으로 남기고 기준선 표시 행 둘을 쓴다(한 사람당 한 번) */
+    /** 처음 적용 기준선 — 기존 문서를 읽음으로 남기고 기준선 표시 행을 쓴다(한 사람당 한 번) */
     async applyBaseline(userId: string, docIds: string[], now: Date = new Date()): Promise<void> {
-      await writeMissing(userId, [...docIds.filter((id) => !isMarkerDocId(id)), BASELINE_DOC_ID, REJECT_BASELINE_DOC_ID], now);
-    },
-
-    /**
-     * 반려함 기준선 — 기준선을 이미 남긴 사람이 반려함을 처음 조회할 때 한 번.
-     * 그때 반려함에 있던 문서를 읽음으로 남겨, 예전 반려 문서에 빨간 동그라미가 뜨지 않게 한다.
-     */
-    async applyRejectBaseline(userId: string, docIds: string[], now: Date = new Date()): Promise<void> {
-      await writeMissing(userId, [...docIds.filter((id) => !isMarkerDocId(id)), REJECT_BASELINE_DOC_ID], now);
+      await writeMissing(userId, [...docIds.filter((id) => id !== BASELINE_DOC_ID), BASELINE_DOC_ID], now);
     },
   };
 }

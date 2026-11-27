@@ -265,7 +265,7 @@ export default function ApprovalScreen() {
   };
 
   // 문서를 열면(선택해 상세가 보이면) 읽음으로 기록 — 한 번 읽으면 끝
-  const { markRead } = unreadState;
+  const { markRead, markRejectionRead } = unreadState;
   useEffect(() => {
     if (selId) markRead(selId);
   }, [selId, markRead]);
@@ -470,6 +470,10 @@ export default function ApprovalScreen() {
     isUnread: (id) => unreadState.isUnreadInBox(box, id),
   });
   const position = selDoc ? docPosition(displayedList, selDoc.id) : null;
+  // 내가 기안한 반려 문서를 열면 상신함 빨간 동그라미에서 뺀다(반려될 때마다 다시 켜진다)
+  useEffect(() => {
+    if (selDoc) markRejectionRead(selDoc);
+  }, [selDoc, markRejectionRead]);
 
   /** 내가 지금 승인할 수 있는 문서 — 일괄 승인 대상 */
   const isApprovable = (d: ApprovalDoc) => {
@@ -693,9 +697,10 @@ export default function ApprovalScreen() {
 
                     const uniqueIds = new Set(combined.map((d) => d.id));
                     if (b === '상신') {
+                      // 반려된 내 문서 중 반려 뒤로 아직 열어 보지 않은 것만
                       badgeCount = Array.from(uniqueIds)
                         .map(id => combined.find(d => d.id === id)!)
-                        .filter((d) => d.status === '반려' || d.status === '긴급 조치 사후 검토 반려' || d.status === '시행반송')
+                        .filter((d) => unreadState.isRejectionUnreadDoc(d))
                         .length;
                     } else if (b === '반려') {
                       badgeCount = Array.from(uniqueIds)

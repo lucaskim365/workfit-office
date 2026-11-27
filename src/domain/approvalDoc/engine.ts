@@ -227,6 +227,23 @@ export function isRejectedBoxMatch(doc: ApprovalDoc, userId: string): boolean {
   return isMyRejectedDecision || isInApprovalChain;
 }
 
+const REJECTED_READ_STORAGE_PREFIX = 'workfit_read_rejected_docs:';
+
+/**
+ * 예전에 이 브라우저에 남긴 반려 문서 열람 기록 — 읽기 전용.
+ * 열람 기록은 이제 DB(approvalReads)에 남긴다. 이 값은 안읽음 기준선을 처음 남길 때 한 번 옮겨 담는 데만 쓴다.
+ */
+export function getReadRejectedDocIds(userId: string): Set<string> {
+  if (!userId || typeof window === 'undefined') return new Set();
+  try {
+    const raw = localStorage.getItem(`${REJECTED_READ_STORAGE_PREFIX}${userId}`);
+    return raw ? new Set(JSON.parse(raw)) : new Set();
+  } catch {
+    return new Set();
+  }
+}
+
+
 /** 레거시 시행처(executionDepts, execution)까지 포함한 수신처(recipients) 유효 목록 도출 */
 export function getEffectiveRecipients(doc: ApprovalDoc): ApprovalRecipient[] {
   const list: ApprovalRecipient[] = [...(doc.recipients || [])];

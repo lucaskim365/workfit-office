@@ -511,7 +511,7 @@ const COLLECTIONS: CollectionDef[] = [
   },
   {
     // 전자결재 읽음 기록 — 한 사람·한 문서당 한 행, 처음 읽은 시각만(안읽음 표시의 원천).
-    // 문서 $id = safeDocId(`${userId}__${docId}`). docId '__baseline__'·'__baseline_reject__' 행은 기준선 표시(반려함 기준선은 2026-11-25 추가).
+    // 문서 $id = safeDocId(`${userId}__${docId}`). docId '__baseline__' 행은 처음 적용 기준선 표시.
     id: 'approvalReads',
     name: '결재 문서 읽음 기록',
     attributes: [S('userId', 64, true), S('docId', 64, true), S('readAt', 40, true)],

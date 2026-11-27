@@ -2,11 +2,13 @@ import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { approvalReadRepo } from '@/data/approvalRead/approvalRead.repo';
 import { useReceivedPostReads } from '@/features/gw/usePostReadShares';
+import { getReadRejectedDocIds } from '@/domain/approvalDoc/engine';
 import type { ApprovalBox, ApprovalDoc } from '@/domain/approvalDoc/schema';
 import {
   baselineReadDocIds,
   isDocRead,
-  rejectBaselineDocIds,
+  isRejectionUnread,
+  rejectionReadKey,
   UNREAD_TRACKED_BOXES,
   unreadByBox,
   type UnreadTrackedBox,
@@ -18,9 +20,8 @@ const KEY = 'approvalReads';
  * 전자결재 안읽음 — 웹·PWA 공용. 결재함 분류(byBox)는 화면이 이미 가진 것을 받는다
  * (결재 문서를 다시 불러오지 않게). 규칙은 domain/approvalDoc/unread.
  *
- * 처음 쓰는 사람은 기준선을 한 번 남긴다 — 대기·참조·수신·반려함의 기존 문서를 읽음으로.
- * 기준선을 이미 남긴 사람은 반려함 기준선을 한 번 더 남긴다(예전 반려 문서에 빨간 동그라미가 뜨지 않게, 2026-11-25).
- * 기준선을 남기기 전에는 안읽음을 표시하지 않는다(전부 안읽음으로 번쩍이지 않게).
+ * 처음 쓰는 사람은 기준선을 한 번 남긴다 — 대기·참조·수신함의 기존 문서와 이 브라우저에 남아 있던
+ * 반려 열람 기록을 읽음으로. 기준선을 남기기 전에는 안읽음을 표시하지 않는다(전부 안읽음으로 번쩍이지 않게).
  */
 export function useApprovalUnread(userId: string, byBox: Record<ApprovalBox, ApprovalDoc[]>, boxesLoading: boolean) {
   const qc = useQueryClient();
@@ -35,17 +36,15 @@ export function useApprovalUnread(userId: string, byBox: Record<ApprovalBox, App
   const baselineStarted = useRef(false);
   useEffect(() => {
     const state = readQuery.data;
-    if (!userId || !state || (state.hasBaseline && state.hasRejectBaseline) || boxesLoading || baselineStarted.current) return;
+    if (!userId || !state || state.hasBaseline || boxesLoading || baselineStarted.current) return;
     baselineStarted.current = true;
-    const write = state.hasBaseline
-      ? approvalReadRepo.applyRejectBaseline(userId, rejectBaselineDocIds(byBox))
-      : approvalReadRepo.applyBaseline(userId, baselineReadDocIds(byBox));
-    write
+    approvalReadRepo
+      .applyBaseline(userId, baselineReadDocIds(byBox, getReadRejectedDocIds(userId)))
       .catch((err) => console.warn('[approvalReads] 기준선 기록 실패:', err))
       .finally(() => qc.invalidateQueries({ queryKey: [KEY, userId] }));
   }, [userId, readQuery.data, boxesLoading, byBox, qc]);
 
-  const ready = Boolean(readQuery.data?.hasBaseline && readQuery.data?.hasRejectBaseline);
+  const ready = Boolean(readQuery.data?.hasBaseline);
   const readDocIds = useMemo(() => readQuery.data?.readDocIds ?? new Set<string>(), [readQuery.data]);
 
   const unread = useMemo(() => {
@@ -63,12 +62,27 @@ export function useApprovalUnread(userId: string, byBox: Record<ApprovalBox, App
   const markRead = useCallback(
     (docId: string) => {
       if (!userId || !docId || readDocIds.has(docId)) return;
-      qc.setQueryData([KEY, userId], (prev: { readDocIds: Set<string>; hasBaseline: boolean; hasRejectBaseline: boolean } | undefined) =>
+      qc.setQueryData([KEY, userId], (prev: { readDocIds: Set<string>; hasBaseline: boolean } | undefined) =>
         prev ? { ...prev, readDocIds: new Set(prev.readDocIds).add(docId) } : prev,
       );
       approvalReadRepo.markRead(userId, [docId]).catch((err) => console.warn('[approvalReads] 읽음 기록 실패:', err));
     },
     [userId, readDocIds, qc],
+  );
+
+  /** 상신함 반려 문서를 반려된 뒤로 아직 열지 않았는지 — 기록을 불러오기 전에는 표시하지 않는다 */
+  const isRejectionUnreadDoc = useCallback(
+    (doc: ApprovalDoc) => Boolean(readQuery.data) && isRejectionUnread(doc, readDocIds),
+    [readQuery.data, readDocIds],
+  );
+
+  /** 내가 기안한 반려 문서를 열면 반려 알림을 읽음으로 기록 */
+  const markRejectionRead = useCallback(
+    (doc: ApprovalDoc) => {
+      const key = doc.drafterId === userId ? rejectionReadKey(doc) : null;
+      if (key) markRead(key);
+    },
+    [userId, markRead],
   );
 
   return {
@@ -80,6 +94,8 @@ export function useApprovalUnread(userId: string, byBox: Record<ApprovalBox, App
     isUnreadAnywhere: (docId: string) => UNREAD_TRACKED_BOXES.some((b) => unread[b].ids.has(docId)),
     isUnreadDoc,
     markRead,
+    isRejectionUnreadDoc,
+    markRejectionRead,
   };
 }
 
@@ -87,8 +103,17 @@ export function useApprovalUnread(userId: string, byBox: Record<ApprovalBox, App
  * 상세 화면을 열면 읽음으로 기록 — 푸시 알림 등으로 목록을 거치지 않고 바로 들어오는 경우용.
  * 결재함 분류 없이 기록만 한다(목록 화면이 다시 열리면 최신 기록을 읽는다).
  */
-export function useMarkApprovalReadOnOpen(userId: string | undefined, docId: string | undefined) {
+export function useMarkApprovalReadOnOpen(userId: string | undefined, docId: string | undefined, doc?: ApprovalDoc | null) {
   const qc = useQueryClient();
+  // 내가 기안한 반려 문서 — 반려 알림(상신함 빨간 동그라미)도 읽음으로
+  const rejectionKey = doc && userId && doc.drafterId === userId ? rejectionReadKey(doc) : null;
+  useEffect(() => {
+    if (!userId || !rejectionKey) return;
+    approvalReadRepo
+      .markRead(userId, [rejectionKey])
+      .then(() => qc.invalidateQueries({ queryKey: [KEY, userId] }))
+      .catch((err) => console.warn('[approvalReads] 반려 읽음 기록 실패:', err));
+  }, [userId, rejectionKey, qc]);
   useEffect(() => {
     if (!userId || !docId) return;
     approvalReadRepo

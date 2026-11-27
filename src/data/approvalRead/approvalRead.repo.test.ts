@@ -26,20 +26,6 @@ test('처음 적용 기준선을 남기면 이후 다시 하지 않도록 표시
   assert.deepEqual([...s.readDocIds], ['AP-5']); // 기준선 표시 행은 문서로 세지 않는다
 });
 
-test('처음 적용 기준선은 반려함 기준선도 함께 남긴다', async () => {
-  await approvalReadRepo.applyBaseline('U-F', ['AP-6']);
-  assert.equal((await approvalReadRepo.readState('U-F')).hasRejectBaseline, true);
-});
-
-test('기준선만 있는 사람은 반려함 기준선을 따로 한 번 남긴다', async () => {
-  await approvalReadRepo.markRead('U-G', ['AP-1']);
-  assert.equal((await approvalReadRepo.readState('U-G')).hasRejectBaseline, false);
-  await approvalReadRepo.applyRejectBaseline('U-G', ['AP-R1', 'AP-R2']);
-  const s = await approvalReadRepo.readState('U-G');
-  assert.equal(s.hasRejectBaseline, true);
-  assert.deepEqual([...s.readDocIds].sort(), ['AP-1', 'AP-R1', 'AP-R2']); // 표시 행은 문서로 세지 않는다
-});
-
 test('같은 문서를 동시에 기록해 "이미 존재(409)"가 나도 실패로 보지 않는다', async () => {
   const { createApprovalReadRepo } = await import('./approvalRead.repo');
   const saved: string[] = [];
