@@ -504,6 +504,16 @@ export function ApprovalDocumentView({
 
   useDocumentNotificationRead(currentUser?.id, !isPreview && canAccessDocument ? doc.id : undefined);
 
+  // 시트 문서 엑셀 받기 — 파일 이름은 문서번호_제목.
+  // 훅은 아래 '열람 권한 확인 중'·'열람 불가'로 일찍 돌아가는 줄보다 위에 둔다 — 권한이 뒤늦게 확인되면 훅 개수가 달라져 화면이 죽는다(후열로만 볼 수 있는 사람)
+  const exportFileName = [docNoOf(doc), doc.title].filter(Boolean).join('_') || doc.id;
+  const exportNameRef = useRef(exportFileName);
+  exportNameRef.current = exportFileName;
+  const onExportReadyForDoc = useCallback(
+    (fn: ((fileName: string) => Promise<void>) | null) => onSheetExportReady?.(fn ? () => fn(exportNameRef.current) : null),
+    [onSheetExportReady]
+  );
+
   if (!canAccessDocument && postReadQuery.isLoading) {
     // 후열 전달 여부를 확인하기 전에 "열람 불가"를 잠깐 띄우지 않는다.
     return <div className="py-12 text-center text-[12px] text-ink3">열람 권한 확인 중…</div>;
@@ -712,14 +722,6 @@ export function ApprovalDocumentView({
     drafterSign: [drafterName, drafterPos].filter(Boolean).join(' '),
     extras: extrasText,
   };
-  // 시트 문서 엑셀 받기 — 파일 이름은 문서번호_제목
-  const exportFileName = [docNoOf(doc), doc.title].filter(Boolean).join('_') || doc.id;
-  const exportNameRef = useRef(exportFileName);
-  exportNameRef.current = exportFileName;
-  const onExportReadyForDoc = useCallback(
-    (fn: ((fileName: string) => Promise<void>) | null) => onSheetExportReady?.(fn ? () => fn(exportNameRef.current) : null),
-    [onSheetExportReady]
-  );
 
   return (
     <SealMarkProvider markId={sealMarkIdOf(form?.fields)}>
