@@ -4,7 +4,7 @@ import { GwHead, GwSideNav, GwSplit } from '@/modules/gw/_gw';
 import { shortName } from '@/domain/pm/rules';
 import type { AlertGo } from '@/domain/pm/alerts';
 import { usePmDerived, usePmMutations, usePmSiteMutations, usePmSnapshot } from '@/features/pm/usePm';
-import { pmStore } from '@/data/pm/pmStoreInstance';
+import { PM_OFF, PM_OFF_TEXT, pmStore } from '@/data/pm/pmStoreInstance';
 import { resolvePmRoute, visibleMenus } from './menu';
 import { usePmAccess } from '@/features/pm/usePmAccess';
 import { EmptyHint } from './views/wbs/parts';
@@ -80,6 +80,22 @@ const NO_TITLE = new Set(['sched/gantt', 'risk/delay']);
  * ([[2026-11-24-pms-port-design]])
  */
 export default function PmScreen() {
+  return PM_OFF ? <PmOff /> : <PmMain />;
+}
+
+/** 운영 빌드에 PM 스위치(VITE_PM_DRIVER)가 없을 때 — 안내만, 저장소 · 사람 목록을 부르지 않음 */
+function PmOff() {
+  return (
+    <div className="mx-auto w-full max-w-[1500px] px-4 py-5 sm:px-6 sm:py-6">
+      <GwHead icon="task" name="프로젝트" />
+      <section className="mt-5 rounded-xl border border-border bg-panel shadow-sm">
+        <EmptyHint title={PM_OFF_TEXT} hint="사업 · 업무 · 점검 · 손익 관리를 곧 이 화면에서 쓸 수 있습니다." />
+      </section>
+    </div>
+  );
+}
+
+function PmMain() {
   const [params, setParams] = useSearchParams();
   const route = resolvePmRoute(params.get('v'));
   const people = usePmPeople();
