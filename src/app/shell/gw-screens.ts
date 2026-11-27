@@ -44,7 +44,7 @@ export const GW_READY_APPS = new Set([
   'community',
   'calendar',
   'resource',
-  // 'task', // 프로젝트 - 준비중 비활성화
+  'task', // 프로젝트 — PM 이관(modules/gw/pm), 11/27 사용자 지시로 켬
   'survey',
   'gallery',
   'meal-ticket',
