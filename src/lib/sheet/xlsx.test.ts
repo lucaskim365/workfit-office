@@ -196,6 +196,13 @@ test('엑셀이 아닌 파일·빈 시트는 알기 쉬운 오류', async () => 
   await assert.rejects(importXlsx(await zip(workbook('<sheetData/>'))), (e) => e instanceof XlsxError && e.message.includes('내용이 없습니다'));
 });
 
+test('빈 시트 오류에도 시트 이름이 실려 온다 — 다른 시트로 넘어갈 수 있게', async () => {
+  await assert.rejects(
+    importXlsx(await zip(workbook('<sheetData/>', {}, ['표지', '내역']))),
+    (e) => e instanceof XlsxError && JSON.stringify(e.sheetNames) === JSON.stringify(['표지', '내역']),
+  );
+});
+
 // ── 색인 색·테마 색(밝기)·자릿수·인쇄 영역 ──
 const STYLES2 = `<?xml version="1.0"?><styleSheet ${NS}>
 <numFmts count="1"><numFmt numFmtId="179" formatCode="0.0%"/></numFmts>

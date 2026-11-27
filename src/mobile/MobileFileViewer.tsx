@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState, type ComponentType } from 'react';
 import { createPortal } from 'react-dom';
 import type { ViewerFile } from './fileViewer/viewerShell';
 
@@ -28,9 +28,52 @@ export function openFileViewer(file: ViewerFile) {
   window.dispatchEvent(new CustomEvent(OPEN_EVENT, { detail: file }));
 }
 
-const PdfScreen = lazy(() => import('./fileViewer/PdfScreen'));
-const XlsxScreen = lazy(() => import('./fileViewer/XlsxScreen'));
-const DocxScreen = lazy(() => import('./fileViewer/DocxScreen'));
+type ScreenProps = { file: ViewerFile; onClose: () => void };
+
+/**
+ * 보기 화면을 내려받지 못했을 때 — 새 버전이 배포돼 옛 파일이 사라졌거나(앱을 열어 둔 채 배포된 경우) 통신이 끊긴 경우.
+ * 그냥 두면 앱 전체가 하얗게 되므로, 안내와 [새로고침]·[닫기]를 보인다(새로고침은 본인이 누른다 — 쓰던 글을 지킬 수 있게)
+ */
+function ScreenLoadFailed({ onClose }: ScreenProps) {
+  return (
+    <div className="fixed inset-0 z-[200] grid place-items-center bg-[#3a3a3a] px-6 text-center text-[13px] leading-relaxed text-white/90">
+      <div>
+        파일 보기 화면을 불러오지 못했습니다.
+        <br />
+        새 버전이 배포됐거나 통신이 끊겼을 수 있습니다. 새로고침한 뒤 다시 열어 주세요.
+        <div className="mt-4 flex justify-center gap-2">
+          <button type="button" onClick={onClose} className="rounded-lg bg-white/15 px-4 py-2 font-semibold">
+            닫기
+          </button>
+          <button type="button" onClick={() => window.location.reload()} className="rounded-lg bg-white px-4 py-2 font-semibold text-[#222]">
+            새로고침
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** 보기 화면 내려받기 — 실패하면 잠깐 뒤 한 번 더, 그래도 안 되면 안내 화면 */
+function lazyScreen(load: () => Promise<{ default: ComponentType<ScreenProps> }>) {
+  return lazy(async () => {
+    try {
+      return await load();
+    } catch {
+      await new Promise((resolve) => setTimeout(resolve, 800));
+      try {
+        return await load();
+      } catch (error) {
+        console.error('파일 보기 화면을 불러오지 못했습니다.', error);
+        return { default: ScreenLoadFailed };
+      }
+    }
+  });
+}
+
+const PdfScreen = lazyScreen(() => import('./fileViewer/PdfScreen'));
+const XlsxScreen = lazyScreen(() => import('./fileViewer/XlsxScreen'));
+const DocxScreen = lazyScreen(() => import('./fileViewer/DocxScreen'));
 
 /** 앱 셸에 한 번 두는 받침 — 열기 신호를 받아 보기 화면을 띄우고, [뒤로가기]로 닫는다 */
 export function MobileFileViewerHost() {

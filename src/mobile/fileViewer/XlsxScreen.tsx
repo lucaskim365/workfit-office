@@ -56,7 +56,11 @@ export default function XlsxScreen({ file, onClose }: { file: ViewerFile; onClos
       } catch (e) {
         if (cancelled) return;
         // 칸 내용이 없는 시트 — 그림만 보이거나 빈 시트 안내
-        if (e instanceof XlsxError && e.message.includes('내용이 없습니다')) return setLoaded({ sheet: null, images, cut: null });
+        if (e instanceof XlsxError && e.message.includes('내용이 없습니다')) {
+          // 시트 탭은 그대로 보인다 — 첫 시트가 비어도 다른 시트로 넘어갈 수 있게
+          if (e.sheetNames) setNames(e.sheetNames);
+          return setLoaded({ sheet: null, images, cut: null });
+        }
         console.warn('[xlsx] 열기 실패', e);
         setError(/\.xls$/i.test(file.name) ? '예전 엑셀 형식(.xls)은 앱에서 볼 수 없습니다.' : '이 시트를 열지 못했습니다.');
       }
