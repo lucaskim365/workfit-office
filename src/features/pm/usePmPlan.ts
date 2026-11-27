@@ -45,7 +45,7 @@ export function planKey(list: readonly PmPlanItem[], i: number): PlanKey {
 export function planAt(list: readonly PmPlanItem[], key: PlanKey): number {
   let n = 0;
   for (let j = 0; j < list.length; j++) if (keyOf(list[j]) === key.k) { if (n === key.n) return j; n++; }
-  throw new PmLatestError('그 줄이 없어졌습니다 (다른 곳에서 먼저 바뀜) — 화면을 다시 확인해 주세요');
+  throw new PmLatestError('그 줄이 이미 없습니다 (방금 빼셨거나 다른 곳에서 바뀜) — 화면을 다시 확인해 주세요');
 }
 /** 같은 일이 이미 있으면 안 넣음 (G2 M3 — 두 번 눌림) */
 export const planHas = (list: readonly PmPlanItem[], it: PmPlanItem) => list.some((x) => keyOf(x) === keyOf(it));

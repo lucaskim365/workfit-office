@@ -226,7 +226,12 @@ function TodayCard({ C, d, all, me, people, mut, smut, shortOf, edit, say, onOpe
   const sug = [
     grp('오늘 꼭', (sg.left.length || sg.must.length) ? <>
       {sg.left.length > 0 && <Button size="sm" variant="primary" title={sg.left.map((x) => planText(C, x, shortOf)).join('\n')}
-        onClick={() => { edit(today, (a) => { const add = sg.left.map(({ done: _d, memo: _m, ...r }) => r).filter((r) => !planHas(a, r)); if (!add.length) return false; a.push(...add); }); say(`어제 남은 일 ${sg.left.length}건을 오늘로 가져왔습니다`); }}>↪ 어제 남은 일 {sg.left.length}건</Button>}
+        onClick={() => edit(today, (a) => {
+          // 실제로 더한 건수로 안내 — 0건(두 번 눌림 등)이면 쓰지도 알리지도 않음
+          const add = sg.left.map(({ done: _d, memo: _m, ...r }) => r).filter((r) => !planHas(a, r));
+          if (!add.length) return false;
+          a.push(...add); say(`어제 남은 일 ${add.length}건을 오늘로 가져왔습니다`);
+        })}>↪ 어제 남은 일 {sg.left.length}건</Button>}
       {sg.must.map(chip)}
     </> : null, 'text-danger', '어제 못 끝낸 일 · 오늘이나 다음 근무일까지 마감인 일'),
     grp('나를 기다리는 일', sg.wait.length ? sg.wait.map(chip) : null, 'text-blue', '내가 검토 · 승인할 차례 · 새로 받은 티켓 · 반려되어 돌아온 일 · 남이 배정한 일'),
@@ -269,7 +274,11 @@ function TodayCard({ C, d, all, me, people, mut, smut, shortOf, edit, say, onOpe
     const t = quickK ? C.task(quickK) : undefined;
     if (t) {
       void mut.addSubtask.mutateAsync({ taskId: t.id, text: v, assigneeId: me, due: '' }).then((s) => push({ taskId: t.id, subId: (s as { id: string }).id }));
-    } else push({ text: v, ...(quickP !== '' ? { pct: +quickP } : {}) });
+    } else {
+      // 같은 글이 오늘 이미 있으면 안 넣고 알림 (데모는 두 줄로 들어감)
+      const item: PmPlanItem = { text: v, ...(quickP !== '' ? { pct: +quickP } : {}) };
+      edit(today, (a) => { if (planHas(a, item)) { say(`'${v}' 은(는) 이미 오늘 할 일에 있습니다`); return false; } a.push(item); });
+    }
     setQuick('');
   };
   const pickK = (v: string) => {

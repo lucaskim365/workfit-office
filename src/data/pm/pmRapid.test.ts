@@ -136,14 +136,14 @@ test('M4 줄 열쇠 — 같은 글 두 줄 · 같은 업무 두 줄 · 반복 �
   assert.ok(planHas([{ text: '같음' }], { text: '같음' }) && !planHas([{ text: '같음' }], { text: '다름' }));
 });
 
-test('M4 그 줄이 없어짐 (다른 탭이 뺌) → 쓰지 않고 "그 줄이 없어졌습니다"', async () => {
+test('M4 그 줄이 없어짐 (다른 탭이 뺌) → 쓰지 않고 "그 줄이 이미 없습니다"', async () => {
   const { db, A, B } = await two();
   await A.setPlanDay(ME, TODAY, [{ text: 'ZZ 1' }, { text: 'ZZ 2' }]);
   await B.refresh();
   const screen = screenOf(A);
   await B.latest('setPlanDay', planDayEdit(ME, TODAY, (a) => { a.splice(1, 1); }));
   await A.refresh();
-  await assert.rejects(A.latest('setPlanDay', planDayEdit(ME, TODAY, (a) => { a[planAt(a, planKey(screen, 1))].done = true; })), /그 줄이 없어졌습니다/);
+  await assert.rejects(A.latest('setPlanDay', planDayEdit(ME, TODAY, (a) => { a[planAt(a, planKey(screen, 1))].done = true; })), /그 줄이 이미 없습니다/);
   assert.deepEqual((await dayOf(db)).map((x) => [x.text, !!x.done]), [['ZZ 1', false]]);
 });
 
