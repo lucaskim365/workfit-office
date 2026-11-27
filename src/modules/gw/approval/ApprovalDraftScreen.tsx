@@ -16,7 +16,7 @@ import {
   type RelatedDoc,
 } from '@/domain/approvalDoc/schema';
 import { CANCEL_FORM_CODE, RESERVED_BODY_KEY, amountFieldOf, documentBodyKeyOf, type ApprovalForm, type FieldValue } from '@/domain/approvalForm/schema';
-import { withBodyHeader, withSealTexts } from '@/domain/approvalForm/headerItems';
+import { TITLE_ROW, withBodyHeader, withSealTexts } from '@/domain/approvalForm/headerItems';
 import { sheetHasLogo, sheetHeaderItems } from '@/domain/approvalForm/sheet/sheetHeader';
 import { type ApprovalDraftInput } from '@/data/approvalDoc/approvalDoc.repo';
 import { approvalProcessRepo } from '@/data/approvalProcess/approvalProcess.repo';
@@ -1077,7 +1077,9 @@ function ApprovalDraftInner({
   const docForm = useMemo(() => {
     const f = withBodyHeader(form, sheetHeaderItems(sheetTpl?.sheet));
     // 시트 서식인지 아직 모르는 동안에도 항목을 그리지 않는다 — 빈 기존 양식이 잠깐 보였다가 시트로 바뀌지 않게
-    return f && (sheetVersion !== null || sheetKindUnknown) ? { ...f, fields: [] } : f;
+    // 그동안은 머리의 제목 줄도 숨긴다 — 제목 칸이 따로 있는 서식에서 제목 입력란이 잠깐 머리에 보였다가 자리를 옮기면, 치던 사람의 커서가 빠진다
+    if (f && sheetKindUnknown) return { ...f, fields: [], hiddenHeaderItems: [...(f.hiddenHeaderItems ?? []), TITLE_ROW] };
+    return f && sheetVersion !== null ? { ...f, fields: [] } : f;
   }, [form, sheetTpl, sheetVersion, sheetKindUnknown]);
   // 연동 유형 — 시트 서식이 대신하는 기존 서식 코드(휴가·외근·출장·휴일근무). 기존 서식은 서식 코드 그대로
   const linkCode = typeof values[LINK_KEY] === 'string' && values[LINK_KEY] ? String(values[LINK_KEY]) : code;

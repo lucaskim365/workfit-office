@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useRef, useState, type ComponentType } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
 import { createPortal } from 'react-dom';
 import type { ViewerFile } from './fileViewer/viewerShell';
 
@@ -40,7 +40,7 @@ function ScreenLoadFailed({ onClose }: ScreenProps) {
       <div>
         파일 보기 화면을 불러오지 못했습니다.
         <br />
-        새 버전이 배포됐거나 통신이 끊겼을 수 있습니다. 새로고침한 뒤 다시 열어 주세요.
+        통신이 잠깐 끊겼다면 닫고 다시 열어 보세요. 새 버전이 배포된 경우에는 새로고침해야 열립니다.
         <div className="mt-4 flex justify-center gap-2">
           <button type="button" onClick={onClose} className="rounded-lg bg-white/15 px-4 py-2 font-semibold">
             닫기
@@ -54,9 +54,20 @@ function ScreenLoadFailed({ onClose }: ScreenProps) {
   );
 }
 
+const SCREEN_LOADERS: Record<ViewerKind, () => Promise<{ default: ComponentType<ScreenProps> }>> = {
+  pdf: () => import('./fileViewer/PdfScreen'),
+  xlsx: () => import('./fileViewer/XlsxScreen'),
+  docx: () => import('./fileViewer/DocxScreen'),
+};
+/** 종류마다 한 번 만든 보기 화면 — 내려받기에 실패한 것은 지워서, 다음에 열 때 다시 내려받는다 */
+const screens = new Map<ViewerKind, ComponentType<ScreenProps>>();
+
 /** 보기 화면 내려받기 — 실패하면 잠깐 뒤 한 번 더, 그래도 안 되면 안내 화면 */
-function lazyScreen(load: () => Promise<{ default: ComponentType<ScreenProps> }>) {
-  return lazy(async () => {
+function screenOf(kind: ViewerKind): ComponentType<ScreenProps> {
+  const cached = screens.get(kind);
+  if (cached) return cached;
+  const load = SCREEN_LOADERS[kind];
+  const screen: ComponentType<ScreenProps> = lazy(async () => {
     try {
       return await load();
     } catch {
@@ -65,15 +76,15 @@ function lazyScreen(load: () => Promise<{ default: ComponentType<ScreenProps> }>
         return await load();
       } catch (error) {
         console.error('파일 보기 화면을 불러오지 못했습니다.', error);
+        // 실패한 화면은 남겨 두지 않는다 — 통신이 돌아오면 닫고 다시 열었을 때 열리게
+        if (screens.get(kind) === screen) screens.delete(kind);
         return { default: ScreenLoadFailed };
       }
     }
   });
+  screens.set(kind, screen);
+  return screen;
 }
-
-const PdfScreen = lazyScreen(() => import('./fileViewer/PdfScreen'));
-const XlsxScreen = lazyScreen(() => import('./fileViewer/XlsxScreen'));
-const DocxScreen = lazyScreen(() => import('./fileViewer/DocxScreen'));
 
 /** 앱 셸에 한 번 두는 받침 — 열기 신호를 받아 보기 화면을 띄우고, [뒤로가기]로 닫는다 */
 export function MobileFileViewerHost() {
@@ -124,9 +135,10 @@ export function MobileFileViewerHost() {
     else setFile(null);
   };
 
-  if (!file) return null;
-  const kind = viewerKindOf(file.name, file.mime);
-  const Screen = kind === 'xlsx' ? XlsxScreen : kind === 'docx' ? DocxScreen : PdfScreen;
+  // 파일을 열 때마다 한 번 고른다 — 보는 도중에 화면이 바뀌지 않게(실패한 화면은 다음에 열 때 다시 내려받는다)
+  const Screen = useMemo(() => (file ? screenOf(viewerKindOf(file.name, file.mime) ?? 'pdf') : null), [file]);
+
+  if (!file || !Screen) return null;
   // 문서 맨 위층(body)에 띄운다 — 앱 틀(z-100) 안에 두면 body 에 띄운 창(파일함 z-150 등)에서 열 때 그 뒤에 가려졌다
   return createPortal(
     <Suspense fallback={<div className="fixed inset-0 z-[200] grid place-items-center bg-[#3a3a3a] text-[13px] text-white/80">여는 중…</div>}>
