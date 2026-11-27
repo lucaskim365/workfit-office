@@ -4,11 +4,11 @@ import { Button } from '@/shared/ui/Button';
 import { addDays, isDone, leftText, monthDay, shortName } from '@/domain/pm/rules';
 import { agoText, weekStart } from '@/domain/pm/site';
 import { UPD_WHY, updWhat, type UpdInputs } from '@/domain/pm/my';
-import { planEditable, planMarkTask, planRecentIdx, planUpdDates } from '@/domain/pm/plan';
+import { planMarkTask, planRecentIdx, planUpdDates } from '@/domain/pm/plan';
 import { updSortStable, wcBoard, wcPeople } from '@/domain/pm/weekly';
 import type { PmProject, PmTask } from '@/domain/pm/schema';
 import { usePmDerived, usePmMutations, usePmSiteMutations, usePmSites } from '@/features/pm/usePm';
-import { planDayBase, usePmPlanCtx } from '@/features/pm/usePmPlan';
+import { planDayEdit, usePmPlanCtx } from '@/features/pm/usePmPlan';
 import { usePmPeople } from '../../usePmPeople';
 import { usePmModals } from '../ticket/usePmModals';
 import { EmptyHint, ProjectTag, Tag } from '../wbs/parts';
@@ -77,7 +77,8 @@ export function WeekCheckView() {
   const say = (t: string, bad?: boolean) => setMsg({ t, bad });
   const setPct = (t: PmTask, n: number) => {
     const was = isDone(d.liveMap.get(t.id) ?? { status: t.status, pct: t.actualPct });
-    if ((n >= 100 || was) && C) { const items = planMarkTask(planEditable(C, me, d.today), t.id, n >= 100); if (items) mut.setPlanDay.mutate({ date: d.today, items, base: planDayBase(C, me, d.today) }); }
+    // G2: 저장 차례 때 최신 그날 목록에서 체크 맞춤
+    if ((n >= 100 || was) && C) mut.setPlanDay.mutate({ make: planDayEdit(me, d.today, (a) => { const r = planMarkTask(a, t.id, n >= 100); if (!r) return false; a.splice(0, a.length, ...r); }) });
     mut.setProgress.mutate({ id: t.id, pct: n, why: '주간 진행률' });
     smut.markNoChange.mutate([t.id]);
     say(`'${t.name}' 진행률 ${n}% 기록`);

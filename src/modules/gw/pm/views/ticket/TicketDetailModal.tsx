@@ -3,7 +3,7 @@ import { Modal } from '@/shared/ui/Modal';
 import { Button } from '@/shared/ui/Button';
 import { liveOf } from '@/domain/pm/rules';
 import {
-  applyTicketDraft, PM_TICKET_FLOW, PM_TICKET_PRIOS, setTicketProg, SYSTEM, ticketActions, TICKET_EDIT_FIELDS, tkExpected, tkLate, tkOpen,
+  applyTicketDraft, PM_TICKET_FLOW, PM_TICKET_PRIOS, SYSTEM, ticketActions, TICKET_EDIT_FIELDS, tkExpected, tkLate, tkOpen,
   tkReviewPending, type PmTicketPrio, type TicketDraft,
 } from '@/domain/pm/ticket';
 import type { PmDerived, usePmMutations } from '@/features/pm/usePm';
@@ -187,8 +187,8 @@ export function TicketDetailModal({ no, d, people, mut, onClose, onOpenTicket, o
               <input
                 type="range" min={0} max={100} step={1} defaultValue={x.prog} key={x.prog}
                 disabled={!(x.status === '접수' || x.status === '진행중')}
-                onMouseUp={(e) => { const n = +(e.target as HTMLInputElement).value; if (n !== x.prog) void mut.putTicket.mutateAsync({ x: setTicketProg(x, n, me, d.today), base: [pmBase('tickets', x.no, x)] }); }}
-                onKeyUp={(e) => { const n = +(e.target as HTMLInputElement).value; if (n !== x.prog) void mut.putTicket.mutateAsync({ x: setTicketProg(x, n, me, d.today), base: [pmBase('tickets', x.no, x)] }); }}
+                onMouseUp={(e) => { const n = +(e.target as HTMLInputElement).value; if (n !== x.prog) void mut.ticketProg.mutateAsync({ no: x.no, pct: n }); }}
+                onKeyUp={(e) => { const n = +(e.target as HTMLInputElement).value; if (n !== x.prog) void mut.ticketProg.mutateAsync({ no: x.no, pct: n }); }}
                 className="w-[130px]" aria-label="진행률"
               />
               <b>{x.prog}%</b>

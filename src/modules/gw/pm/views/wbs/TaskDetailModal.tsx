@@ -9,7 +9,7 @@ import { makeSubTicket, subTicketOf, tkOpen } from '@/domain/pm/ticket';
 import { StatusTag } from '../ticket/parts';
 import { HOURS, planEditable, planMarkTask } from '@/domain/pm/plan';
 import { hourText } from '@/domain/pm/team';
-import { planCtxOf, planDayBase } from '@/features/pm/usePmPlan';
+import { planCtxOf, planDayEdit } from '@/features/pm/usePmPlan';
 import { ProjectTag, Tag } from './parts';
 
 /**
@@ -45,9 +45,8 @@ export function TaskDetailModal({ id, d, people, mut, shortOf, onClose, onEdit, 
   /** 오늘 할 일에 이 업무 줄이 있으면 체크 상태를 맞춤 (planMarkTask) */
   const markPlan = (on: boolean) => {
     if (!people.me) return;
-    const C0 = planCtxOf(d);
-    const items = planMarkTask(planEditable(C0, people.me, today), t.id, on);
-    if (items) mut.setPlanDay.mutate({ date: today, items, base: planDayBase(C0, people.me, today) });
+    // G2: 저장 차례 때 최신 그날 목록에서 (줄이 없으면 안 씀)
+    mut.setPlanDay.mutate({ make: planDayEdit(people.me, today, (a) => { const r = planMarkTask(a, t.id, on); if (!r) return false; a.splice(0, a.length, ...r); }) });
   };
   const complete = () => {
     const left = subs.filter((s) => !s.done).length;
@@ -210,7 +209,8 @@ export function SubtaskBox({ taskId, d, people, mut, onMsg, taskName, taskDone, 
   /** [+ 오늘] (subToday) */
   const toToday = (s: PmSubtask) => {
     if (inToday.has(s.id)) { onMsg('이미 오늘 할 일에 있습니다'); return; }
-    mut.setPlanDay.mutate({ date: today, items: [...todayIts, { taskId, subId: s.id, ...(s.estHours ? { hours: s.estHours } : {}) }], base: planDayBase(C, me, today) });
+    // G2: 최신 목록에 이미 있으면 안 넣음 (연달아 두 번 눌림 · 다른 세부 작업 [+ 오늘] 연달아도 둘 다)
+    mut.setPlanDay.mutate({ make: planDayEdit(me, today, (a) => { if (a.some((x) => x.subId === s.id)) return false; a.push({ taskId, subId: s.id, ...(s.estHours ? { hours: s.estHours } : {}) }); }) });
     onMsg('오늘 할 일에 넣었습니다');
   };
   const [withTk, setWithTk] = useState(false);
@@ -245,11 +245,12 @@ export function SubtaskBox({ taskId, d, people, mut, onMsg, taskName, taskDone, 
     setDue('');
     // 카드에서 처음 쪼갠 내 세부 작업 → 오늘 할 일의 '업무 통째' 줄을 그 세부 작업으로
     if (inline && who === me && mineBefore === 0) {
-      const i = todayIts.findIndex((x) => x.taskId === taskId && !x.subId);
-      if (i >= 0) {
-        const a = todayIts.map((x) => ({ ...x }));
-        a[i] = { ...a[i], subId: made.id, ...(made.estHours && !a[i].hours ? { hours: made.estHours } : {}) };
-        mut.setPlanDay.mutate({ date: today, items: a, base: planDayBase(C, me, today) });
+      if (todayIts.some((x) => x.taskId === taskId && !x.subId)) {
+        mut.setPlanDay.mutate({ make: planDayEdit(me, today, (a) => {
+          const i = a.findIndex((x) => x.taskId === taskId && !x.subId);
+          if (i < 0) return false;
+          a[i] = { ...a[i], subId: made.id, ...(made.estHours && !a[i].hours ? { hours: made.estHours } : {}) };
+        }) });
       }
     }
     if (who && who !== me) onMsg(`${people.nameOf(who)}에게 배정했습니다${due ? ` — ${monthDay(due)} 할 일에 들어갑니다` : ''}`);

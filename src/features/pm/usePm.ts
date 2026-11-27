@@ -1,11 +1,11 @@
 import { useMemo } from 'react';
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
-import { latestSnapshot, pmBase, type PmBases, type PmSnapshot } from '@/data/pm/pm.store';
+import { latestSnapshot, pmBase, PmLatestError, type PmBases, type PmMake, type PmSnapshot } from '@/data/pm/pm.store';
 import { pmStore } from '@/data/pm/pmStoreInstance';
 import { doneInfoOf, liveOf, todayStr, type FilterCtx, type Live } from '@/domain/pm/rules';
 import type { PmAgreementChange, PmDoc, PmPlanItem, PmProject, PmSubtask, PmTask, PmTaskDone, PmTaskFunctions } from '@/domain/pm/schema';
 import { isDrop, lastUpdate, siteBrief, siteCtxOf, siteStage, type SiteBrief, type SiteCtx, type SiteInputs, type SiteStage } from '@/domain/pm/site';
-import { taskTicketIndex, ticketDoneInfo, type PmTicket } from '@/domain/pm/ticket';
+import { setTicketProg, taskTicketIndex, ticketDoneInfo, type PmTicket } from '@/domain/pm/ticket';
 import { docOf, type DocState } from '@/domain/pm/doc';
 import { clearPmSaveError, reportPmSaveError } from './pmSaveBus';
 
@@ -24,6 +24,16 @@ export function usePmSnapshot() {
   // 남이 고친 값으로 바꿔, 옛 값으로 채워진 창의 저장이 ①(내용 비교)에 안 걸리고 남의 변경을 덮음 (시험: B 진행률 60 → A 창 저장으로 50).
   // 다른 다시 읽기 길(화면이 새로 붙음 · 다른 저장 실패 · K3)은 수정 창이 연 때 기록(기준표, pm.store PmBase)을 같이 넘겨 막음 (F5, 설계 5.7.17).
   return useQuery({ queryKey: SNAP_KEY, queryFn: () => latestSnapshot(pmStore()), staleTime: 30_000, refetchOnReconnect: false });
+}
+
+/** 티켓 진행률 (G2) — 차례 때 최신 티켓에서 계산, 접수 · 진행 중이 아니면 안 씀 (M2, 화면 입력 막힘 조건과 같음) */
+export function ticketProgMake(no: string, pct: number, me: string): PmMake<[PmTicket]> {
+  return (snap) => {
+    const x = snap.tickets.find((t) => t.no === no);
+    if (!x) throw new PmLatestError(`티켓 ${no} 을(를) 찾을 수 없습니다`);
+    if (!(x.status === '접수' || x.status === '진행중')) throw new PmLatestError(`티켓 ${no} 이(가) 지금 '${x.status}' 이라 진행률을 바꾸지 않았습니다`);
+    return x.prog === pct ? null : [setTicketProg(x, pct, me, todayStr())];
+  };
 }
 
 /** 저장 뒤 화면에 저장소 상태를 넣음 — 읽은 시각은 그대로라 30초 세기가 이어짐 */
@@ -51,8 +61,12 @@ export interface PmDerived {
 export function usePmDerived(nameOf?: (id: string) => string): PmDerived | null {
   const q = usePmSnapshot();
   const snap = q.data;
-  return useMemo(() => {
-    if (!snap) return null;
+  return useMemo(() => (snap ? derivePm(snap, nameOf) : null), [snap, nameOf]);
+}
+
+/** 파생값 계산 (순수 함수) — 화면 훅과 최신 값 저장(G2, 저장소 지금 상태에서)이 같은 계산 한 벌을 씀 */
+export function derivePm(snap: PmSnapshot, nameOf?: (id: string) => string): PmDerived {
+  {
     const today = todayStr();
     const taskTicket = taskTicketIndex(snap.tickets);
     const ticketMap = new Map(snap.tickets.map((x) => [x.no, x]));
@@ -84,7 +98,7 @@ export function usePmDerived(nameOf?: (id: string) => string): PmDerived | null 
     const docMap = new Map(snap.docs.map((x) => [x.id, x]));
     const docState = (t: PmTask) => docOf(t, docMap, taskTicket.get(t.id));
     return { snap, today, liveMap, doneMap, fnMap, subsByTask, taskMap, taskTicket, ticketMap, ctx, docOf: docState };
-  }, [snap, nameOf]);
+  }
 }
 
 function useApply() {
@@ -107,12 +121,15 @@ export function usePmMutations(me: string, nameOf?: (id: string) => string) {
     updateSubtask: m(({ id, patch }: { id: string; patch: Partial<Omit<PmSubtask, 'id' | 'taskId' | 'doneDate' | 'doneBy'>> }) => s.updateSubtask(id, patch, me)),
     removeSubtask: m((id: string) => s.removeSubtask(id)),
     // 업무계획 (3-6)
-    setPlanDay: m(({ date, items, who, base }: { date: string; items: PmPlanItem[]; who?: string; base: PmBases }) => s.withBase(base).setPlanDay(who ?? me, date, items)),
+    // G2: 그날 업무계획은 값 대신 '최신에서 만드는 함수'만 받음 (usePmPlan planDayEdit)
+    setPlanDay: m(({ make }: { make: PmMake<[string, string, PmPlanItem[]]> }) => s.latest('setPlanDay', make)),
     resetBaseline: m(({ projectId, label }: { projectId: string; label: string }) => s.resetBaseline(projectId, label, me)),
     // 티켓
     issueTickets: m((list: PmTicket[]) => s.issueTickets(list)),
     moveTicket: m(({ no, to, cmt }: { no: string; to: PmTicket['status']; cmt: string }) => s.moveTicket(no, to, cmt, me, nm)),
     putTicket: m(({ x, base }: { x: PmTicket; base: PmBases }) => s.withBase(base).putTicket(x)),
+    // G2: 티켓 진행률(끌기 · 화살표 키) — 차례 때 최신 티켓에서 계산, 접수 · 진행 중이 아니면 안 씀 (M2)
+    ticketProg: m(({ no, pct }: { no: string; pct: number }) => s.latest('putTicket', ticketProgMake(no, pct, me))),
     commentTicket: m(({ no, text }: { no: string; text: string }) => s.commentTicket(no, text, me)),
     addTicketFile: m(({ no, name }: { no: string; name: string }) => s.addTicketFile(no, name, me)),
     removeTicketFile: m(({ no, index }: { no: string; index: number }) => s.removeTicketFile(no, index, me)),

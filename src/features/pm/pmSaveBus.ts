@@ -1,5 +1,5 @@
 import { useState, useSyncExternalStore } from 'react';
-import { isPmDbSaveError, isPmPartialSave } from '@/data/pm/pm.store';
+import { isPmDbSaveError, isPmPartialSave, PmSkippedError } from '@/data/pm/pm.store';
 
 /**
  * PM 저장 실패 알림 (7-6, DB 모드) — 저장 훅이 실패를 여기 알리면 화면 공통 안내(PmSaveLayer)가 띄움.
@@ -22,6 +22,8 @@ const shown = new WeakSet<object>();
 export function reportPmSaveError(e: unknown) {
   if (!isPmDbSaveError(e)) return;
   shown.add(e);
+  // 앞 저장 실패 때문에 건너뛴 저장(G2 M6) — 앞 실패 안내가 떠 있으면 그것을 그대로 둠
+  if (e instanceof PmSkippedError && state.last) return;
   const partial = isPmPartialSave(e);
   state = { last: { msg: e.message, at: Date.now(), partial }, partials: state.partials + (partial ? 1 : 0) };
   emit();

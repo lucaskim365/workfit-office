@@ -130,7 +130,7 @@ export interface PmStoreOpts {
   nid?: (p: string) => string;
 }
 /** 저장 함수가 아닌 것 (테스트 ⓐ 가 '한 번도 안 부른 저장 함수'를 셀 때 뺌) */
-export const PM_READ_METHODS = ['snapshot', 'refresh', 'peek', 'gen', 'notices', 'onProgress', 'fundOf', 'withBase'] as const;
+export const PM_READ_METHODS = ['snapshot', 'refresh', 'peek', 'gen', 'notices', 'onProgress', 'fundOf', 'withBase', 'latest'] as const;
 
 const MSG = {
   partial: '저장 중 연결이 끊겨 일부만 저장됐습니다. 화면은 저장된 상태로 다시 읽었습니다 — 다시 저장하지 말고 창을 닫아 목록에서 확인해 주세요 (사업 등록이면 [삭제]로 지운 뒤 다시 등록)',
@@ -148,6 +148,14 @@ export class PmDbSaveError extends Error {
   constructor(msg: string, public readonly partial = false) { super(msg); this.name = 'PmDbSaveError'; }
 }
 export const isPmDbSaveError = (e: unknown): e is Error => e instanceof PmDbSaveError || e instanceof PmConflictError;
+/** 최신 값에서 다시 계산하는 저장(G2)이 차례 때 쓸 수 없다고 본 것 — 그 줄이 없어짐 · 티켓이 진행 중이 아님 등 (안내만, 쓰기 0) */
+export class PmLatestError extends PmDbSaveError { constructor(msg: string) { super(msg); this.name = 'PmLatestError'; } }
+/** 줄 선 뒤 차례 전에 같은 저장소의 저장이 실패함 → 이 저장도 안 씀 (G2 M6) — 앞 실패 안내를 덮지 않음 */
+export class PmSkippedError extends PmDbSaveError {
+  constructor() { super('앞 저장이 실패해 이 저장도 하지 않았습니다 — 다시 읽은 화면에서 확인하고 한 번 더 눌러 주세요'); this.name = 'PmSkippedError'; }
+}
+/** 최신 값에서 인자를 만드는 함수 (G2) — null = 할 것 없음(이미 같음 · 이미 들어 있음) */
+export type PmMake<A extends unknown[]> = (snap: PmSnapshot) => A | null;
 export const isPmPartialSave = (e: unknown) => e instanceof PmDbSaveError && e.partial;
 
 /**
@@ -1146,6 +1154,11 @@ export function createPmStore(today = todayStr(), opts: PmStoreOpts = {}) {
       ...reads,
       /** 메모리 모드는 기준표를 안 봄 = 그냥 저장 함수 (동작 그대로) */
       withBase(_bases: PmBases): Core { return core; },
+      /** 최신 값에서 인자를 만들어 저장 (G2) — 메모리 모드도 같은 길: 지금 상태로 만들고 바로 저장 */
+      latest: (async (name: CoreKey, make: (snap: PmSnapshot) => unknown[] | null) => {
+        const a = make(clone(state));
+        return a ? (core[name] as (...x: unknown[]) => Promise<unknown>)(...a) : null;
+      }) as Latest,
       async snapshot(): Promise<PmSnapshot> { return clone(state); },
       /** 메모리 모드는 다시 읽을 곳이 없음 = 지금 상태 */
       async refresh() { return reads.peek(); },
@@ -1199,11 +1212,19 @@ export function createPmStore(today = todayStr(), opts: PmStoreOpts = {}) {
     saveCode: (a) => ({ field: 'codes', id: (a[0] as PmCode)?.id, rec: null }),
   };
 
-  const run = (name: CoreKey, args: unknown[], bases?: PmBases) => line(async () => {
+  /** 실패한 저장 수 (G2 M6) — 최신 값 저장은 줄 설 때 값과 차례 때 값이 다르면 안 씀 */
+  let fails = 0;
+  const run = (name: CoreKey, args0: unknown[] | null, bases?: PmBases, make?: (snap: PmSnapshot) => unknown[] | null) => {
+    const queued = fails;
+    return line(async () => {
+      try { return await body(); } catch (e) { fails++; throw e; }
+    });
+    async function body(): Promise<unknown> {
+    let args = args0 ?? [];
     await ensure();
     if (empty) throw new PmDbSaveError(MSG.empty);
     for (let attempt = 1; ; attempt++) {
-      if (K3[name]?.(args)) {
+      if (!make && K3[name]?.(args)) {
         const t = K3_TARGET[name]?.(args);
         if (t) t.rec = clone(baseCur(state, t));
         await reload();
@@ -1211,6 +1232,13 @@ export function createPmStore(today = todayStr(), opts: PmStoreOpts = {}) {
       }
       // F5: 창이 연 때 기록 ≠ 지금 기록 → 아무것도 안 씀 (다시 읽지 않음 — 저장소가 이미 더 새 것을 앎)
       if (bases?.some((b) => !baseSame(state, b))) throw new PmStaleWindowError();
+      // G2: 차례가 오면 저장소 지금 상태에서 인자를 만듦 (화면이 저장소보다 늦어도 앞 저장 결과 위에서 계산)
+      if (make) {
+        if (fails !== queued) throw new PmSkippedError();
+        const a = make(clone(state));
+        if (!a) return null;
+        args = a;
+      }
       const prev = state;
       const draft = clone(prev);
       state = draft;
@@ -1228,6 +1256,8 @@ export function createPmStore(today = todayStr(), opts: PmStoreOpts = {}) {
           await sync!.write(p);
         } catch (e) {
           if (e instanceof PmNumberTakenError && attempt < 3) { await reloadAfterFail(); continue; }
+          // G2: 최신 값 저장이 ①(DB 비교)에 걸림 = 저장소가 몰랐던 다른 곳 변경 → 다시 읽고 그 위에서 다시 계산 (줄 단위 합치기)
+          if (make && e instanceof PmConflictError && attempt < 3) { await reloadAfterFail(); continue; }
           await reloadAfterFail();
           if (e instanceof PmNumberTakenError) throw new PmDbSaveError(MSG.number);
           if (e instanceof PmProjectTakenError) throw new PmDbSaveError(MSG.project(e.id));
@@ -1241,7 +1271,8 @@ export function createPmStore(today = todayStr(), opts: PmStoreOpts = {}) {
       for (const b of bases ?? []) b.rec = clone(baseCur(state, b));
       return res;
     }
-  });
+    }
+  };
   const wrapOf = (bases?: PmBases) => Object.fromEntries((Object.keys(core) as CoreKey[]).map((k) => [k, (...a: unknown[]) => run(k, a, bases)])) as unknown as Core;
   const wrapped = wrapOf();
   return {
@@ -1249,6 +1280,11 @@ export function createPmStore(today = todayStr(), opts: PmStoreOpts = {}) {
     ...reads,
     /** 기준표를 같이 넘기는 저장 (F5) — `s.withBase(표).updateTask(…)` */
     withBase(bases: PmBases): Core { return wrapOf(bases); },
+    /**
+     * 최신 값에서 인자를 만들어 저장 (G2) — 화면 값으로 통째 쓰던 저장(그날 업무계획 · 티켓 진행률)은 '무엇을 바꿀지'만 넘기고,
+     * 줄 세우기 차례가 오면 저장소 지금 상태로 인자를 만든다. 줄 선 뒤 앞 저장이 실패했으면 안 씀(PmSkippedError).
+     */
+    latest: ((name: CoreKey, make: (snap: PmSnapshot) => unknown[] | null) => run(name, null, undefined, make)) as Latest,
     async snapshot(): Promise<PmSnapshot> { return line(async () => { await ensure(); return clone(state); }); },
     /** DB 전체 다시 읽기 (같은 줄에서 — 저장 사이에만) → 상태 + 세대 */
     async refresh() { return line(async () => { await reload(); return reads.peek(); }); },
@@ -1258,6 +1294,9 @@ export function createPmStore(today = todayStr(), opts: PmStoreOpts = {}) {
 }
 
 export type PmStore = ReturnType<typeof createPmStore>;
+type PmCore = Omit<PmStore, (typeof PM_READ_METHODS)[number] | 'latest'>;
+/** s.latest('setPlanDay', snap => [who, date, items]) — 이름에 맞는 인자를 최신 상태에서 만듦 */
+type Latest = <K extends keyof PmCore>(name: K, make: PmMake<Parameters<PmCore[K]>>) => Promise<Awaited<ReturnType<PmCore[K]>> | null>;
 
 /** 화면 훅이 쓰는 읽기 — 늦게 도착한 옛 읽기 결과는 버리고 지금 상태로 (K2 b) */
 export async function latestSnapshot(s: PmStore): Promise<PmSnapshot> {

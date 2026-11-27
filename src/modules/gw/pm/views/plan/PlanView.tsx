@@ -2,13 +2,13 @@ import { useMemo, useState, type ReactNode } from 'react';
 import { Button } from '@/shared/ui/Button';
 import { liveOf, monthDay, shortName } from '@/domain/pm/rules';
 import {
-  HOURS, PCTS, carryText, dayLabel, isWeekend, pDone, planAll, planCopyText, planDay, planEditable, planH, planItP, planPickTasks, planRecentTexts,
+  HOURS, PCTS, carryText, dayLabel, isWeekend, pDone, planAll, planCopyText, planDay, planH, planItP, planPickTasks, planRecentTexts,
   planReportText, planSuggest, planText, planWeeks, subCount, type PlanCtx, type PlanSug,
 } from '@/domain/pm/plan';
 import { hourText } from '@/domain/pm/team';
 import type { PmPlanItem, PmTask } from '@/domain/pm/schema';
 import { usePmDerived, usePmMutations, usePmSiteMutations, type PmDerived } from '@/features/pm/usePm';
-import { planDayBase, usePmPlanCtx } from '@/features/pm/usePmPlan';
+import { planAt, planDayEdit, planHas, planKey, usePmPlanCtx } from '@/features/pm/usePmPlan';
 import { usePmPeople } from '../../usePmPeople';
 import { usePmModals } from '../ticket/usePmModals';
 import { SubtaskBox } from '../wbs/TaskDetailModal';
@@ -56,8 +56,14 @@ export function PlanView() {
   if (!d || !C || !all) return <EmptyHint title="업무계획을 불러오는 중입니다" />;
   if (!me) return <EmptyHint title="로그인한 사용자를 알 수 없습니다" hint="그룹웨어에 다시 로그인하면 내 업무계획이 나옵니다." />;
   const say = (text: string, bad?: boolean) => setMsg({ text, bad });
-  /** 그날 계획 고치기 (planMut) — 고치는 순간 그날은 저장되고 자동 초안 표시가 떨어짐 */
-  const edit = (date: string, fn: (a: PmPlanItem[]) => void) => { const a = planEditable(C, me, date, all); fn(a); mut.setPlanDay.mutate({ date, items: a, base: planDayBase(C, me, date) }); };
+  /**
+   * 그날 계획 고치기 (planMut) — 고치는 순간 그날은 저장되고 자동 초안 표시가 떨어짐.
+   * G2: fn 은 저장 차례 때 저장소의 최신 그날 목록 a 에 적용됨. 화면 줄 i 는 at(i) 로 최신 목록의 자리(줄 열쇠)로 바꿔 씀.
+   */
+  const edit = (date: string, fn: (a: PmPlanItem[], at: (i: number) => number) => void | false) => {
+    const screen = planDay(C, me, date, all);
+    mut.setPlanDay.mutate({ make: planDayEdit(me, date, (a) => fn(a, (i) => planAt(a, planKey(screen, i)))) });
+  };
 
   const weeks = planWeeks(d.today);
   const head = (
@@ -107,7 +113,7 @@ export function PlanView() {
                       <td className="px-2 py-1">
                         {its.length ? its.map((it, i) => (
                           <WeekItem key={i} C={C} nameOf={people.nameOf} me={me} date={date} it={it} shortOf={shortOf} onOpenTask={modals.openTask}
-                            onDel={() => edit(date, (a) => { a.splice(i, 1); })} />
+                            onDel={() => edit(date, (a, at) => { a.splice(at(i), 1); })} />
                         )) : <span className="text-[11.5px] text-ink3">{past ? '기록 없음' : '계획 없음'}</span>}
                       </td>
                       <td className="w-[150px] whitespace-nowrap px-3 py-2 text-right align-top">
@@ -182,7 +188,7 @@ function ItemName({ C, it, t, nameOf }: { C: PlanCtx; it: PmPlanItem; t: PmTask;
 function TodayCard({ C, d, all, me, people, mut, smut, shortOf, edit, say, onOpenTask, onOpenTicket, onPop, teamPdf }: {
   C: PlanCtx; d: PmDerived; all: Record<string, PmPlanItem[]>; me: string; people: ReturnType<typeof usePmPeople>;
   mut: ReturnType<typeof usePmMutations>; smut: ReturnType<typeof usePmSiteMutations>; shortOf: (id: string) => string;
-  edit: (date: string, fn: (a: PmPlanItem[]) => void) => void; say: (m: string, bad?: boolean) => void;
+  edit: (date: string, fn: (a: PmPlanItem[], at: (i: number) => number) => void | false) => void; say: (m: string, bad?: boolean) => void;
   onOpenTask: (id: string) => void; onOpenTicket: (no: string) => void; onPop: (p: Pop) => void; teamPdf: boolean;
 }) {
   const today = d.today;
@@ -200,7 +206,8 @@ function TodayCard({ C, d, all, me, people, mut, smut, shortOf, edit, say, onOpe
   const [quickP, setQuickP] = useState('');
   const tasks = planPickTasks(C, me, quickK);
   const kLabel = (t: PmTask) => `${shortOf(t.projectId)} · ${t.code} ${t.name}`;
-  const push = (item: PmPlanItem) => edit(today, (a) => { a.push(item); });
+  // 두 번 눌려도 한 번만 (G2 M3) — 차례 때 최신 목록에 이미 있으면 안 넣음
+  const push = (item: PmPlanItem) => edit(today, (a) => { if (planHas(a, item)) return false; a.push(item); });
 
   const chip = (o: PlanSug) => (
     <button key={o.key} type="button" title={o.tip} onClick={() => push(o.item)}
@@ -219,7 +226,7 @@ function TodayCard({ C, d, all, me, people, mut, smut, shortOf, edit, say, onOpe
   const sug = [
     grp('오늘 꼭', (sg.left.length || sg.must.length) ? <>
       {sg.left.length > 0 && <Button size="sm" variant="primary" title={sg.left.map((x) => planText(C, x, shortOf)).join('\n')}
-        onClick={() => { edit(today, (a) => { sg.left.forEach(({ done: _d, memo: _m, ...r }) => a.push(r)); }); say(`어제 남은 일 ${sg.left.length}건을 오늘로 가져왔습니다`); }}>↪ 어제 남은 일 {sg.left.length}건</Button>}
+        onClick={() => { edit(today, (a) => { const add = sg.left.map(({ done: _d, memo: _m, ...r }) => r).filter((r) => !planHas(a, r)); if (!add.length) return false; a.push(...add); }); say(`어제 남은 일 ${sg.left.length}건을 오늘로 가져왔습니다`); }}>↪ 어제 남은 일 {sg.left.length}건</Button>}
       {sg.must.map(chip)}
     </> : null, 'text-danger', '어제 못 끝낸 일 · 오늘이나 다음 근무일까지 마감인 일'),
     grp('나를 기다리는 일', sg.wait.length ? sg.wait.map(chip) : null, 'text-blue', '내가 검토 · 승인할 차례 · 새로 받은 티켓 · 반려되어 돌아온 일 · 남이 배정한 일'),
@@ -242,7 +249,7 @@ function TodayCard({ C, d, all, me, people, mut, smut, shortOf, edit, say, onOpe
   /** 체크 (planDone) — 세부 작업 줄이면 세부 작업도 완료, 액션 줄이면 액션도 완료 */
   const check = (i: number, on: boolean) => {
     const it = its[i];
-    edit(today, (a) => { a[i].done = on; });
+    edit(today, (a, at) => { a[at(i)].done = on; });
     if (it.subId && C.sub(it)) {
       mut.updateSubtask.mutate({ id: it.subId, patch: { done: on } });
       const t = C.task(it.taskId);
@@ -327,22 +334,22 @@ function TodayCard({ C, d, all, me, people, mut, smut, shortOf, edit, say, onOpe
                   {[...new Set([l.pct, ...PCTS])].sort((a, b) => a - b).map((v) => <option key={v} value={v}>{v}%</option>)}
                 </select>
               ) : (
-                <select className={`${sel} w-[70px]`} value={planItP(C, it)} title="진행률 (업무보고에 들어갑니다)" onChange={(e) => edit(today, (a) => { a[i].pct = +e.target.value; })}>
+                <select className={`${sel} w-[70px]`} value={planItP(C, it)} title="진행률 (업무보고에 들어갑니다)" onChange={(e) => { const v = +e.target.value; edit(today, (a, at) => { a[at(i)].pct = v; }); }}>
                   {PCTS.map((v) => <option key={v} value={v}>{v}%</option>)}
                 </select>
               )}
               <select className={`${sel} w-[74px] ${h ? '' : 'text-ink3'}`} value={it.hours ? String(it.hours) : ''} title="실제로 쓴 시간 (선택) — 과제 수행일지 · 투입 시간에 쓰입니다"
-                onChange={(e) => edit(today, (a) => { a[i].hours = e.target.value === '' ? 0 : +e.target.value; })}>
+                onChange={(e) => { const v = e.target.value === '' ? 0 : +e.target.value; edit(today, (a, at) => { a[at(i)].hours = v; }); }}>
                 <option value="">시간</option>
                 {HOURS.map((v) => <option key={v} value={v}>{v}h</option>)}
               </select>
               {!memoOn && <Button size="sm" variant="ghost" onClick={() => setMemoOpen(i)} title="한 일 메모 (업무보고 비고)">메모</Button>}
-              <Button size="sm" variant="ghost" onClick={() => { setMemoOpen(null); edit(today, (a) => { a.splice(i, 1); }); }} title="오늘 계획에서 빼기">빼기</Button>
+              <Button size="sm" variant="ghost" onClick={() => { setMemoOpen(null); edit(today, (a, at) => { a.splice(at(i), 1); }); }} title="오늘 계획에서 빼기">빼기</Button>
             </div>
             {memoOn && (
               <input key={`${i}|${it.memo ?? ''}`} autoFocus={memoOpen === i} defaultValue={it.memo ?? ''} placeholder="한 일 메모 (업무보고 비고에 들어갑니다)"
                 className="ml-6 mt-1 h-[26px] w-[calc(100%-24px)] rounded border border-border-hi px-2 text-[11px]"
-                onBlur={(e) => { const v = e.target.value.trim(); if (v !== (it.memo ?? '')) edit(today, (a) => { a[i].memo = v; }); setMemoOpen(null); }}
+                onBlur={(e) => { const v = e.target.value.trim(); if (v !== (it.memo ?? '')) edit(today, (a, at) => { a[at(i)].memo = v; }); setMemoOpen(null); }}
                 onKeyDown={(e) => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) (e.target as HTMLInputElement).blur(); }} />
             )}
             {open && (
